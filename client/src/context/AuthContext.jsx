@@ -4,7 +4,7 @@ import axios from "axios";
 
 const AuthContext = createContext(null);
 
-const BASE_URL = "http://localhost:5000/api";
+const BASE_URL = "https://my-course-backend-8u69.onrender.com/api";
 
 // ── Axios instance — shared across the whole app ──────────────────────────────
 // InstructorDashboard and Shopify.jsx import this as:
