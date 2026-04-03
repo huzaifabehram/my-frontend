@@ -6,7 +6,7 @@ import axios from "axios";
 // ─────────────────────────────────────────────────────────────────────────────
 // API SETUP
 // ─────────────────────────────────────────────────────────────────────────────
-const BASE_URL = "http://localhost:5000/api";
+const BASE_URL = "https://my-course-backend-8u69.onrender.com/api";
 
 function authHeaders() {
   const token = localStorage.getItem("token");
