@@ -1,4 +1,3 @@
-// src/Pages/Shopify.jsx
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
@@ -45,16 +44,16 @@ function VideoModal({ lectures, startIndex = 0, onClose }) {
   const goPrev = () => { if (hasPrev) setCurrentIdx(i => i - 1); };
 
   return (
-    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-sm p-2 sm:p-4" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div className="bg-gray-900 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden max-h-[95vh] flex flex-col">
-        <div className="flex items-center justify-between px-4 sm:px-5 py-3 border-b border-white/10 flex-shrink-0">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-sm p-4" onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="bg-gray-900 rounded-2xl w-full max-w-3xl shadow-2xl overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-white/10">
           <div className="flex-1 min-w-0">
             <p className="text-xs text-slate-400 mb-0.5">Preview {currentIdx + 1} of {lectures.length}</p>
             <p className="text-sm font-bold text-white truncate">{current?.title}</p>
           </div>
           <button onClick={onClose} className="ml-4 w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition-colors flex-shrink-0">✕</button>
         </div>
-        <div className="relative bg-black aspect-video flex-shrink-0">
+        <div className="relative bg-black aspect-video">
           {ytId ? (
             <iframe key={current?._id} src={`https://www.youtube.com/embed/${ytId}?autoplay=1`} className="w-full h-full" allow="autoplay; encrypted-media" allowFullScreen title={current?.title}/>
           ) : current?.videoUrl ? (
@@ -77,7 +76,7 @@ function VideoModal({ lectures, startIndex = 0, onClose }) {
             <div className="w-full h-full flex items-center justify-center"><div className="text-center"><div className="text-5xl mb-3">🎬</div><p className="text-white/60 text-sm">No preview available</p></div></div>
           )}
         </div>
-        <div className="flex items-center justify-between px-4 sm:px-5 py-3 bg-gray-800 flex-shrink-0">
+        <div className="flex items-center justify-between px-5 py-3 bg-gray-800">
           <button onClick={goPrev} disabled={!hasPrev} className="text-xs font-bold text-white/70 hover:text-white disabled:opacity-30 transition-colors">← Prev</button>
           <div className="flex gap-1.5 overflow-x-auto max-w-xs">
             {lectures.map((_, i) => (
@@ -86,9 +85,9 @@ function VideoModal({ lectures, startIndex = 0, onClose }) {
           </div>
           <button onClick={goNext} disabled={!hasNext} className="text-xs font-bold text-white/70 hover:text-white disabled:opacity-30 transition-colors">Next →</button>
         </div>
-        <div className="overflow-y-auto divide-y divide-white/5 flex-1">
+        <div className="max-h-40 overflow-y-auto divide-y divide-white/5">
           {lectures.map((lec, i) => (
-            <button key={lec._id || i} onClick={() => setCurrentIdx(i)} className={`w-full flex items-center gap-3 px-4 sm:px-5 py-2.5 text-left transition-colors ${i === currentIdx ? "bg-amber-400/10" : "hover:bg-white/5"}`}>
+            <button key={lec._id || i} onClick={() => setCurrentIdx(i)} className={`w-full flex items-center gap-3 px-5 py-2.5 text-left transition-colors ${i === currentIdx ? "bg-amber-400/10" : "hover:bg-white/5"}`}>
               <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${i === currentIdx ? "bg-amber-400 text-gray-900" : "bg-white/10 text-white/60"}`}>{i === currentIdx ? "▶" : i + 1}</div>
               <div className="flex-1 min-w-0">
                 <p className={`text-xs truncate ${i === currentIdx ? "text-amber-300 font-bold" : "text-white/70"}`}>{lec.title}</p>
@@ -126,7 +125,7 @@ function CourseThumbnail({ course, freeLectures, onPreview }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PRICE + ENROLL CARD  (desktop only — mobile uses bottom bar)
+// PRICE + ENROLL CARD
 // ─────────────────────────────────────────────────────────────────────────────
 function PriceEnrollCard({ course, enrolled, enrolling, onEnroll, added, setAdded }) {
   return (
@@ -162,7 +161,7 @@ function PriceEnrollCard({ course, enrolled, enrolling, onEnroll, added, setAdde
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// COURSE CARD (listing page)
+// COURSE CARD
 // ─────────────────────────────────────────────────────────────────────────────
 function CourseCard({ course, onClick }) {
   return (
@@ -191,21 +190,26 @@ function CourseCard({ course, onClick }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NAVBAR
+// NAVBAR — always shows Log In + Sign Up when logged out
 // ─────────────────────────────────────────────────────────────────────────────
 function Navbar({ user }) {
   const navigate = useNavigate();
   return (
     <nav className="bg-gray-900 text-white px-4 sm:px-6 flex items-center justify-between sticky top-0 z-50 shadow-lg" style={{ minHeight: 56 }}>
+      {/* Logo */}
       <button onClick={() => navigate("/courses")} className="text-xl font-black text-amber-400 hover:text-amber-300 transition-colors py-3 flex-shrink-0">
         LearnFlow
       </button>
+
+      {/* Search bar hint — desktop only */}
       <div className="hidden md:flex flex-1 mx-6 max-w-sm">
         <div className="w-full flex items-center gap-2 bg-white/10 hover:bg-white/15 border border-white/10 hover:border-white/20 rounded-lg px-3 py-2 cursor-pointer transition-all" onClick={() => navigate("/courses")}>
           <svg className="w-4 h-4 text-white/40 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
           <span className="text-sm text-white/35">Search for anything...</span>
         </div>
       </div>
+
+      {/* Right: auth buttons or user menu */}
       <div className="flex items-center gap-2 flex-shrink-0">
         {user ? (
           <>
@@ -217,8 +221,16 @@ function Navbar({ user }) {
           </>
         ) : (
           <>
-            <Link to="/auth/login" className="text-sm font-semibold text-slate-200 hover:text-white border border-slate-500 hover:border-slate-300 px-4 py-1.5 rounded-lg transition-all whitespace-nowrap">Log In</Link>
-            <Link to="/auth/register" className="text-sm font-bold bg-amber-400 hover:bg-amber-300 text-gray-900 px-4 py-1.5 rounded-lg transition-colors whitespace-nowrap">Sign Up</Link>
+            {/* ── LOG IN — outlined button ── */}
+            <Link to="/auth/login"
+              className="text-sm font-semibold text-slate-200 hover:text-white border border-slate-500 hover:border-slate-300 px-4 py-1.5 rounded-lg transition-all whitespace-nowrap">
+              Log In
+            </Link>
+            {/* ── SIGN UP — filled amber button ── */}
+            <Link to="/auth/register"
+              className="text-sm font-bold bg-amber-400 hover:bg-amber-300 text-gray-900 px-4 py-1.5 rounded-lg transition-colors whitespace-nowrap">
+              Sign Up
+            </Link>
           </>
         )}
       </div>
@@ -236,7 +248,7 @@ function Breadcrumb({ items }) {
         {items.map((item, i) => (
           <span key={i} className="flex items-center gap-1.5">
             {i > 0 && <span className="text-slate-600">›</span>}
-            {item.href ? <Link to={item.href} className="hover:text-amber-400 transition-colors">{item.label}</Link> : <span className="text-slate-300 font-medium truncate max-w-[140px] sm:max-w-none">{item.label}</span>}
+            {item.href ? <Link to={item.href} className="hover:text-amber-400 transition-colors">{item.label}</Link> : <span className="text-slate-300 font-medium">{item.label}</span>}
           </span>
         ))}
       </div>
@@ -267,7 +279,7 @@ function RatingBar({ stars, count, total }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// REVIEWS SECTION
+// REVIEWS SECTION — fetches real reviews from GET /api/reviews/:courseId
 // ─────────────────────────────────────────────────────────────────────────────
 function ReviewsSection({ courseId, course, user, enrolled }) {
   const [reviews,    setReviews]    = useState([]);
@@ -309,8 +321,10 @@ function ReviewsSection({ courseId, course, user, enrolled }) {
   const displayed = showAll ? reviews : reviews.slice(0, 4);
 
   return (
-    <section className="bg-white rounded-xl border border-gray-200 p-5 sm:p-6 shadow-sm">
-      <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-5">Student Reviews</h2>
+    <section className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+      <h2 className="text-2xl font-extrabold text-gray-900 mb-5">Student Reviews</h2>
+
+      {/* Overview */}
       <div className="flex flex-col sm:flex-row gap-6 mb-6 pb-6 border-b border-gray-100">
         <div className="flex flex-col items-center justify-center bg-amber-50 rounded-2xl p-5 min-w-[110px]">
           <span className="text-5xl font-black text-amber-500 leading-none">{avgRating > 0 ? avgRating.toFixed(1) : "—"}</span>
@@ -321,8 +335,10 @@ function ReviewsSection({ courseId, course, user, enrolled }) {
           {breakdown.map(b => <RatingBar key={b.stars} stars={b.stars} count={b.count} total={totalReviews}/>)}
         </div>
       </div>
+
+      {/* Write review form */}
       {user && enrolled && !submitted && (
-        <div className="mb-6 pb-6 border-b border-gray-100 bg-indigo-50 rounded-xl p-4 sm:p-5">
+        <div className="mb-6 pb-6 border-b border-gray-100 bg-indigo-50 rounded-xl p-5">
           <h3 className="font-bold text-gray-800 mb-3">Leave a Review</h3>
           <div className="flex items-center gap-1 mb-3">
             {[1,2,3,4,5].map(s => (
@@ -335,7 +351,7 @@ function ReviewsSection({ courseId, course, user, enrolled }) {
             {myRating > 0 && <span className="ml-2 text-sm text-gray-500">{["","Poor","Fair","Good","Very Good","Excellent"][myRating]}</span>}
           </div>
           <textarea value={myComment} onChange={e => setMyComment(e.target.value)} rows={3}
-            placeholder="Share your experience..."
+            placeholder="Share your experience with this course..."
             className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-400 resize-none mb-3"/>
           {formError && <p className="text-xs text-red-500 mb-2">{formError}</p>}
           <button onClick={handleSubmit} disabled={submitting}
@@ -344,28 +360,31 @@ function ReviewsSection({ courseId, course, user, enrolled }) {
           </button>
         </div>
       )}
+
       {submitted && (
         <div className="mb-6 pb-6 border-b border-gray-100 bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
           <p className="text-2xl mb-1">🌟</p>
           <p className="font-bold text-emerald-700">Thank you for your review!</p>
         </div>
       )}
+
+      {/* Reviews list */}
       {loading ? (
         <div className="flex justify-center py-8"><div className="w-8 h-8 border-2 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"/></div>
       ) : reviews.length === 0 ? (
         <div className="text-center py-8">
           <p className="text-3xl mb-2">💬</p>
-          <p className="text-gray-500 text-sm">No reviews yet. {user && enrolled ? "Be the first!" : "Enroll to leave a review."}</p>
+          <p className="text-gray-500 text-sm">No reviews yet. {user && enrolled ? "Be the first to review!" : "Enroll to leave a review."}</p>
         </div>
       ) : (
         <>
           <div className="space-y-5">
             {displayed.map((review, i) => (
-              <div key={review._id || i} className="flex gap-3 sm:gap-4 pb-5 border-b border-gray-50 last:border-0 last:pb-0">
+              <div key={review._id || i} className="flex gap-4 pb-5 border-b border-gray-50 last:border-0 last:pb-0">
                 <div className="flex-shrink-0">
                   {review.student?.avatar
-                    ? <img src={review.student.avatar} className="w-9 h-9 sm:w-10 sm:h-10 rounded-full object-cover" alt={review.student?.name}/>
-                    : <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm">
+                    ? <img src={review.student.avatar} className="w-10 h-10 rounded-full object-cover" alt={review.student?.name}/>
+                    : <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-700 font-bold text-sm">
                         {(review.student?.name || "A")[0].toUpperCase()}
                       </div>}
                 </div>
@@ -389,6 +408,7 @@ function ReviewsSection({ courseId, course, user, enrolled }) {
           )}
         </>
       )}
+
       {!user && (
         <div className="mt-4 pt-4 border-t border-gray-100 text-center">
           <p className="text-sm text-gray-500"><Link to="/auth/register" className="text-indigo-600 font-bold hover:underline">Enroll in this course</Link> to leave a review</p>
@@ -427,20 +447,20 @@ function CoursesListPage({ user }) {
     <div className="min-h-screen bg-gray-50">
       <Navbar user={user}/>
       <Breadcrumb items={[{ label: "Home", href: "/" }, { label: "All Courses" }]}/>
-      <div className="bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 text-white py-10 sm:py-14 px-4">
+      <div className="bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 text-white py-14 px-4">
         <div className="max-w-3xl mx-auto text-center">
-          <h1 className="text-3xl sm:text-5xl font-extrabold mb-3 sm:mb-4 leading-tight">Learn Without Limits</h1>
-          <p className="text-slate-300 text-base sm:text-lg mb-6 sm:mb-8">Browse our courses — no account needed to explore.</p>
+          <h1 className="text-4xl sm:text-5xl font-extrabold mb-4 leading-tight">Learn Without Limits</h1>
+          <p className="text-slate-300 text-lg mb-8">Browse our courses — no account needed to explore.</p>
           <div className="relative max-w-xl mx-auto">
             <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search for courses, topics..."
-              className="w-full px-4 sm:px-5 py-3.5 sm:py-4 rounded-xl text-gray-900 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-400 pr-12"/>
+              className="w-full px-5 py-4 rounded-xl text-gray-900 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-400 pr-12"/>
             <svg className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
           </div>
         </div>
       </div>
       {categories.length > 1 && (
         <div className="bg-white border-b border-gray-100 px-4 sm:px-6 py-3 sticky top-[56px] z-30 shadow-sm">
-          <div className="max-w-7xl mx-auto flex gap-2 overflow-x-auto pb-1 scrollbar-none">
+          <div className="max-w-7xl mx-auto flex gap-2 overflow-x-auto pb-1">
             {categories.map(cat => (
               <button key={cat} onClick={() => setCategory(cat)}
                 className={`flex-shrink-0 text-xs font-bold px-4 py-1.5 rounded-full transition-all ${category === cat ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200"}`}>
@@ -450,23 +470,23 @@ function CoursesListPage({ user }) {
           </div>
         </div>
       )}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-8 sm:py-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10">
         {loading ? (
           <div className="flex items-center justify-center py-24"><div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"/></div>
         ) : filtered.length === 0 ? (
           <div className="text-center py-24">
             <div className="text-5xl mb-4">📭</div>
             <h2 className="text-xl font-bold text-gray-800 mb-2">No courses found</h2>
-            <p className="text-gray-500 text-sm">{search || category !== "All" ? "Try a different search or category." : "No published courses yet."}</p>
+            <p className="text-gray-500">{search || category !== "All" ? "Try a different search or category." : "No published courses yet."}</p>
             {(search || category !== "All") && <button onClick={() => { setSearch(""); setCategory("All"); }} className="mt-4 bg-indigo-600 text-white font-bold px-5 py-2 rounded-lg hover:bg-indigo-700 transition-colors text-sm">Clear Filters</button>}
           </div>
         ) : (
           <>
-            <div className="flex items-center justify-between mb-5 flex-wrap gap-2">
+            <div className="flex items-center justify-between mb-6 flex-wrap gap-2">
               <p className="text-sm text-gray-500"><span className="font-bold text-gray-800">{filtered.length}</span> course{filtered.length !== 1 ? "s" : ""} available</p>
               {!user && <p className="text-sm text-gray-500"><Link to="/auth/register" className="text-indigo-600 font-bold hover:underline">Sign up free</Link> to start learning</p>}
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
               {filtered.map(course => <CourseCard key={course._id} course={course} onClick={() => navigate(`/course/${course._id}`)}/>)}
             </div>
           </>
@@ -477,114 +497,7 @@ function CoursesListPage({ user }) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// MOBILE "THIS COURSE INCLUDES" SECTION  — like Udemy image 1
-// ═════════════════════════════════════════════════════════════════════════════
-function MobileCourseIncludes({ course, totalLectures }) {
-  const items = [
-    { icon: "🎬", label: `${totalLectures} on-demand lecture${totalLectures !== 1 ? "s" : ""}` },
-    { icon: "📱", label: "Access on mobile and desktop" },
-    { icon: "♾️", label: "Full lifetime access" },
-    { icon: "🏆", label: "Certificate of completion" },
-    { icon: "📥", label: "Downloadable resources" },
-  ];
-  return (
-    <div className="bg-white border-y border-gray-200 py-5 px-5">
-      <h3 className="font-extrabold text-gray-900 text-base mb-3">This course includes:</h3>
-      <ul className="space-y-2.5">
-        {items.map(item => (
-          <li key={item.label} className="flex items-center gap-3 text-sm text-gray-700">
-            <span className="text-lg w-6 text-center flex-shrink-0">{item.icon}</span>
-            {item.label}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MOBILE HERO — Udemy-style: thumbnail top, then title + meta below
-// ─────────────────────────────────────────────────────────────────────────────
-function MobileHero({ course, freeLectures, onPreview, enrolled, enrolling, onEnroll }) {
-  return (
-    <div className="lg:hidden">
-      {/* Full-width thumbnail with play overlay */}
-      <div className="relative w-full aspect-video bg-black cursor-pointer group" onClick={onPreview}>
-        {course.thumbnail
-          ? <img src={course.thumbnail} alt={course.title} className="w-full h-full object-cover"/>
-          : <div className="w-full h-full bg-gradient-to-br from-indigo-800 to-purple-900 flex items-center justify-center"><span className="text-6xl">📚</span></div>}
-        <div className="absolute inset-0 bg-black/40 flex flex-col items-center justify-center">
-          <div className="w-16 h-16 rounded-full bg-white/20 border-2 border-white/70 flex items-center justify-center group-hover:scale-110 transition-transform shadow-xl mb-2">
-            <svg className="w-7 h-7 text-white ml-1" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-          </div>
-          <span className="text-white font-semibold text-sm">Preview this course</span>
-          {freeLectures > 0 && <span className="text-white/70 text-xs mt-0.5">{freeLectures} free preview{freeLectures !== 1 ? "s" : ""}</span>}
-        </div>
-      </div>
-
-      {/* Course title + meta — like Udemy mobile */}
-      <div className="bg-white px-4 pt-4 pb-3 border-b border-gray-100">
-        {course.badge && (
-          <div className="flex gap-2 mb-2">
-            <span className="text-xs font-bold bg-amber-400 text-amber-900 px-2 py-0.5 rounded">{course.badge}</span>
-          </div>
-        )}
-        <h1 className="text-xl font-extrabold text-gray-900 leading-snug mb-2">{course.title}</h1>
-        <p className="text-sm text-gray-600 leading-relaxed mb-3 line-clamp-3">{course.subtitle || course.description?.slice(0, 160)}</p>
-
-        {/* Rating row */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm mb-3">
-          {course.rating > 0 && (
-            <div className="flex items-center gap-1">
-              <span className="font-bold text-amber-500">{course.rating.toFixed(1)}</span>
-              <StarRating rating={course.rating}/>
-              <span className="text-gray-400 text-xs">({course.totalRatings || 0})</span>
-            </div>
-          )}
-          {course.studentsEnrolled > 0 && <span className="text-gray-500 text-xs">{course.studentsEnrolled.toLocaleString()} students</span>}
-        </div>
-
-        {/* Instructor */}
-        {course.instructor && (
-          <div className="flex items-center gap-2 mb-3">
-            <div className="w-7 h-7 rounded-full bg-purple-600 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">{course.instructor.name?.[0] || "I"}</div>
-            <span className="text-xs text-gray-600">By <span className="font-semibold text-purple-700">{course.instructor.name}</span>{course.instructor.title && <span className="text-gray-400"> · {course.instructor.title}</span>}</span>
-          </div>
-        )}
-
-        {/* Tags */}
-        {course.tags?.length > 0 && (
-          <div className="flex flex-wrap gap-1.5">
-            {course.tags.slice(0, 4).map(tag => <span key={tag} className="text-xs bg-gray-100 border border-gray-200 rounded-full px-2.5 py-0.5 text-gray-600">{tag}</span>)}
-          </div>
-        )}
-      </div>
-
-      {/* Price + quick enroll */}
-      <div className="bg-white px-4 py-4 border-b border-gray-100">
-        <div className="flex items-center gap-3 mb-3">
-          <span className="text-3xl font-black text-gray-900">${course.discountPrice ?? course.price ?? 0}</span>
-          {course.discountPrice && course.price && (
-            <>
-              <span className="text-base text-gray-400 line-through">${course.price}</span>
-              <span className="text-xs font-bold text-red-500 bg-red-50 rounded px-2 py-0.5">{Math.round(100 - (course.discountPrice / course.price) * 100)}% off</span>
-            </>
-          )}
-          {(!course.price || course.price === 0) && <span className="text-sm font-bold text-emerald-600 bg-emerald-50 rounded px-2 py-0.5">FREE</span>}
-        </div>
-        {course.discountPrice && <p className="text-xs text-red-500 font-semibold mb-3">⚡ Limited time offer!</p>}
-        <button onClick={onEnroll} disabled={enrolling}
-          className={`w-full py-3.5 rounded-xl font-black text-sm transition-all shadow-md ${enrolled ? "bg-emerald-500 text-white" : enrolling ? "bg-indigo-400 text-white cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700 text-white"}`}>
-          {enrolled ? "✓ Continue Learning →" : enrolling ? "Enrolling..." : !course.price || course.price === 0 ? "Enroll Free" : "Enroll Now"}
-        </button>
-        <p className="text-center text-xs text-gray-400 mt-2">30-Day Money-Back Guarantee</p>
-      </div>
-    </div>
-  );
-}
-
-// ═════════════════════════════════════════════════════════════════════════════
-// COURSE DETAIL PAGE
+// COURSE DETAIL PAGE — MOBILE OPTIMIZED
 // ═════════════════════════════════════════════════════════════════════════════
 function CourseDetailPage({ user }) {
   const { id }   = useParams();
@@ -641,13 +554,13 @@ function CourseDetailPage({ user }) {
 
   if (loading) return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-center"><div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"/><p className="text-gray-500 text-sm">Loading course...</p></div>
+      <div className="text-center"><div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"/><p className="text-gray-500">Loading course...</p></div>
     </div>
   );
 
   if (!course) return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-      <div className="text-center"><div className="text-5xl mb-4">😕</div><h2 className="text-xl font-bold text-gray-800 mb-2">Course not found</h2><button onClick={() => navigate("/courses")} className="text-indigo-600 font-semibold hover:underline text-sm">← Back to Courses</button></div>
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="text-center"><div className="text-5xl mb-4">😕</div><h2 className="text-xl font-bold text-gray-800 mb-2">Course not found</h2><button onClick={() => navigate("/courses")} className="text-indigo-600 font-semibold hover:underline">← Back to Courses</button></div>
     </div>
   );
 
@@ -662,278 +575,398 @@ function CourseDetailPage({ user }) {
       <Breadcrumb items={[
         { label: "Home", href: "/" },
         { label: "Courses", href: "/courses" },
-        ...(course.category ? [{ label: course.category, href: `/courses?cat=${course.category}` }] : []),
-        { label: course.title?.length > 30 ? course.title.slice(0, 30) + "…" : course.title },
+        { label: course.category || "Course", href: `/courses?cat=${course.category}` },
+        { label: course.title?.length > 40 ? course.title.slice(0, 40) + "…" : course.title },
       ]}/>
 
-      {/* ══ MOBILE LAYOUT — Udemy-style ══ */}
-      <MobileHero
-        course={course}
-        freeLectures={freeLectures}
-        onPreview={() => openPreview(0)}
-        enrolled={enrolled}
-        enrolling={enrolling}
-        onEnroll={handleEnroll}
-      />
+      {/* ════════════════════════════════════════════════════════════════ */}
+      {/* MOBILE LAYOUT (under lg breakpoint) */}
+      {/* ════════════════════════════════════════════════════════════════ */}
+      <div className="lg:hidden">
+        {/* Mobile Hero — Minimalist Title */}
+        <div className="bg-white px-4 pt-4 pb-3 border-b border-gray-100">
+          <button onClick={() => navigate("/courses")} className="text-sm text-indigo-600 font-semibold mb-3 flex items-center gap-1 hover:text-indigo-700">← Courses</button>
+          {course.badge && <span className="text-xs font-bold bg-amber-400 text-amber-900 px-2 py-0.5 rounded mb-3 inline-block">{course.badge}</span>}
+          <h1 className="text-2xl font-extrabold text-gray-900 leading-tight mb-2">{course.title}</h1>
+          {course.subtitle && <p className="text-sm text-gray-600 leading-relaxed">{course.subtitle}</p>}
+        </div>
 
-      {/* ══ DESKTOP HERO — unchanged ══ */}
-      <div className="hidden lg:block bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 text-white relative">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 lg:py-14">
-          <div className="max-w-2xl lg:max-w-[60%]">
-            <button onClick={() => navigate("/courses")} className="text-sm text-slate-400 hover:text-white mb-4 flex items-center gap-1 transition-colors">← All Courses</button>
-            {course.badge && <span className="text-xs font-bold bg-amber-400 text-amber-900 px-2 py-0.5 rounded mb-3 inline-block">{course.badge}</span>}
-            <h1 className="text-3xl sm:text-4xl font-extrabold leading-tight mb-3">{course.title}</h1>
-            <p className="text-slate-300 text-base mb-4 leading-relaxed">{course.subtitle || course.description?.slice(0, 160)}</p>
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm mb-4">
-              {course.rating > 0 && (
-                <div className="flex items-center gap-1.5">
-                  <span className="font-bold text-amber-400">{course.rating.toFixed(1)}</span>
-                  <StarRating rating={course.rating}/>
-                  <span className="text-slate-400">({course.totalRatings || 0} ratings)</span>
-                </div>
-              )}
-              {course.studentsEnrolled > 0 && <span className="text-slate-300">{course.studentsEnrolled.toLocaleString()} students enrolled</span>}
-              <span className="text-slate-400">Updated {course.updatedAt ? new Date(course.updatedAt).toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "Recently"}</span>
-            </div>
-            {course.instructor && (
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-amber-400 flex items-center justify-center font-bold text-gray-900 flex-shrink-0">{course.instructor.name?.[0] || "I"}</div>
-                <span className="text-sm text-slate-300">Created by <span className="text-amber-400 font-semibold">{course.instructor.name}</span>{course.instructor.title && <span className="text-slate-400"> · {course.instructor.title}</span>}</span>
+        {/* Mobile Thumbnail — Full Width */}
+        <div className="px-4 py-4">
+          <CourseThumbnail course={course} freeLectures={freeLectures} onPreview={() => openPreview(0)}/>
+        </div>
+
+        {/* Mobile Course Stats — Compact Row */}
+        <div className="px-4 py-4 bg-white border-b border-gray-100">
+          <div className="space-y-2.5">
+            {course.rating > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-amber-500 text-sm">{course.rating.toFixed(1)}</span>
+                <StarRating rating={course.rating}/>
+                <span className="text-xs text-gray-500">({course.totalRatings || 0} ratings)</span>
               </div>
             )}
-            {course.tags?.length > 0 && (
-              <div className="mt-4 flex flex-wrap gap-2">
-                {course.tags.map(tag => <span key={tag} className="text-xs bg-white/10 border border-white/20 rounded-full px-3 py-1 text-slate-300">{tag}</span>)}
-              </div>
-            )}
+            {course.studentsEnrolled > 0 && <p className="text-sm text-gray-700"><span className="font-semibold">{course.studentsEnrolled.toLocaleString()}</span> students enrolled</p>}
+            <p className="text-xs text-gray-500">Updated {course.updatedAt ? new Date(course.updatedAt).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "Recently"}</p>
           </div>
         </div>
-        <div className="h-8"/>
-      </div>
 
-      {/* ══ MAIN CONTENT ══ */}
-      <div className="max-w-7xl mx-auto px-0 sm:px-4 lg:px-6 relative">
-        <div className="flex flex-col lg:flex-row gap-0 lg:gap-8">
-
-          {/* Left column */}
-          <div className="flex-1 min-w-0 space-y-0 lg:space-y-6 py-0 lg:py-6 lg:pr-4">
-
-            {/* Mobile: "This course includes" — Udemy image 1 style */}
-            <div className="lg:hidden">
-              <MobileCourseIncludes course={course} totalLectures={totalLectures}/>
-            </div>
-
-            {/* What you'll learn */}
-            {course.whatYouLearn?.length > 0 && (
-              <section className="bg-white lg:rounded-xl border-y lg:border border-gray-200 p-5 sm:p-6 shadow-sm">
-                <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-4">What you'll learn</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {course.whatYouLearn.map((item, i) => (
-                    <div key={i} className="flex items-start gap-2.5">
-                      <svg className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
-                      <p className="text-sm text-gray-700 leading-snug">{item}</p>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* Description */}
-            <section className="bg-white lg:rounded-xl border-y lg:border border-gray-200 p-5 sm:p-6 shadow-sm">
-              <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-3">Description</h2>
-              <div className={`overflow-hidden transition-all duration-500 relative ${expanded ? "max-h-[600px]" : "max-h-28 sm:max-h-32"}`}>
-                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{course.description}</p>
-                {!expanded && <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white to-transparent"/>}
+        {/* Mobile Instructor Card */}
+        {course.instructor && (
+          <div className="px-4 py-4 bg-white border-b border-gray-100">
+            <h3 className="text-sm font-bold text-gray-900 mb-3">Instructor</h3>
+            <div className="flex items-start gap-3">
+              <div className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-lg flex-shrink-0">
+                {course.instructor.name?.[0] || "I"}
               </div>
-              <button onClick={() => setExpanded(e => !e)} className="mt-2 text-sm font-semibold text-purple-600 hover:text-purple-800 transition-colors flex items-center gap-1">
-                {expanded ? "Show less ↑" : "Show more ↓"}
-              </button>
-            </section>
-
-            {/* Requirements */}
-            {course.requirements?.length > 0 && (
-              <section className="bg-white lg:rounded-xl border-y lg:border border-gray-200 p-5 sm:p-6 shadow-sm">
-                <h2 className="text-xl font-extrabold text-gray-900 mb-3">Requirements</h2>
-                <ul className="space-y-2">
-                  {course.requirements.map((r, i) => (
-                    <li key={i} className="flex items-start gap-2 text-sm text-gray-600">
-                      <span className="text-gray-400 mt-0.5 flex-shrink-0">•</span>
-                      {r}
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            )}
-
-            {/* Curriculum */}
-            {course.sections?.length > 0 && (
-              <section className="bg-white lg:rounded-xl border-y lg:border border-gray-200 p-5 sm:p-6 shadow-sm">
-                <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-1">Course Content</h2>
-                <p className="text-sm text-gray-500 mb-4">
-                  {course.sections.length} sections • {totalLectures} lecture{totalLectures !== 1 ? "s" : ""}{freeLectures > 0 && ` • ${freeLectures} free preview${freeLectures !== 1 ? "s" : ""}`}
-                </p>
-                <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100">
-                  {course.sections.map(section => (
-                    <div key={section._id}>
-                      <button
-                        onClick={() => setOpenSections(p => p.includes(section._id) ? p.filter(x => x !== section._id) : [...p, section._id])}
-                        className="w-full flex justify-between items-center px-4 py-3.5 bg-gray-50 hover:bg-gray-100 active:bg-gray-100 transition-colors text-left"
-                      >
-                        <div className="flex items-center gap-2 min-w-0 flex-1">
-                          <svg className={`w-4 h-4 text-gray-500 transition-transform flex-shrink-0 ${openSections.includes(section._id) ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
-                          </svg>
-                          <span className="font-semibold text-sm text-gray-800 leading-snug">{section.title}</span>
-                        </div>
-                        <span className="text-xs text-gray-500 flex-shrink-0 ml-2">{section.lectures?.length || 0} lectures</span>
-                      </button>
-
-                      {openSections.includes(section._id) && (
-                        <div className="divide-y divide-gray-50">
-                          {section.lectures?.map((lec, li) => {
-                            const isPreviewable = lec.free;
-                            const lecIdx = previewLecs.findIndex(pl => (pl._id || pl.id) === (lec._id || lec.id));
-                            return (
-                              <div
-                                key={lec._id || li}
-                                className={`flex items-center px-4 py-3 transition-colors ${isPreviewable ? "hover:bg-purple-50 active:bg-purple-100 cursor-pointer" : "cursor-default"}`}
-                                onClick={() => isPreviewable && openPreview(lecIdx >= 0 ? lecIdx : 0)}
-                              >
-                                {/* Icon */}
-                                <div className="mr-3 flex-shrink-0">
-                                  {isPreviewable ? (
-                                    <div className="w-6 h-6 rounded-full border border-purple-300 bg-purple-50 flex items-center justify-center">
-                                      <svg className="w-3 h-3 text-purple-600 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
-                                    </div>
-                                  ) : (
-                                    <div className="w-6 h-6 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center">
-                                      <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
-                                      </svg>
-                                    </div>
-                                  )}
-                                </div>
-
-                                {/* Title + Preview badge */}
-                                <div className="flex-1 min-w-0 flex items-center gap-2">
-                                  <span className="text-sm text-gray-700 leading-snug line-clamp-2">{lec.title}</span>
-                                  {isPreviewable && (
-                                    <span className="flex-shrink-0 text-xs text-purple-600 border border-purple-200 bg-purple-50 rounded px-2 py-0.5 font-semibold">
-                                      Preview
-                                    </span>
-                                  )}
-                                </div>
-
-                                {/* Duration */}
-                                {lec.duration && (
-                                  <span className="text-xs text-gray-400 flex-shrink-0 ml-3 font-mono tabular-nums">{lec.duration}</span>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </section>
-            )}
-
-            {/* Instructor */}
-            {course.instructor && (
-              <section className="bg-white lg:rounded-xl border-y lg:border border-gray-200 p-5 sm:p-6 shadow-sm">
-                <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900 mb-4">Instructor</h2>
-                <div className="flex items-start gap-4">
-                  <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-purple-600 flex items-center justify-center text-white font-black text-2xl flex-shrink-0">
-                    {course.instructor.name?.[0] || "I"}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-lg font-bold text-purple-700 leading-tight">{course.instructor.name}</h3>
-                    {course.instructor.title && <p className="text-sm text-gray-500 mt-0.5">{course.instructor.title}</p>}
-                    {/* Instructor stats row */}
-                    <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 mb-2">
-                      {course.rating > 0 && (
-                        <div className="flex items-center gap-1 text-xs text-gray-600">
-                          <svg className="w-3.5 h-3.5 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/></svg>
-                          <span>{course.rating.toFixed(1)} Instructor Rating</span>
-                        </div>
-                      )}
-                      {course.totalRatings > 0 && <span className="text-xs text-gray-500">{course.totalRatings.toLocaleString()} Reviews</span>}
-                      {course.studentsEnrolled > 0 && <span className="text-xs text-gray-500">{course.studentsEnrolled.toLocaleString()} Students</span>}
-                    </div>
-                    {course.instructor.bio && <p className="text-sm text-gray-700 leading-relaxed">{course.instructor.bio}</p>}
-                  </div>
-                </div>
-              </section>
-            )}
-
-            {/* Reviews */}
-            <div className="lg:hidden px-0">
-              <ReviewsSection courseId={id} course={course} user={user} enrolled={enrolled}/>
+              <div className="flex-1">
+                <p className="font-bold text-gray-900 text-sm">{course.instructor.name}</p>
+                {course.instructor.title && <p className="text-xs text-gray-600 mt-0.5">{course.instructor.title}</p>}
+              </div>
             </div>
-            <div className="hidden lg:block">
-              <ReviewsSection courseId={id} course={course} user={user} enrolled={enrolled}/>
-            </div>
+            {course.instructor.bio && <p className="text-xs text-gray-600 mt-3 leading-relaxed">{course.instructor.bio.slice(0, 150)}{course.instructor.bio.length > 150 ? "..." : ""}</p>}
           </div>
+        )}
 
-          {/* Desktop sticky sidebar — unchanged */}
-          <div className="hidden lg:block w-80 xl:w-96 flex-shrink-0">
-            <div className="sticky" style={{ top: "80px" }}>
-              <div className="bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden" style={{ marginTop: "-220px" }}>
-                <CourseThumbnail course={course} freeLectures={freeLectures} onPreview={() => openPreview(0)}/>
-                <div className="p-5">
-                  <PriceEnrollCard course={course} enrolled={enrolled} enrolling={enrolling} onEnroll={handleEnroll} added={added} setAdded={setAdded}/>
-                </div>
-              </div>
+        {/* Mobile Pricing & Enroll Card */}
+        <div className="px-4 py-4 bg-white border-b border-gray-100">
+          <div className="space-y-3">
+            <div className="flex items-baseline gap-2">
+              <span className="text-3xl font-black text-gray-900">${course.discountPrice ?? course.price ?? 0}</span>
+              {course.discountPrice && course.price && <span className="text-sm text-gray-400 line-through">${course.price}</span>}
+              {(!course.price || course.price === 0) && <span className="text-xs font-bold text-emerald-600">FREE</span>}
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ══ MOBILE STICKY BOTTOM BAR — Udemy style ══ */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-50" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
-        <div className="bg-white border-t border-gray-200 shadow-[0_-4px_20px_rgba(0,0,0,0.12)]">
-          <div className="flex items-center justify-between px-4 py-3 gap-3">
-            {/* Price stack */}
-            <div className="flex-shrink-0">
-              <div className="flex items-baseline gap-2">
-                <span className="text-xl font-black text-gray-900">${course.discountPrice ?? course.price ?? 0}</span>
-                {course.discountPrice && course.price && (
-                  <span className="text-sm text-gray-400 line-through">${course.price}</span>
-                )}
-              </div>
-              {(!course.price || course.price === 0) && (
-                <span className="text-sm font-bold text-emerald-600">Free</span>
-              )}
-              {course.discountPrice && (
-                <p className="text-xs text-red-500 font-semibold leading-none">⚡ Limited offer</p>
-              )}
-            </div>
-
-            {/* Enroll button — full purple like Udemy */}
-            <button onClick={handleEnroll} disabled={enrolling}
-              className={`flex-1 py-3 rounded-lg text-sm font-black transition-all ${
-                enrolled
-                  ? "bg-emerald-500 hover:bg-emerald-600 text-white"
-                  : enrolling
-                    ? "bg-indigo-400 text-white cursor-not-allowed"
-                    : "bg-indigo-600 hover:bg-indigo-700 text-white"
-              }`}>
-              {enrolled ? "Continue Learning →" : enrolling ? "Enrolling..." : !course.price || course.price === 0 ? "Enroll Free" : "Enroll Now"}
+            {course.discountPrice && <p className="text-xs text-red-500 font-semibold">⚡ Limited time offer!</p>}
+            <button onClick={handleEnroll} disabled={enrolling} className={`w-full py-3 rounded-lg font-bold text-sm transition-all ${enrolled ? "bg-emerald-500 hover:bg-emerald-600 text-white" : enrolling ? "bg-indigo-400 text-white cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700 text-white"}`}>
+              {enrolled ? "✓ Go to Course" : enrolling ? "Enrolling..." : !course.price || course.price === 0 ? "Enroll Free" : "Enroll Now"}
             </button>
+            {!enrolled && (
+              <button onClick={() => setAdded(a => !a)} className={`w-full py-2 rounded-lg font-bold text-sm transition-all ${added ? "bg-green-500 text-white" : "bg-amber-400 hover:bg-amber-500 text-gray-900"}`}>
+                {added ? "✓ Added to Wishlist" : "♡ Add to Wishlist"}
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Mobile Course Includes */}
+        <div className="px-4 py-4 bg-white border-b border-gray-100">
+          <h3 className="text-sm font-bold text-gray-900 mb-3">This course includes:</h3>
+          <div className="space-y-2">
+            {[
+              { icon: "🎬", text: `${totalLectures} lectures` },
+              { icon: "📺", text: `${Math.round(totalLectures * 1.5)} hours on-demand video` },
+              { icon: "📝", text: "Certificate of completion" },
+              { icon: "⬇️", text: "Downloadable resources" },
+              { icon: "📱", text: "Access on mobile & desktop" },
+              { icon: "♾️", text: "Full lifetime access" }
+            ].map((item, i) => (
+              <div key={i} className="flex items-center gap-2 text-sm text-gray-700">
+                <span className="text-lg">{item.icon}</span>
+                <span>{item.text}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Mobile What You'll Learn */}
+        {course.whatYouLearn?.length > 0 && (
+          <div className="px-4 py-4 bg-white border-b border-gray-100">
+            <h3 className="text-sm font-bold text-gray-900 mb-3">What you'll learn</h3>
+            <div className="space-y-2">
+              {course.whatYouLearn.slice(0, 5).map((item, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <svg className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
+                  <p className="text-xs text-gray-700">{item}</p>
+                </div>
+              ))}
+              {course.whatYouLearn.length > 5 && <p className="text-xs text-indigo-600 font-semibold mt-2">+{course.whatYouLearn.length - 5} more</p>}
+            </div>
+          </div>
+        )}
+
+        {/* Mobile Description */}
+        <div className="px-4 py-4 bg-white border-b border-gray-100">
+          <h3 className="text-sm font-bold text-gray-900 mb-2">Description</h3>
+          <p className="text-xs text-gray-700 leading-relaxed line-clamp-4">{course.description}</p>
+        </div>
+
+        {/* Mobile Curriculum */}
+        {course.sections?.length > 0 && (
+          <div className="px-4 py-4 bg-white border-b border-gray-100">
+            <h3 className="text-sm font-bold text-gray-900 mb-1">Course Content</h3>
+            <p className="text-xs text-gray-500 mb-4">{course.sections.length} sections • {totalLectures} lectures{freeLectures > 0 && ` • ${freeLectures} previews`}</p>
+            <div className="space-y-2">
+              {course.sections.map(section => (
+                <div key={section._id} className="border border-gray-100 rounded-lg overflow-hidden">
+                  <button
+                    onClick={() => setOpenSections(p => p.includes(section._id) ? p.filter(x => x !== section._id) : [...p, section._id])}
+                    className="w-full flex justify-between items-center px-3 py-2.5 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <svg className={`w-4 h-4 text-gray-500 transition-transform flex-shrink-0 ${openSections.includes(section._id) ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
+                      </svg>
+                      <span className="font-semibold text-xs text-gray-800 truncate">{section.title}</span>
+                    </div>
+                    <span className="text-xs text-gray-500 flex-shrink-0 ml-2">{section.lectures?.length || 0}</span>
+                  </button>
+
+                  {openSections.includes(section._id) && (
+                    <div className="divide-y divide-gray-50 bg-white">
+                      {section.lectures?.map((lec, li) => {
+                        const isPreviewable = lec.free;
+                        const lecIdx = previewLecs.findIndex(pl => (pl._id || pl.id) === (lec._id || lec.id));
+                        return (
+                          <div
+                            key={lec._id || li}
+                            className={`flex items-center justify-between px-3 py-2.5 transition-colors ${isPreviewable ? "hover:bg-purple-50 cursor-pointer" : ""}`}
+                            onClick={() => isPreviewable && openPreview(lecIdx >= 0 ? lecIdx : 0)}
+                          >
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              {isPreviewable ? (
+                                <div className="w-5 h-5 rounded-full border border-purple-300 bg-purple-50 flex items-center justify-center flex-shrink-0">
+                                  <svg className="w-2.5 h-2.5 text-purple-600 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                </div>
+                              ) : (
+                                <svg className="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                                </svg>
+                              )}
+                              <span className="text-xs text-gray-800 truncate">{lec.title}</span>
+                            </div>
+                            {isPreviewable && <span className="text-xs text-purple-600 flex-shrink-0 ml-2">Preview</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Mobile Reviews */}
+        <div className="px-4 py-4">
+          <ReviewsSection courseId={id} course={course} user={user} enrolled={enrolled}/>
+        </div>
+
+        {/* Mobile Bottom Spacing */}
+        <div className="h-20" />
+      </div>
+
+      {/* ════════════════════════════════════════════════════════════════ */}
+      {/* DESKTOP LAYOUT (lg and above) — UNCHANGED */}
+      {/* ════════════════════════════════════════════════════════════════ */}
+      <div className="hidden lg:block">
+        {/* Hero */}
+        <div className="bg-gradient-to-br from-gray-900 via-slate-800 to-gray-900 text-white relative">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 py-10 lg:py-14">
+            <div className="max-w-2xl lg:max-w-[60%]">
+              <button onClick={() => navigate("/courses")} className="text-sm text-slate-400 hover:text-white mb-4 flex items-center gap-1 transition-colors">← All Courses</button>
+              {course.badge && <span className="text-xs font-bold bg-amber-400 text-amber-900 px-2 py-0.5 rounded mb-3 inline-block">{course.badge}</span>}
+              <h1 className="text-3xl sm:text-4xl font-extrabold leading-tight mb-3">{course.title}</h1>
+              <p className="text-slate-300 text-base mb-4 leading-relaxed">{course.subtitle || course.description?.slice(0, 160)}</p>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm mb-4">
+                {course.rating > 0 && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="font-bold text-amber-400">{course.rating.toFixed(1)}</span>
+                    <StarRating rating={course.rating}/>
+                    <span className="text-slate-400">({course.totalRatings || 0} ratings)</span>
+                  </div>
+                )}
+                {course.studentsEnrolled > 0 && <span className="text-slate-300">{course.studentsEnrolled.toLocaleString()} students enrolled</span>}
+                <span className="text-slate-400">Updated {course.updatedAt ? new Date(course.updatedAt).toLocaleDateString("en-US", { month: "long", year: "numeric" }) : "Recently"}</span>
+              </div>
+              {course.instructor && (
+                <div className="flex items-center gap-3">
+                  <div className="w-9 h-9 rounded-full bg-amber-400 flex items-center justify-center font-bold text-gray-900 flex-shrink-0">{course.instructor.name?.[0] || "I"}</div>
+                  <span className="text-sm text-slate-300">Created by <span className="text-amber-400 font-semibold">{course.instructor.name}</span>{course.instructor.title && <span className="text-slate-400"> · {course.instructor.title}</span>}</span>
+                </div>
+              )}
+              {course.tags?.length > 0 && (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {course.tags.map(tag => <span key={tag} className="text-xs bg-white/10 border border-white/20 rounded-full px-3 py-1 text-slate-300">{tag}</span>)}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="hidden lg:block h-8"/>
+        </div>
+
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 relative">
+          <div className="flex flex-col lg:flex-row gap-8">
+
+            {/* Left column */}
+            <div className="flex-1 min-w-0 space-y-6 py-6 lg:pr-4">
+
+              {/* What you'll learn */}
+              {course.whatYouLearn?.length > 0 && (
+                <section className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                  <h2 className="text-2xl font-extrabold text-gray-900 mb-4">What you'll learn</h2>
+                  <div className="grid sm:grid-cols-2 gap-2">
+                    {course.whatYouLearn.map((item, i) => (
+                      <div key={i} className="flex items-start gap-2">
+                        <svg className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
+                        <p className="text-sm text-gray-700">{item}</p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Description */}
+              <section className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                <h2 className="text-2xl font-extrabold text-gray-900 mb-3">Description</h2>
+                <div className={`overflow-hidden transition-all duration-500 relative ${expanded ? "max-h-[600px]" : "max-h-32"}`}>
+                  <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{course.description}</p>
+                  {!expanded && <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white to-transparent"/>}
+                </div>
+                <button onClick={() => setExpanded(e => !e)} className="mt-2 text-sm font-semibold text-purple-600 hover:text-purple-800 transition-colors">
+                  {expanded ? "Show less ↑" : "Show more ↓"}
+                </button>
+              </section>
+
+              {/* Requirements */}
+              {course.requirements?.length > 0 && (
+                <section className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                  <h2 className="text-xl font-extrabold text-gray-900 mb-3">Requirements</h2>
+                  <ul className="list-disc list-inside space-y-1.5">
+                    {course.requirements.map((r, i) => <li key={i} className="text-sm text-gray-600">{r}</li>)}
+                  </ul>
+                </section>
+              )}
+
+              {/* ── CURRICULUM — Udemy-style rows ── */}
+              {course.sections?.length > 0 && (
+                <section className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                  <h2 className="text-2xl font-extrabold text-gray-900 mb-1">Course Content</h2>
+                  <p className="text-sm text-gray-500 mb-4">
+                    {course.sections.length} sections • {totalLectures} lectures{freeLectures > 0 && ` • ${freeLectures} free previews`}
+                  </p>
+                  <div className="border border-gray-200 rounded-xl overflow-hidden divide-y divide-gray-100">
+                    {course.sections.map(section => (
+                      <div key={section._id}>
+                        <button
+                          onClick={() => setOpenSections(p => p.includes(section._id) ? p.filter(x => x !== section._id) : [...p, section._id])}
+                          className="w-full flex justify-between items-center px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                        >
+                          <div className="flex items-center gap-2">
+                            <svg className={`w-4 h-4 text-gray-500 transition-transform ${openSections.includes(section._id) ? "rotate-90" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7"/>
+                            </svg>
+                            <span className="font-semibold text-sm text-gray-800">{section.title}</span>
+                          </div>
+                          <span className="text-xs text-gray-500">{section.lectures?.length || 0} lectures</span>
+                        </button>
+
+                        {openSections.includes(section._id) && (
+                          <div className="divide-y divide-gray-50">
+                            {section.lectures?.map((lec, li) => {
+                              const isPreviewable = lec.free;
+                              const lecIdx = previewLecs.findIndex(pl => (pl._id || pl.id) === (lec._id || lec.id));
+                              return (
+                                <div
+                                  key={lec._id || li}
+                                  className={`flex items-center justify-between px-5 py-3 transition-colors ${isPreviewable ? "hover:bg-purple-50 cursor-pointer" : ""}`}
+                                  onClick={() => isPreviewable && openPreview(lecIdx >= 0 ? lecIdx : 0)}
+                                >
+                                  {/* Left: icon + title + Preview badge */}
+                                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                                    {isPreviewable ? (
+                                      // Play button circle — like Udemy
+                                      <div className="w-6 h-6 rounded-full border border-purple-300 bg-purple-50 flex items-center justify-center flex-shrink-0">
+                                        <svg className="w-3 h-3 text-purple-600 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M8 5v14l11-7z"/></svg>
+                                      </div>
+                                    ) : (
+                                      <div className="w-6 h-6 rounded-full bg-gray-50 border border-gray-200 flex items-center justify-center flex-shrink-0">
+                                        <svg className="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                                        </svg>
+                                      </div>
+                                    )}
+
+                                    {/* Title */}
+                                    <span className={`text-sm truncate ${isPreviewable ? "text-gray-800" : "text-gray-700"}`}>
+                                      {lec.title}
+                                    </span>
+
+                                    {/* "Preview" clickable badge — Udemy blue link style */}
+                                    {isPreviewable && (
+                                      <span className="flex-shrink-0 text-xs text-purple-600 border border-purple-200 bg-purple-50 hover:bg-purple-100 rounded px-2 py-0.5 font-semibold transition-colors ml-1">
+                                        Preview
+                                      </span>
+                                    )}
+                                  </div>
+
+                                  {/* Right: duration — always shown at end of line */}
+                                  {lec.duration ? (
+                                    <span className="text-xs text-gray-400 flex-shrink-0 ml-4 tabular-nums font-mono">
+                                      {lec.duration}
+                                    </span>
+                                  ) : null}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Instructor */}
+              {course.instructor && (
+                <section className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                  <h2 className="text-2xl font-extrabold text-gray-900 mb-5">Your Instructor</h2>
+                  <div className="flex items-start gap-5">
+                    <div className="w-20 h-20 rounded-full bg-purple-600 flex items-center justify-center text-white font-black text-2xl flex-shrink-0">
+                      {course.instructor.name?.[0] || "I"}
+                    </div>
+                    <div>
+                      <h3 className="text-xl font-bold text-purple-700">{course.instructor.name}</h3>
+                      {course.instructor.title && <p className="text-sm text-gray-500 mt-0.5">{course.instructor.title}</p>}
+                      {course.instructor.bio   && <p className="mt-3 text-sm text-gray-700 leading-relaxed">{course.instructor.bio}</p>}
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* ── REAL REVIEWS ── */}
+              <ReviewsSection courseId={id} course={course} user={user} enrolled={enrolled}/>
+            </div>
+
+            {/* Floating sticky card */}
+            <div className="hidden lg:block w-80 xl:w-96 flex-shrink-0">
+              <div className="sticky" style={{ top: "80px" }}>
+                <div className="bg-white rounded-xl shadow-2xl border border-gray-100 overflow-hidden" style={{ marginTop: "-220px" }}>
+                  <CourseThumbnail course={course} freeLectures={freeLectures} onPreview={() => openPreview(0)}/>
+                  <div className="p-5">
+                    <PriceEnrollCard course={course} enrolled={enrolled} enrolling={enrolling} onEnroll={handleEnroll} added={added} setAdded={setAdded}/>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Spacer so content doesn't hide behind bottom bar on mobile */}
-      <div className="lg:hidden h-20"/>
+      {/* Mobile bottom bar */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3 flex items-center justify-between z-40 shadow-lg">
+        <div>
+          <span className="text-lg font-black text-gray-900">${course.discountPrice ?? course.price ?? 0}</span>
+          {course.discountPrice && <span className="text-xs text-gray-400 line-through ml-2">${course.price}</span>}
+        </div>
+        <button onClick={handleEnroll} disabled={enrolling}
+          className={`px-5 py-2 rounded-lg text-sm font-bold transition-all ${enrolled ? "bg-emerald-500 text-white" : enrolling ? "bg-indigo-400 text-white cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700 text-white"}`}>
+          {enrolled ? "Go to Course" : enrolling ? "Enrolling..." : "Enroll Now"}
+        </button>
+      </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ROOT EXPORT
-// ─────────────────────────────────────────────────────────────────────────────
 export default function Shopify() {
   const { id }   = useParams();
   const { user } = useAuth();
