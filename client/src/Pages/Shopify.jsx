@@ -1,631 +1,630 @@
 import React, { useState } from 'react';
-import { 
-  ChevronDown, ChevronRight, Star, Users, Clock, Globe,
-  Play, CheckCircle, BarChart3, FileText, Zap, Menu, Search, LogIn,
-  ChevronLeft, ChevronRightIcon
-} from 'lucide-react';
+import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search, User, ChevronRight } from 'lucide-react';
 
 export default function CourseLandingPage() {
-  const [expandedSection, setExpandedSection] = useState(0);
-  const [expandedRequirements, setExpandedRequirements] = useState(false);
-  const [expandedDescription, setExpandedDescription] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [expandedSection, setExpandedSection] = useState([0]);
   const [videoCarouselIndex, setVideoCarouselIndex] = useState(0);
   const [imageCarouselIndex, setImageCarouselIndex] = useState(0);
+  const [showFullDescription, setShowFullDescription] = useState(false);
 
-  // Mock data
-  const courseSections = [
-    {
-      id: 1,
-      title: 'Getting Started',
-      lectures: [
-        { id: 1, title: 'Course Introduction', duration: '5:32', isFree: true },
-        { id: 2, title: 'What You Need to Know', duration: '8:15', isFree: true },
-        { id: 3, title: 'Setting Up Your Environment', duration: '12:45', isFree: false },
-      ],
+  const courseData = {
+    title: 'Complete Web Development Bootcamp 2024',
+    subtitle: 'Master HTML, CSS, JavaScript, React, and Node.js from scratch',
+    rating: 4.8,
+    reviews: 150232,
+    students: 89234,
+    price: 99.99,
+    originalPrice: 499.99,
+    language: 'English',
+    lastUpdated: 'January 2024',
+    instructor: {
+      name: 'Sarah Anderson',
+      rating: 4.9,
+      reviews: 45678,
+      students: 234567,
+      courses: 12,
+      bio: 'Senior Full-Stack Developer with 10+ years of experience. I\'ve helped over 200,000 students launch their coding careers.',
+      image: '👩‍💼'
     },
-    {
-      id: 2,
-      title: 'Core Concepts',
-      lectures: [
-        { id: 4, title: 'Understanding Fundamentals', duration: '15:20', isFree: false },
-        { id: 5, title: 'Deep Dive into Theory', duration: '22:10', isFree: false },
-        { id: 6, title: 'Practical Applications', duration: '18:05', isFree: false },
-      ],
-    },
-    {
-      id: 3,
-      title: 'Advanced Techniques',
-      lectures: [
-        { id: 7, title: 'Pro Tips and Tricks', duration: '12:30', isFree: false },
-        { id: 8, title: 'Real-World Projects', duration: '45:20', isFree: false },
-      ],
-    },
-  ];
-
-  const reviews = [
-    { id: 1, author: 'Sarah Johnson', rating: 5, text: 'Outstanding course! Clear explanations and practical examples.', image: '👩‍💼' },
-    { id: 2, author: 'Michael Chen', rating: 5, text: 'Best investment for my career. Highly recommended!', image: '👨‍💻' },
-    { id: 3, author: 'Emma Davis', rating: 4.5, text: 'Great content with hands-on projects.', image: '👩‍🎓' },
-  ];
+    learningOutcomes: [
+      'Build fully functional web applications from scratch',
+      'Master JavaScript ES6+ features and async programming',
+      'Create responsive designs with CSS Grid and Flexbox',
+      'Build backend APIs with Node.js and Express',
+      'Deploy applications to production',
+      'Implement user authentication and security'
+    ],
+    courseIncludes: [
+      { icon: Clock, text: '45 hours of on-demand video' },
+      { icon: BookOpen, text: '200+ coding exercises' },
+      { icon: Zap, text: '5 real-world projects' },
+      { icon: User, text: 'Lifetime access' }
+    ],
+    sections: [
+      {
+        title: 'Section 1: HTML Fundamentals',
+        lectures: 12,
+        duration: '3h 45m',
+        lectures_list: [
+          { id: 1, title: 'Introduction to HTML', duration: '15m', type: 'video', preview: true },
+          { id: 2, title: 'HTML5 Semantic Elements', duration: '22m', type: 'video', preview: false },
+          { id: 3, title: 'HTML Quiz #1', duration: '5m', type: 'quiz', preview: false }
+        ]
+      },
+      {
+        title: 'Section 2: CSS Mastery',
+        lectures: 18,
+        duration: '6h 20m',
+        lectures_list: [
+          { id: 4, title: 'CSS Selectors & Specificity', duration: '28m', type: 'video', preview: true },
+          { id: 5, title: 'Flexbox Complete Guide', duration: '45m', type: 'video', preview: false },
+          { id: 6, title: 'CSS Grid Layout', duration: '38m', type: 'video', preview: false }
+        ]
+      },
+      {
+        title: 'Section 3: JavaScript Basics',
+        lectures: 24,
+        duration: '8h 15m',
+        lectures_list: [
+          { id: 7, title: 'JavaScript Variables & Types', duration: '35m', type: 'video', preview: true },
+          { id: 8, title: 'Functions & Scope', duration: '42m', type: 'video', preview: false },
+          { id: 9, title: 'JavaScript Quiz #2', duration: '10m', type: 'quiz', preview: false }
+        ]
+      }
+    ],
+    requirements: [
+      'A computer with internet connection',
+      'Basic understanding of how websites work',
+      'Text editor (VS Code recommended)',
+      'Willingness to practice and build projects'
+    ],
+    description: 'This comprehensive bootcamp will transform you into a full-stack web developer. Through hands-on projects, you\'ll build real applications while learning best practices and industry standards. Whether you\'re starting from zero or transitioning careers, this course provides everything you need to succeed in web development.',
+    reviews_list: [
+      { author: 'John Smith', rating: 5, text: 'Absolutely incredible course! Sarah explains everything clearly and the projects were really helpful.', verified: true },
+      { author: 'Emma Johnson', rating: 5, text: 'Best investment I\'ve made. Got my first developer job 3 months after completing this course.', verified: true },
+      { author: 'Michael Chen', rating: 4, text: 'Great content and structure. The pacing is just right for beginners.', verified: true }
+    ]
+  };
 
   const videoReviews = [
-    { id: 1, title: 'Student Success Story', thumbnail: '🎬' },
-    { id: 2, title: 'Course Overview', thumbnail: '📹' },
-    { id: 3, title: 'Student Testimonial', thumbnail: '🎥' },
+    { id: 1, name: 'Alex Rivera', thumbnail: '🎥' },
+    { id: 2, name: 'Jordan Lee', thumbnail: '🎥' },
+    { id: 3, name: 'Sam Wilson', thumbnail: '🎥' },
+    { id: 4, name: 'Casey Brown', thumbnail: '🎥' }
   ];
 
-  const imageReviews = [
-    { id: 1, title: 'Project Showcase', image: '🖼️' },
-    { id: 2, title: 'Certificate Examples', image: '📜' },
-    { id: 3, title: 'Student Work', image: '🎨' },
+  const imageGallery = [
+    { id: 1, image: '📸' },
+    { id: 2, image: '📸' },
+    { id: 3, image: '📸' },
+    { id: 4, image: '📸' },
+    { id: 5, image: '📸' }
   ];
 
-  const toggleSection = (id) => {
-    setExpandedSection(expandedSection === id ? null : id);
-  };
-
-  const nextVideoCarousel = () => {
-    setVideoCarouselIndex((prev) => (prev + 1) % videoReviews.length);
-  };
-
-  const prevVideoCarousel = () => {
-    setVideoCarouselIndex((prev) => (prev - 1 + videoReviews.length) % videoReviews.length);
-  };
-
-  const nextImageCarousel = () => {
-    setImageCarouselIndex((prev) => (prev + 1) % imageReviews.length);
-  };
-
-  const prevImageCarousel = () => {
-    setImageCarouselIndex((prev) => (prev - 1 + imageReviews.length) % imageReviews.length);
-  };
+  // Shared style to make buttons look like links
+  const linkStyle = "bg-transparent border-none p-0 cursor-pointer underline";
 
   return (
-    <div className="bg-white overflow-x-hidden">
-      {/* 1. ANNOUNCEMENT BAR */}
-      <div className="w-full bg-gradient-to-r from-amber-50 to-orange-50 border-b border-amber-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <p className="text-center text-sm font-medium text-amber-900">
-            🎉 Limited Time: Get 50% off with code LAUNCH50 - Offer ends in 2 days
-          </p>
-        </div>
+    <div className="min-h-screen bg-white">
+      {/* ANNOUNCEMENT BAR */}
+      <div className="bg-amber-50 text-center py-3 px-4">
+        <p className="text-sm font-medium text-gray-800">
+          🎉 Limited time: Get this course for $99 (80% off). Enroll now!
+        </p>
       </div>
 
-      {/* 2. HEADER */}
-      <header className="sticky top-0 z-50 bg-white border-b border-gray-100 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            {/* Left: Menu Icon */}
-            <button className="lg:hidden p-2 hover:bg-gray-100 rounded-lg transition">
-              <Menu size={24} className="text-gray-700" />
+      {/* HEADER */}
+      <header className="sticky top-0 z-40 bg-white border-b border-gray-200">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <button className="lg:hidden" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+
+          <div className="absolute left-1/2 transform -translate-x-1/2 lg:relative lg:left-auto lg:transform-none">
+            <h1 className="text-2xl font-bold text-gray-900">Courseify</h1>
+          </div>
+
+          <nav className="hidden lg:flex items-center gap-8 flex-1 ml-12">
+            <button className="text-gray-700 hover:text-gray-900 transition bg-transparent border-none cursor-pointer">Categories</button>
+            <button className="text-gray-700 hover:text-gray-900 transition bg-transparent border-none cursor-pointer">Instructor</button>
+            <button className="text-gray-700 hover:text-gray-900 transition bg-transparent border-none cursor-pointer">About</button>
+          </nav>
+
+          <div className="flex items-center gap-3">
+            <Search className="hidden lg:block text-gray-400 cursor-pointer" size={20} />
+            <button className="hidden lg:block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition font-medium">
+              Login
             </button>
-
-            {/* Center: Logo */}
-            <div className="flex-1 lg:flex-none flex justify-center lg:justify-start ml-0 lg:ml-0">
-              <div className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                Edu
-              </div>
-            </div>
-
-            {/* Right: Search, Login */}
-            <div className="flex items-center gap-4">
-              <button className="hidden md:flex items-center gap-2 bg-gray-100 px-4 py-2 rounded-full hover:bg-gray-200 transition">
-                <Search size={18} className="text-gray-500" />
-                <span className="text-sm text-gray-500">Search</span>
-              </button>
-              <button className="p-2 md:hidden hover:bg-gray-100 rounded-lg transition">
-                <Search size={20} className="text-gray-700" />
-              </button>
-              <button className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition font-medium">
-                <LogIn size={18} />
-                <span>Log in</span>
-              </button>
-            </div>
+            <button className="hidden lg:block px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition font-medium">
+              Sign Up
+            </button>
           </div>
         </div>
+
+        {mobileMenuOpen && (
+          <div className="lg:hidden border-t border-gray-200 bg-white p-4 space-y-3">
+            <button className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left">Categories</button>
+            <button className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left">Instructor</button>
+            <button className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left">About</button>
+            <button className="w-full text-left py-2 text-gray-700">Login</button>
+            <button className="w-full text-left py-2 text-gray-700">Sign Up</button>
+          </div>
+        )}
       </header>
 
-      {/* 3. BREADCRUMB */}
-      <div className="border-b border-gray-100">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <span>Development</span>
-            <ChevronRight size={16} />
-            <span>Web Development</span>
-            <ChevronRight size={16} />
-            <span className="text-gray-900 font-medium">The Complete React Course</span>
-          </div>
-        </div>
+      {/* BREADCRUMB */}
+      <div className="max-w-7xl mx-auto px-4 py-3 text-sm text-gray-600">
+        <span>Development</span>
+        <span className="mx-2">›</span>
+        <span>Web Development</span>
+        <span className="mx-2">›</span>
+        <span className="text-gray-900 font-medium">Complete Web Development Bootcamp</span>
       </div>
 
-      {/* MAIN CONTENT CONTAINER */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* LEFT COLUMN - Main Content */}
-          <div className="lg:col-span-2">
-            {/* 4. COURSE PREVIEW SECTION */}
-            <div className="mb-10">
-              <div className="relative bg-gradient-to-br from-slate-700 to-slate-900 rounded-lg overflow-hidden aspect-video flex items-center justify-center group cursor-pointer">
-                <div className="absolute inset-0 bg-black/20 group-hover:bg-black/30 transition duration-300" />
-                <div className="relative flex flex-col items-center gap-3 z-10">
-                  <button className="w-16 h-16 bg-white rounded-full flex items-center justify-center hover:bg-gray-100 transition transform group-hover:scale-110 duration-300 shadow-lg">
-                    <Play size={28} className="text-blue-600 ml-1" />
+      {/* BLACK HERO SECTION - COURSE PREVIEW */}
+      <section className="w-full bg-black text-white py-8 lg:py-16">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="grid grid-cols-1 lg:grid-cols-1 gap-6 lg:gap-8">
+            <div className="lg:col-span-1">
+              <div className="relative bg-gray-800 rounded-xl overflow-hidden aspect-video flex items-center justify-center cursor-pointer hover:bg-gray-700 transition group">
+                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-t from-black/40 to-transparent">
+                  <button className="bg-white text-black p-5 rounded-full hover:bg-gray-100 transition transform group-hover:scale-110 duration-200 shadow-lg">
+                    <Play size={40} fill="currentColor" />
                   </button>
-                  <p className="text-white font-medium text-sm">Preview this course</p>
                 </div>
               </div>
+              <p className="text-gray-400 text-sm mt-4">Preview this course</p>
             </div>
+          </div>
+        </div>
+      </section>
 
-            {/* 5. COURSE INFORMATION */}
-            <div className="mb-10">
-              <h1 className="text-3xl sm:text-4xl font-bold text-gray-900 mb-3">
-                The Complete React Mastery Course 2024
-              </h1>
-              <p className="text-gray-600 text-lg mb-6 leading-relaxed">
-                Learn React from scratch and build production-ready applications. Master hooks, state management, routing, and modern JavaScript patterns.
-              </p>
+      {/* BLACK SECTION - COURSE INFORMATION */}
+      <section className="w-full bg-black text-white py-12 lg:py-16">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="mb-4">
+            <span className="inline-block bg-yellow-400 text-black font-bold px-4 py-2 rounded-full text-sm">
+              Bestseller
+            </span>
+          </div>
 
-              {/* Metadata */}
-              <div className="flex flex-wrap gap-6 text-sm">
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-500">Last updated</span>
-                  <span className="font-medium text-gray-900">December 2024</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Globe size={16} className="text-gray-400" />
-                  <span className="font-medium text-gray-900">English</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="flex">
-                    {[...Array(5)].map((_, i) => (
-                      <Star key={i} size={16} className={i < 4 ? 'fill-amber-400 text-amber-400' : 'fill-gray-300 text-gray-300'} />
-                    ))}
-                  </div>
-                  <span className="text-gray-600">(4.8) 12,543 ratings</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <Users size={16} className="text-gray-400" />
-                  <span className="font-medium text-gray-900">245K students</span>
-                </div>
+          <h1 className="text-4xl lg:text-5xl font-bold text-white mb-6 leading-tight">
+            {courseData.title}
+          </h1>
+
+          <p className="text-xl text-gray-300 mb-8 leading-relaxed max-w-3xl">
+            {courseData.subtitle}
+          </p>
+
+          <div className="flex flex-wrap items-center gap-6 mb-8">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1">
+                <Star size={22} className="text-yellow-400" fill="currentColor" />
+                <span className="text-3xl font-bold text-white">{courseData.rating}</span>
+              </div>
+              <div>
+                <p className="text-gray-300 font-semibold">({courseData.reviews.toLocaleString()} ratings)</p>
               </div>
             </div>
+            <div className="flex items-center gap-2 text-gray-300">
+              <Users size={20} />
+              <span className="font-semibold">{courseData.students.toLocaleString()} students</span>
+            </div>
+          </div>
 
-            {/* 6. WHAT YOU WILL LEARN */}
-            <div className="mb-10 p-6 border border-gray-200 rounded-lg bg-gray-50">
-              <h2 className="text-xl font-bold text-gray-900 mb-6">What you will learn</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {[
-                  'Master React fundamentals and advanced patterns',
-                  'Build modern, responsive user interfaces',
-                  'Work with React Hooks and custom hooks',
-                  'Manage state with Redux and Context API',
-                  'Implement routing and navigation',
-                  'Connect to APIs and handle async operations',
-                ].map((item, i) => (
-                  <div key={i} className="flex gap-3">
-                    <CheckCircle size={20} className="text-green-600 flex-shrink-0 mt-0.5" />
-                    <span className="text-gray-700">{item}</span>
+          <div className="mb-8">
+            <p className="text-gray-400">
+              Created by{' '}
+              <button className={`text-green-400 hover:text-green-300 font-semibold ${linkStyle}`}>
+                {courseData.instructor.name}
+              </button>
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-6 text-gray-400 text-sm border-t border-gray-800 pt-8">
+            <div className="flex items-center gap-2">
+              <Clock size={18} />
+              <span>Last updated {courseData.lastUpdated}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span>🌐</span>
+              <span>{courseData.language}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span>📝</span>
+              <span>English, Spanish [+2]</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* WHITE SECTION */}
+      <section className="w-full bg-white py-12 lg:py-16">
+        <div className="max-w-7xl mx-auto px-4">
+          {/* WHAT YOU WILL LEARN */}
+          <div className="mb-16">
+            <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-8">What you'll learn</h2>
+            <div className="border border-gray-300 rounded-lg p-6 lg:p-8">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {courseData.learningOutcomes.map((outcome, idx) => (
+                  <div key={idx} className="flex gap-4">
+                    <div className="flex-shrink-0">
+                      <Zap size={20} className="text-purple-600 mt-1" />
+                    </div>
+                    <p className="text-gray-700">{outcome}</p>
                   </div>
                 ))}
               </div>
             </div>
+          </div>
 
-            {/* 7. THIS COURSE INCLUDES */}
-            <div className="mb-10 py-6 border-t border-b border-gray-100">
-              <h2 className="text-xl font-bold text-gray-900 mb-6">This course includes</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="flex gap-3">
-                  <Clock size={20} className="text-blue-600 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-gray-900">42 hours</p>
-                    <p className="text-sm text-gray-600">on-demand video</p>
+          {/* THIS COURSE INCLUDES */}
+          <div className="mb-16">
+            <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-8">This course includes</h2>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+              {courseData.courseIncludes.map((item, idx) => {
+                const Icon = item.icon;
+                return (
+                  <div key={idx} className="text-center">
+                    <Icon size={32} className="text-purple-600 mx-auto mb-3" />
+                    <p className="text-sm text-gray-700 font-medium">{item.text}</p>
                   </div>
-                </div>
-                <div className="flex gap-3">
-                  <FileText size={20} className="text-blue-600 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-gray-900">24 articles</p>
-                    <p className="text-sm text-gray-600">downloadable resources</p>
-                  </div>
-                </div>
-                <div className="flex gap-3">
-                  <Zap size={20} className="text-blue-600 flex-shrink-0" />
-                  <div>
-                    <p className="font-medium text-gray-900">Lifetime access</p>
-                    <p className="text-sm text-gray-600">on all devices</p>
-                  </div>
-                </div>
-              </div>
+                );
+              })}
             </div>
+          </div>
 
-            {/* 8. COURSE CONTENT HEADER */}
-            <div className="mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Course content</h2>
-              <p className="text-gray-600">
-                <span className="font-medium">{courseSections.length} sections</span>
-                {' •  '}
-                <span className="font-medium">
-                  {courseSections.reduce((acc, sec) => acc + sec.lectures.length, 0)} lectures
-                </span>
-                {' •  '}
-                <span className="font-medium">42h 15m total duration</span>
-              </p>
+          {/* COURSE CONTENT HEADER */}
+          <div className="mb-8">
+            <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">Course content</h2>
+            <div className="flex flex-wrap gap-3 text-gray-700 lg:text-lg font-semibold">
+              <span>{courseData.sections.length} sections</span>
+              <span>•</span>
+              <span>{courseData.sections.reduce((acc, s) => acc + s.lectures, 0)} lectures</span>
+              <span>•</span>
+              <span>18h 20m total duration</span>
             </div>
+          </div>
 
-            {/* 9. COURSE CONTENT ACCORDION */}
-            <div className="mb-10 border border-gray-200 rounded-lg overflow-hidden">
-              {courseSections.map((section) => (
-                <div key={section.id} className="border-b border-gray-200 last:border-b-0">
+          {/* COURSE CONTENT ACCORDION */}
+          <div className="space-y-2 mb-16">
+            {courseData.sections.map((section, idx) => {
+              const isExpanded = expandedSection.includes(idx);
+              return (
+                <div key={idx} className="border border-gray-300 rounded-lg overflow-hidden">
                   <button
-                    onClick={() => toggleSection(section.id)}
-                    className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition duration-200"
+                    onClick={() => {
+                      if (isExpanded) {
+                        setExpandedSection(expandedSection.filter(i => i !== idx));
+                      } else {
+                        setExpandedSection([idx]);
+                      }
+                    }}
+                    className="w-full px-5 py-3 flex items-center justify-between bg-white hover:bg-gray-50 transition"
                   >
-                    <div className="flex items-center gap-4 flex-1 text-left">
+                    <div className="flex items-center gap-3 flex-1 text-left">
                       <ChevronDown
                         size={20}
-                        className={`text-gray-600 transition-transform duration-300 ${
-                          expandedSection === section.id ? 'rotate-180' : ''
-                        }`}
+                        className={`text-gray-600 transition flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
                       />
-                      <div>
+                      <div className="flex-1">
                         <h3 className="font-semibold text-gray-900">{section.title}</h3>
-                        <p className="text-sm text-gray-600">{section.lectures.length} lectures</p>
+                        <p className="text-xs text-gray-600">{section.lectures} lectures • {section.duration}</p>
                       </div>
                     </div>
                   </button>
 
-                  {expandedSection === section.id && (
-                    <div className="bg-gray-50 border-t border-gray-200">
-                      {section.lectures.map((lecture, idx) => (
+                  {isExpanded && (
+                    <div className="border-t border-gray-200 bg-gray-50">
+                      {section.lectures_list.map((lecture, lectureIdx) => (
                         <div
-                          key={lecture.id}
-                          className="px-6 py-4 border-t border-gray-200 first:border-t-0 flex items-center justify-between hover:bg-gray-100 transition group"
+                          key={lectureIdx}
+                          className="px-5 py-3 border-b border-gray-200 last:border-b-0 flex items-center justify-between hover:bg-white transition"
                         >
-                          <div className="flex items-center gap-3 flex-1">
-                            <FileText size={16} className="text-gray-400" />
-                            <div className="flex-1">
-                              <p className="text-gray-900 font-medium">{lecture.title}</p>
-                            </div>
-                            {lecture.isFree && (
-                              <span className="text-purple-600 font-medium text-sm ml-2">Preview</span>
-                            )}
-                          </div>
                           <div className="flex items-center gap-3">
-                            <span className="text-sm text-gray-600">{lecture.duration}</span>
-                            <Play size={16} className="text-gray-400 group-hover:text-blue-600 transition" />
+                            <span className="text-gray-600">
+                              {lecture.type === 'video' ? (
+                                <Play size={16} fill="currentColor" className="text-gray-600" />
+                              ) : (
+                                <span>✓</span>
+                              )}
+                            </span>
+                            <div className="flex-1">
+                              <p className="text-gray-900 text-sm font-medium">{lecture.title}</p>
+                              <p className="text-xs text-gray-600">{lecture.duration}</p>
+                            </div>
                           </div>
+                          {lecture.preview && (
+                            <button className="text-purple-600 font-bold text-xs cursor-pointer hover:text-purple-700 whitespace-nowrap ml-2 bg-transparent border-none">
+                              Preview
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
                   )}
                 </div>
-              ))}
-            </div>
+              );
+            })}
+          </div>
 
-            {/* 10. REQUIREMENTS SECTION */}
-            <div className="mb-10">
-              <button
-                onClick={() => setExpandedRequirements(!expandedRequirements)}
-                className="w-full py-4 flex items-center justify-between text-left font-semibold text-gray-900 text-lg hover:text-blue-600 transition"
-              >
-                <span>Requirements</span>
-                <ChevronDown
-                  size={20}
-                  className={`transition-transform duration-300 ${
-                    expandedRequirements ? 'rotate-180' : ''
-                  }`}
-                />
-              </button>
+          {/* REQUIREMENTS */}
+          <div className="mb-16">
+            <button
+              onClick={() => setExpandedSection(expandedSection.includes('requirements') ? expandedSection.filter(i => i !== 'requirements') : [...expandedSection, 'requirements'])}
+              className="w-full flex items-center justify-between py-4 border-b-2 border-gray-300 bg-white hover:bg-gray-50 transition"
+            >
+              <h2 className="text-2xl lg:text-3xl font-bold text-gray-900">Requirements</h2>
+              <ChevronDown
+                size={28}
+                className={`text-gray-600 transition flex-shrink-0 ${expandedSection.includes('requirements') ? 'rotate-180' : ''}`}
+              />
+            </button>
+            {expandedSection.includes('requirements') && (
+              <div className="py-6 space-y-4">
+                <ul className="space-y-3">
+                  {courseData.requirements.map((req, idx) => (
+                    <li key={idx} className="flex gap-3 text-gray-700 text-lg">
+                      <span className="text-purple-600 font-bold flex-shrink-0">•</span>
+                      {req}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
 
-              {expandedRequirements && (
-                <div className="p-6 border border-gray-200 rounded-lg bg-gray-50 space-y-3">
-                  <p className="text-gray-700 flex gap-2">
-                    <span>•</span>
-                    <span>Basic JavaScript knowledge (ES6 or higher)</span>
-                  </p>
-                  <p className="text-gray-700 flex gap-2">
-                    <span>•</span>
-                    <span>HTML and CSS fundamentals</span>
-                  </p>
-                  <p className="text-gray-700 flex gap-2">
-                    <span>•</span>
-                    <span>A code editor (VS Code recommended)</span>
-                  </p>
-                  <p className="text-gray-700 flex gap-2">
-                    <span>•</span>
-                    <span>Node.js installed on your machine</span>
-                  </p>
+          {/* DESCRIPTION */}
+          <div className="mb-16">
+            <h2 className="text-3xl font-bold text-gray-900 mb-6">Description</h2>
+            <p className={`text-gray-700 leading-relaxed text-base ${!showFullDescription ? 'line-clamp-3' : ''}`}>
+              {courseData.description}
+            </p>
+            <button
+              onClick={() => setShowFullDescription(!showFullDescription)}
+              className="text-gray-700 hover:text-gray-900 mt-3 text-sm transition flex items-center gap-1 bg-transparent border-none cursor-pointer"
+            >
+              <span>{showFullDescription ? '▲' : '▼'}</span>
+              <span className="text-xs">{showFullDescription ? 'Show less' : 'Show more'}</span>
+            </button>
+          </div>
+
+          {/* INSTRUCTOR SECTION */}
+          <div className="mb-16">
+            <h2 className="text-3xl font-bold text-gray-900 mb-8">Instructor</h2>
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+              <div className="lg:col-span-1">
+                <div className="w-full lg:w-40 h-40 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-6xl mb-6">
+                  {courseData.instructor.image}
                 </div>
-              )}
-            </div>
+                <h3 className="font-bold text-gray-900 text-xl mb-2">
+                  <button className={`text-green-600 hover:text-green-700 ${linkStyle}`}>
+                    {courseData.instructor.name}
+                  </button>
+                </h3>
+                <p className="text-gray-700 font-medium text-sm">Lead Instructor at London App Brewery</p>
+              </div>
 
-            {/* 11. DESCRIPTION SECTION */}
-            <div className="mb-10">
-              <button
-                onClick={() => setExpandedDescription(!expandedDescription)}
-                className="w-full py-4 flex items-center justify-between text-left font-semibold text-gray-900 text-lg hover:text-blue-600 transition"
-              >
-                <span>Description</span>
-                <ChevronDown
-                  size={20}
-                  className={`transition-transform duration-300 ${
-                    expandedDescription ? 'rotate-180' : ''
-                  }`}
-                />
-              </button>
-
-              {expandedDescription && (
-                <div className="p-6 border border-gray-200 rounded-lg bg-white space-y-4 text-gray-700">
-                  <p>
-                    This comprehensive React course is designed for developers who want to master modern JavaScript web development. Whether you're a beginner or have some programming experience, this course will take you from React basics to advanced production-ready patterns.
-                  </p>
-                  <p>
-                    Throughout this course, you'll build real-world projects, learn industry best practices, and gain hands-on experience with tools used by top companies. We cover everything from component fundamentals to advanced state management and performance optimization.
-                  </p>
-                  <p>
-                    By the end of this course, you'll have the skills and confidence to build modern, scalable web applications and advance your career as a React developer.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* 12. INSTRUCTOR SECTION */}
-            <div className="mb-10 p-6 border border-gray-200 rounded-lg">
-              <h2 className="text-xl font-bold text-gray-900 mb-6">Instructor</h2>
-              <div className="flex flex-col sm:flex-row gap-6">
-                <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-4xl flex-shrink-0">
-                  👨‍🏫
-                </div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-bold text-gray-900 mb-2">Sarah Anderson</h3>
-                  <div className="flex flex-wrap gap-4 text-sm mb-4">
-                    <div className="flex items-center gap-1">
-                      <Star size={16} className="fill-amber-400 text-amber-400" />
-                      <span className="text-gray-700"><span className="font-semibold">4.8</span> Instructor Rating</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-700"><span className="font-semibold">98K</span> Reviews</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-700"><span className="font-semibold">450K</span> Students</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-700"><span className="font-semibold">12</span> Courses</span>
-                    </div>
+              <div className="lg:col-span-3">
+                <div className="flex flex-wrap gap-6 mb-8 pb-8 border-b border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <Star size={18} className="text-yellow-400" fill="currentColor" />
+                    <span className="font-bold text-gray-900">{courseData.instructor.rating}</span>
+                    <span className="text-sm text-gray-600">Instructor Rating</span>
                   </div>
-                  <p className="text-gray-700 leading-relaxed">
-                    Sarah is a full-stack developer with 8+ years of experience building web applications. She's passionate about teaching and has helped 450,000+ students master web development technologies.
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">👥</span>
+                    <span className="font-bold text-gray-900">{courseData.instructor.reviews.toLocaleString()}</span>
+                    <span className="text-sm text-gray-600">Reviews</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">📚</span>
+                    <span className="font-bold text-gray-900">{courseData.instructor.students.toLocaleString()}</span>
+                    <span className="text-sm text-gray-600">Students</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🎓</span>
+                    <span className="font-bold text-gray-900">{courseData.instructor.courses}</span>
+                    <span className="text-sm text-gray-600">Courses</span>
+                  </div>
                 </div>
+                <p className="text-gray-700 leading-relaxed text-base">{courseData.instructor.bio}</p>
               </div>
             </div>
+          </div>
 
-            {/* 13. COURSE REVIEWS */}
-            <div className="mb-10">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">Student reviews</h2>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {reviews.map((review) => (
-                  <div key={review.id} className="p-4 border border-gray-200 rounded-lg hover:shadow-md transition">
-                    <div className="flex items-center gap-3 mb-3">
-                      <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-lg">
-                        {review.image}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-900 text-sm">{review.author}</p>
-                        <div className="flex gap-1">
-                          {[...Array(5)].map((_, i) => (
-                            <Star
-                              key={i}
-                              size={14}
-                              className={i < Math.round(review.rating) ? 'fill-amber-400 text-amber-400' : 'fill-gray-300 text-gray-300'}
-                            />
-                          ))}
+          {/* COURSE REVIEWS */}
+          <div className="mb-16">
+            <h2 className="text-3xl font-bold text-gray-900 mb-3">Student reviews</h2>
+            <p className="text-gray-600 mb-8 text-lg">
+              <span className="font-bold text-gray-900">{courseData.reviews.toLocaleString()}</span> reviews
+            </p>
+            <div className="relative bg-white rounded-lg p-8">
+              <div className="flex items-center justify-between gap-4">
+                <button
+                  onClick={() => setVideoCarouselIndex((prev) => (prev - 1 + courseData.reviews_list.length) % courseData.reviews_list.length)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition flex-shrink-0 text-gray-600"
+                >
+                  ←
+                </button>
+                <div className="flex-1 overflow-hidden">
+                  <div className="flex gap-6">
+                    {courseData.reviews_list.map((review, idx) => (
+                      <div
+                        key={idx}
+                        className={`flex-shrink-0 w-full transition-opacity duration-300 ${idx === videoCarouselIndex ? 'opacity-100' : 'hidden'}`}
+                      >
+                        <div className="bg-white rounded-lg p-8 border border-gray-300">
+                          <div className="flex gap-1 mb-4">
+                            {Array.from({ length: review.rating }).map((_, i) => (
+                              <Star key={i} size={24} className="text-yellow-400" fill="currentColor" />
+                            ))}
+                          </div>
+                          <p className="font-bold text-gray-900 mb-3 text-xl">{review.author}</p>
+                          {review.verified && (
+                            <div className="flex items-center gap-1 bg-green-100 text-green-800 text-xs font-bold px-3 py-1 rounded inline-block mb-4">
+                              <span>✓</span>
+                              <span>Verified Purchase</span>
+                            </div>
+                          )}
+                          <p className="text-gray-700 leading-relaxed text-base">{review.text}</p>
                         </div>
                       </div>
-                    </div>
-                    <p className="text-gray-700 text-sm">{review.text}</p>
+                    ))}
                   </div>
+                </div>
+                <button
+                  onClick={() => setVideoCarouselIndex((prev) => (prev + 1) % courseData.reviews_list.length)}
+                  className="p-2 hover:bg-gray-100 rounded-full transition flex-shrink-0 text-gray-600"
+                >
+                  →
+                </button>
+              </div>
+              <div className="flex justify-center gap-2 mt-8">
+                {courseData.reviews_list.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setVideoCarouselIndex(idx)}
+                    className={`w-2 h-2 rounded-full transition ${idx === videoCarouselIndex ? 'bg-purple-600' : 'bg-gray-300'}`}
+                  />
                 ))}
               </div>
             </div>
+          </div>
 
-            {/* 14. VIDEO REVIEW CAROUSEL */}
-            <div className="mb-10">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">Student video reviews</h2>
-              <div className="relative bg-gradient-to-br from-slate-700 to-slate-900 rounded-lg overflow-hidden aspect-video flex items-center justify-center">
-                <div className="text-6xl">{videoReviews[videoCarouselIndex].thumbnail}</div>
-                <p className="absolute bottom-4 left-4 text-white text-sm font-medium">
-                  {videoReviews[videoCarouselIndex].title}
-                </p>
-
-                {/* Carousel Controls */}
-                <button
-                  onClick={prevVideoCarousel}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white p-2 rounded-full transition"
-                >
-                  <ChevronLeft size={20} className="text-gray-900" />
-                </button>
-                <button
-                  onClick={nextVideoCarousel}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/80 hover:bg-white p-2 rounded-full transition"
-                >
-                  <ChevronRightIcon size={20} className="text-gray-900" />
-                </button>
-
-                {/* Dots */}
-                <div className="absolute bottom-4 right-4 flex gap-2">
-                  {videoReviews.map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setVideoCarouselIndex(i)}
-                      className={`w-2 h-2 rounded-full transition ${
-                        i === videoCarouselIndex ? 'bg-white' : 'bg-white/40'
-                      }`}
-                    />
-                  ))}
-                </div>
+          {/* VIDEO REVIEW CAROUSEL */}
+          <div className="mb-16">
+            <h2 className="text-3xl font-bold text-gray-900 mb-8">Student testimonials</h2>
+            <div className="flex items-center justify-center gap-6">
+              <button
+                onClick={() => setVideoCarouselIndex((prev) => (prev - 1 + videoReviews.length) % videoReviews.length)}
+                className="p-3 hover:bg-gray-100 rounded-full transition text-gray-600"
+              >
+                ←
+              </button>
+              <div className="flex gap-6 overflow-hidden">
+                {videoReviews.map((review, idx) => (
+                  <div
+                    key={idx}
+                    className={`flex-shrink-0 w-80 h-56 bg-gray-300 rounded-lg flex items-center justify-center text-6xl transition transform ${
+                      idx === videoCarouselIndex ? 'scale-100 opacity-100' : 'scale-75 opacity-50'
+                    }`}
+                  >
+                    {review.thumbnail}
+                  </div>
+                ))}
               </div>
-            </div>
-
-            {/* 15. IMAGE REVIEW CAROUSEL */}
-            <div className="mb-10">
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">Student projects</h2>
-              <div className="relative bg-gray-100 rounded-lg overflow-hidden aspect-video flex items-center justify-center">
-                <div className="text-8xl">{imageReviews[imageCarouselIndex].image}</div>
-                <p className="absolute bottom-4 left-4 text-gray-900 text-sm font-medium bg-white px-3 py-1 rounded">
-                  {imageReviews[imageCarouselIndex].title}
-                </p>
-
-                {/* Carousel Controls */}
-                <button
-                  onClick={prevImageCarousel}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white p-2 rounded-full transition shadow-md"
-                >
-                  <ChevronLeft size={20} className="text-gray-900" />
-                </button>
-                <button
-                  onClick={nextImageCarousel}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 bg-white/90 hover:bg-white p-2 rounded-full transition shadow-md"
-                >
-                  <ChevronRightIcon size={20} className="text-gray-900" />
-                </button>
-
-                {/* Dots */}
-                <div className="absolute bottom-4 right-4 flex gap-2">
-                  {imageReviews.map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setImageCarouselIndex(i)}
-                      className={`w-2 h-2 rounded-full transition ${
-                        i === imageCarouselIndex ? 'bg-gray-900' : 'bg-gray-400'
-                      }`}
-                    />
-                  ))}
-                </div>
-              </div>
+              <button
+                onClick={() => setVideoCarouselIndex((prev) => (prev + 1) % videoReviews.length)}
+                className="p-3 hover:bg-gray-100 rounded-full transition text-gray-600"
+              >
+                →
+              </button>
             </div>
           </div>
 
-          {/* RIGHT COLUMN - Sidebar */}
-          <div className="lg:col-span-1">
-            <div className="sticky top-20 space-y-4">
-              {/* Course Preview Card */}
-              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm hover:shadow-md transition">
-                <div className="bg-gradient-to-r from-blue-600 to-purple-600 h-40 flex items-center justify-center">
-                  <Play size={48} className="text-white opacity-80" />
-                </div>
-                <div className="p-6 space-y-4">
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">Price</p>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-3xl font-bold text-gray-900">$99.99</span>
-                      <span className="text-lg text-gray-500 line-through">$199.99</span>
-                    </div>
-                    <p className="text-xs text-green-600 font-medium mt-1">50% off - Ends soon!</p>
+          {/* IMAGE REVIEW CAROUSEL */}
+          <div className="mb-16">
+            <h2 className="text-3xl font-bold text-gray-900 mb-8">Project gallery</h2>
+            <div className="flex items-center justify-center gap-6">
+              <button
+                onClick={() => setImageCarouselIndex((prev) => (prev - 1 + imageGallery.length) % imageGallery.length)}
+                className="p-3 hover:bg-gray-100 rounded-full transition text-gray-600"
+              >
+                ←
+              </button>
+              <div className="flex gap-4 overflow-hidden">
+                {imageGallery.map((item, idx) => (
+                  <div
+                    key={idx}
+                    className={`flex-shrink-0 w-56 h-56 bg-gray-300 rounded-lg flex items-center justify-center text-5xl transition cursor-pointer ${
+                      idx === imageCarouselIndex ? 'ring-4 ring-purple-600' : 'opacity-60'
+                    }`}
+                    onClick={() => setImageCarouselIndex(idx)}
+                  >
+                    {item.image}
                   </div>
-
-                  <button className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold py-3 rounded-lg hover:shadow-lg transition transform hover:scale-105 duration-200">
-                    Enroll Now
-                  </button>
-
-                  <button className="w-full border-2 border-gray-300 text-gray-900 font-semibold py-2 rounded-lg hover:border-gray-400 transition">
-                    Add to Wishlist
-                  </button>
-
-                  <div className="space-y-3 pt-4 border-t border-gray-200">
-                    <div className="flex items-center gap-3 text-sm">
-                      <Zap size={16} className="text-blue-600" />
-                      <span className="text-gray-700">42 hours video content</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-sm">
-                      <FileText size={16} className="text-blue-600" />
-                      <span className="text-gray-700">Downloadable resources</span>
-                    </div>
-                    <div className="flex items-center gap-3 text-sm">
-                      <BarChart3 size={16} className="text-blue-600" />
-                      <span className="text-gray-700">Certificate included</span>
-                    </div>
-                  </div>
-                </div>
+                ))}
               </div>
-
-              {/* Share Card */}
-              <div className="bg-white border border-gray-200 rounded-lg p-4">
-                <p className="text-sm font-semibold text-gray-900 mb-3">Share this course</p>
-                <div className="flex gap-2">
-                  <button className="flex-1 py-2 bg-blue-50 text-blue-600 rounded font-medium text-sm hover:bg-blue-100 transition">
-                    F
-                  </button>
-                  <button className="flex-1 py-2 bg-blue-50 text-blue-600 rounded font-medium text-sm hover:bg-blue-100 transition">
-                    𝕏
-                  </button>
-                  <button className="flex-1 py-2 bg-blue-50 text-blue-600 rounded font-medium text-sm hover:bg-blue-100 transition">
-                    in
-                  </button>
-                </div>
-              </div>
+              <button
+                onClick={() => setImageCarouselIndex((prev) => (prev + 1) % imageGallery.length)}
+                className="p-3 hover:bg-gray-100 rounded-full transition text-gray-600"
+              >
+                →
+              </button>
             </div>
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* 16. FOOTER */}
-      <footer className="bg-gray-900 text-gray-300 mt-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-8">
-            {/* Column 1 */}
+      {/* FOOTER */}
+      <footer className="bg-gray-900 text-gray-300 py-12">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-8 mb-8">
             <div>
-              <h3 className="text-white font-bold text-lg mb-4">Edu</h3>
-              <p className="text-sm leading-relaxed">
-                Empowering learners worldwide with quality education and expert instruction.
-              </p>
-            </div>
-
-            {/* Column 2 */}
-            <div>
-              <h4 className="text-white font-semibold mb-4">Platform</h4>
+              <h3 className="font-bold text-white mb-4">Courseify</h3>
               <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-white transition">Browse courses</a></li>
-                <li><a href="#" className="hover:text-white transition">Become an instructor</a></li>
-                <li><a href="#" className="hover:text-white transition">Mobile app</a></li>
-                <li><a href="#" className="hover:text-white transition">Pricing</a></li>
+                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Press</button></li>
+                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Contact</button></li>
               </ul>
             </div>
-
-            {/* Column 3 */}
             <div>
-              <h4 className="text-white font-semibold mb-4">Company</h4>
+              <h3 className="font-bold text-white mb-4">Instructors</h3>
               <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-white transition">About us</a></li>
-                <li><a href="#" className="hover:text-white transition">Contact</a></li>
-                <li><a href="#" className="hover:text-white transition">Blog</a></li>
-                <li><a href="#" className="hover:text-white transition">Careers</a></li>
+                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Teach</button></li>
+                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Resources</button></li>
+                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Benefits</button></li>
               </ul>
             </div>
-
-            {/* Column 4 */}
             <div>
-              <h4 className="text-white font-semibold mb-4">Legal</h4>
+              <h3 className="font-bold text-white mb-4">Learning</h3>
               <ul className="space-y-2 text-sm">
-                <li><a href="#" className="hover:text-white transition">Privacy policy</a></li>
-                <li><a href="#" className="hover:text-white transition">Terms of service</a></li>
-                <li><a href="#" className="hover:text-white transition">Cookie preferences</a></li>
-                <li><a href="#" className="hover:text-white transition">Accessibility</a></li>
+                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Categories</button></li>
+                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Trending</button></li>
+                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Collections</button></li>
+                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">About</button></li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="font-bold text-white mb-4">Support</h3>
+              <ul className="space-y-2 text-sm">
+                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Help</button></li>
+                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Support</button></li>
+                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">FAQ</button></li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="font-bold text-white mb-4">Legal</h3>
+              <ul className="space-y-2 text-sm">
+                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Privacy</button></li>
+                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Terms</button></li>
+                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Cookies</button></li>
               </ul>
             </div>
           </div>
-
-          <div className="border-t border-gray-800 pt-8">
-            <div className="flex flex-col sm:flex-row justify-between items-center text-sm">
-              <p>&copy; 2024 Edu. All rights reserved.</p>
-              <div className="flex gap-6 mt-4 sm:mt-0">
-                <a href="#" className="hover:text-white transition">🌐 English</a>
-                <a href="#" className="hover:text-white transition">💬 Feedback</a>
-              </div>
-            </div>
+          <div className="border-t border-gray-700 pt-8">
+            <p className="text-sm text-gray-400">© 2024 Courseify. All rights reserved.</p>
           </div>
         </div>
       </footer>
+
+      {/* STICKY ENROLL BUTTON - DESKTOP */}
+      <div className="hidden lg:block fixed bottom-0 left-0 right-0 bg-white border-t border-gray-300 p-6 z-50">
+        <div className="max-w-7xl mx-auto">
+          <button className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-5 rounded-lg transition text-xl">
+            Enroll Now
+          </button>
+        </div>
+      </div>
+
+      {/* MOBILE STICKY CTA */}
+      <div className="fixed bottom-0 left-0 right-0 lg:hidden bg-white border-t border-gray-300 p-3 flex gap-3 z-50">
+        <button className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-4 rounded-lg transition text-lg">
+          Enroll Now
+        </button>
+      </div>
+      <div className="h-20 lg:h-24" />
     </div>
   );
 }
