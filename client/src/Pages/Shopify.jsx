@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
-import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search, User, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search, User } from 'lucide-react';
 
 export default function CourseLandingPage() {
+  const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [expandedSection, setExpandedSection] = useState([0]);
   const [videoCarouselIndex, setVideoCarouselIndex] = useState(0);
@@ -102,7 +104,6 @@ export default function CourseLandingPage() {
     { id: 5, image: '📸' }
   ];
 
-  // Shared style to make buttons look like links
   const linkStyle = "bg-transparent border-none p-0 cursor-pointer underline";
 
   return (
@@ -122,21 +123,47 @@ export default function CourseLandingPage() {
           </button>
 
           <div className="absolute left-1/2 transform -translate-x-1/2 lg:relative lg:left-auto lg:transform-none">
-            <h1 className="text-2xl font-bold text-gray-900">Courseify</h1>
+            <h1
+              className="text-2xl font-bold text-gray-900 cursor-pointer"
+              onClick={() => navigate('/')}
+            >
+              Courseify
+            </h1>
           </div>
 
           <nav className="hidden lg:flex items-center gap-8 flex-1 ml-12">
-            <button className="text-gray-700 hover:text-gray-900 transition bg-transparent border-none cursor-pointer">Categories</button>
-            <button className="text-gray-700 hover:text-gray-900 transition bg-transparent border-none cursor-pointer">Instructor</button>
-            <button className="text-gray-700 hover:text-gray-900 transition bg-transparent border-none cursor-pointer">About</button>
+            <button
+              onClick={() => navigate('/courses')}
+              className="text-gray-700 hover:text-gray-900 transition bg-transparent border-none cursor-pointer"
+            >
+              Categories
+            </button>
+            <button
+              onClick={() => navigate('/instructor')}
+              className="text-gray-700 hover:text-gray-900 transition bg-transparent border-none cursor-pointer"
+            >
+              Instructor
+            </button>
+            <button
+              onClick={() => navigate('/courses')}
+              className="text-gray-700 hover:text-gray-900 transition bg-transparent border-none cursor-pointer"
+            >
+              About
+            </button>
           </nav>
 
           <div className="flex items-center gap-3">
             <Search className="hidden lg:block text-gray-400 cursor-pointer" size={20} />
-            <button className="hidden lg:block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition font-medium">
+            <button
+              onClick={() => navigate('/auth/login')}
+              className="hidden lg:block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition font-medium"
+            >
               Login
             </button>
-            <button className="hidden lg:block px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition font-medium">
+            <button
+              onClick={() => navigate('/auth/register')}
+              className="hidden lg:block px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition font-medium"
+            >
               Sign Up
             </button>
           </div>
@@ -144,20 +171,45 @@ export default function CourseLandingPage() {
 
         {mobileMenuOpen && (
           <div className="lg:hidden border-t border-gray-200 bg-white p-4 space-y-3">
-            <button className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left">Categories</button>
-            <button className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left">Instructor</button>
-            <button className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left">About</button>
-            <button className="w-full text-left py-2 text-gray-700">Login</button>
-            <button className="w-full text-left py-2 text-gray-700">Sign Up</button>
+            <button
+              onClick={() => { navigate('/courses'); setMobileMenuOpen(false); }}
+              className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left"
+            >
+              Categories
+            </button>
+            <button
+              onClick={() => { navigate('/instructor'); setMobileMenuOpen(false); }}
+              className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left"
+            >
+              Instructor
+            </button>
+            <button
+              onClick={() => { navigate('/courses'); setMobileMenuOpen(false); }}
+              className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left"
+            >
+              About
+            </button>
+            <button
+              onClick={() => { navigate('/auth/login'); setMobileMenuOpen(false); }}
+              className="w-full text-left py-2 text-gray-700"
+            >
+              Login
+            </button>
+            <button
+              onClick={() => { navigate('/auth/register'); setMobileMenuOpen(false); }}
+              className="w-full text-left py-2 text-gray-700"
+            >
+              Sign Up
+            </button>
           </div>
         )}
       </header>
 
       {/* BREADCRUMB */}
       <div className="max-w-7xl mx-auto px-4 py-3 text-sm text-gray-600">
-        <span>Development</span>
+        <button onClick={() => navigate('/')} className="hover:underline bg-transparent border-none cursor-pointer text-gray-600">Development</button>
         <span className="mx-2">›</span>
-        <span>Web Development</span>
+        <button onClick={() => navigate('/courses')} className="hover:underline bg-transparent border-none cursor-pointer text-gray-600">Web Development</button>
         <span className="mx-2">›</span>
         <span className="text-gray-900 font-medium">Complete Web Development Bootcamp</span>
       </div>
@@ -216,7 +268,10 @@ export default function CourseLandingPage() {
           <div className="mb-8">
             <p className="text-gray-400">
               Created by{' '}
-              <button className={`text-green-400 hover:text-green-300 font-semibold ${linkStyle}`}>
+              <button
+                onClick={() => navigate('/instructor')}
+                className={`text-green-400 hover:text-green-300 font-semibold ${linkStyle}`}
+              >
                 {courseData.instructor.name}
               </button>
             </p>
@@ -399,7 +454,10 @@ export default function CourseLandingPage() {
                   {courseData.instructor.image}
                 </div>
                 <h3 className="font-bold text-gray-900 text-xl mb-2">
-                  <button className={`text-green-600 hover:text-green-700 ${linkStyle}`}>
+                  <button
+                    onClick={() => navigate('/instructor')}
+                    className={`text-green-600 hover:text-green-700 ${linkStyle}`}
+                  >
                     {courseData.instructor.name}
                   </button>
                 </h3>
@@ -565,41 +623,41 @@ export default function CourseLandingPage() {
             <div>
               <h3 className="font-bold text-white mb-4">Courseify</h3>
               <ul className="space-y-2 text-sm">
-                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Press</button></li>
-                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Contact</button></li>
+                <li><button onClick={() => navigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Press</button></li>
+                <li><button onClick={() => navigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Contact</button></li>
               </ul>
             </div>
             <div>
               <h3 className="font-bold text-white mb-4">Instructors</h3>
               <ul className="space-y-2 text-sm">
-                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Teach</button></li>
-                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Resources</button></li>
-                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Benefits</button></li>
+                <li><button onClick={() => navigate('/instructor')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Teach</button></li>
+                <li><button onClick={() => navigate('/instructor')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Resources</button></li>
+                <li><button onClick={() => navigate('/instructor')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Benefits</button></li>
               </ul>
             </div>
             <div>
               <h3 className="font-bold text-white mb-4">Learning</h3>
               <ul className="space-y-2 text-sm">
-                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Categories</button></li>
-                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Trending</button></li>
-                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Collections</button></li>
-                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">About</button></li>
+                <li><button onClick={() => navigate('/courses')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Categories</button></li>
+                <li><button onClick={() => navigate('/courses')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Trending</button></li>
+                <li><button onClick={() => navigate('/courses')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Collections</button></li>
+                <li><button onClick={() => navigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">About</button></li>
               </ul>
             </div>
             <div>
               <h3 className="font-bold text-white mb-4">Support</h3>
               <ul className="space-y-2 text-sm">
-                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Help</button></li>
-                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Support</button></li>
-                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">FAQ</button></li>
+                <li><button onClick={() => navigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Help</button></li>
+                <li><button onClick={() => navigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Support</button></li>
+                <li><button onClick={() => navigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">FAQ</button></li>
               </ul>
             </div>
             <div>
               <h3 className="font-bold text-white mb-4">Legal</h3>
               <ul className="space-y-2 text-sm">
-                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Privacy</button></li>
-                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Terms</button></li>
-                <li><button className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Cookies</button></li>
+                <li><button onClick={() => navigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Privacy</button></li>
+                <li><button onClick={() => navigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Terms</button></li>
+                <li><button onClick={() => navigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Cookies</button></li>
               </ul>
             </div>
           </div>
@@ -612,7 +670,10 @@ export default function CourseLandingPage() {
       {/* STICKY ENROLL BUTTON - DESKTOP */}
       <div className="hidden lg:block fixed bottom-0 left-0 right-0 bg-white border-t border-gray-300 p-6 z-50">
         <div className="max-w-7xl mx-auto">
-          <button className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-5 rounded-lg transition text-xl">
+          <button
+            onClick={() => navigate('/auth/register')}
+            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-5 rounded-lg transition text-xl"
+          >
             Enroll Now
           </button>
         </div>
@@ -620,7 +681,10 @@ export default function CourseLandingPage() {
 
       {/* MOBILE STICKY CTA */}
       <div className="fixed bottom-0 left-0 right-0 lg:hidden bg-white border-t border-gray-300 p-3 flex gap-3 z-50">
-        <button className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-4 rounded-lg transition text-lg">
+        <button
+          onClick={() => navigate('/auth/register')}
+          className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-4 rounded-lg transition text-lg"
+        >
           Enroll Now
         </button>
       </div>
