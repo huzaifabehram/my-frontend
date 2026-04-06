@@ -43,7 +43,7 @@ function AppRoutes() {
 
       {/* ── PROTECTED ──────────────────────────────────────────────────── */}
       <Route
-        path="/portal/*"
+        path="/portals/*"
         element={
           <ProtectedRoute role="student">
             <Portals />
