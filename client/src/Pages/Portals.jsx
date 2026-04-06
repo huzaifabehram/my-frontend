@@ -4,7 +4,7 @@ import axios from "axios";
 import { ChevronDown, Menu, X, Bell, LogOut, Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings, Home, BookOpen, FileText, Award, User, Search, Clock, Users, Star, MessageCircle, CheckCircle, ChevronRight } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// API SETUP - SAME AS YOUR ORIGINAL
+// API SETUP - SAME AS ORIGINAL
 // ─────────────────────────────────────────────────────────────────────────────
 const BASE_URL = "https://my-course-backend-8u69.onrender.com/api";
 
@@ -44,7 +44,7 @@ const ACTIVITY_DATA = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// UTILITY FUNCTIONS - SAME AS ORIGINAL
+// UTILITY FUNCTIONS
 // ─────────────────────────────────────────────────────────────────────────────
 function normalizeCourse(c, index, completedLectureIds = []) {
   const colors = ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#ec4899"];
@@ -201,7 +201,6 @@ const VideoPlayer = ({ lecture, onComplete, onNext, onPrev, hasNext, hasPrev }) 
       onMouseLeave={() => playing && setShowControls(false)}
       onClick={() => setShowRateMenu(false)}
     >
-      {/* Support for Bunny.net video URLs */}
       <video
         ref={videoRef}
         src={lecture?.videoUrl}
@@ -225,13 +224,11 @@ const VideoPlayer = ({ lecture, onComplete, onNext, onPrev, hasNext, hasPrev }) 
         </div>
       )}
 
-      {/* Controls */}
       <div
         className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/60 to-transparent px-4 md:px-5 pb-4 pt-12 transition-opacity duration-300 ${
           showControls ? "opacity-100" : "opacity-0 pointer-events-none"
         }`}
       >
-        {/* Progress Bar */}
         <div
           className="relative w-full h-1 bg-white/20 rounded-full cursor-pointer mb-4 group hover:h-2 transition-all"
           onClick={seek}
@@ -242,7 +239,6 @@ const VideoPlayer = ({ lecture, onComplete, onNext, onPrev, hasNext, hasPrev }) 
           </div>
         </div>
 
-        {/* Control Buttons */}
         <div className="flex items-center justify-between gap-2 md:gap-3 flex-wrap">
           <div className="flex items-center gap-2 md:gap-3 flex-wrap">
             <button
@@ -269,7 +265,6 @@ const VideoPlayer = ({ lecture, onComplete, onNext, onPrev, hasNext, hasPrev }) 
               <ChevronDown className="w-5 h-5 -rotate-90" />
             </button>
 
-            {/* Volume Control */}
             <div className="flex items-center gap-1.5 group">
               <button
                 onClick={() => {
@@ -299,7 +294,6 @@ const VideoPlayer = ({ lecture, onComplete, onNext, onPrev, hasNext, hasPrev }) 
           </div>
 
           <div className="flex items-center gap-2 md:gap-3">
-            {/* Playback Speed */}
             <div className="relative">
               <button
                 onClick={(e) => {
@@ -327,7 +321,6 @@ const VideoPlayer = ({ lecture, onComplete, onNext, onPrev, hasNext, hasPrev }) 
               )}
             </div>
 
-            {/* Fullscreen */}
             <button onClick={toggleFullscreen} className="text-white/80 hover:text-white transition-colors p-1">
               {fullscreen ? (
                 <Minimize className="w-5 h-5" />
@@ -351,7 +344,6 @@ const Dashboard = ({ student, courses, setActiveTab, setActiveCourse, setActiveL
 
   return (
     <div className="space-y-6">
-      {/* Hero Section */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6 md:p-8 text-white">
         <div
           className="absolute inset-0 opacity-20"
@@ -397,7 +389,6 @@ const Dashboard = ({ student, courses, setActiveTab, setActiveCourse, setActiveL
         </div>
       </div>
 
-      {/* Stats Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {[
           { label: "Enrolled", value: student.totalCourses, icon: "📚", bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-100" },
@@ -413,7 +404,6 @@ const Dashboard = ({ student, courses, setActiveTab, setActiveCourse, setActiveL
         ))}
       </div>
 
-      {/* Continue Learning & Activity */}
       <div className="grid lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
           <h3 className="text-lg font-black text-gray-900">Continue Learning</h3>
@@ -500,7 +490,6 @@ const Dashboard = ({ student, courses, setActiveTab, setActiveCourse, setActiveL
           )}
         </div>
 
-        {/* Activity Chart */}
         <div className="space-y-4">
           <div className="bg-white border border-gray-100 rounded-2xl p-4">
             <h3 className="font-bold text-gray-900 text-sm mb-3">This Week's Activity</h3>
@@ -546,7 +535,6 @@ const MyCourses = ({ courses, setActiveTab, setActiveCourse, setActiveLecture })
 
   return (
     <div>
-      {/* Header with Search */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
         <h3 className="text-2xl font-black text-gray-900">My Courses ({courses.length})</h3>
         <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
@@ -657,7 +645,7 @@ const MyCourses = ({ courses, setActiveTab, setActiveCourse, setActiveLecture })
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LEARN TAB - WITH VIDEO PLAYER
+// LEARN TAB
 // ─────────────────────────────────────────────────────────────────────────────
 const Learn = ({ course, activeLecture, setActiveLecture, onMarkComplete }) => {
   const curriculum = normalizeSections(course?.sections || []);
@@ -711,7 +699,6 @@ const Learn = ({ course, activeLecture, setActiveLecture, onMarkComplete }) => {
 
   return (
     <div className="flex flex-col h-full gap-4">
-      {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex-1 min-w-0">
           <div className="text-xs text-gray-400">{course?.title}</div>
@@ -734,9 +721,7 @@ const Learn = ({ course, activeLecture, setActiveLecture, onMarkComplete }) => {
         </div>
       </div>
 
-      {/* Video Player and Sidebar */}
       <div className={`flex gap-4 flex-1 overflow-hidden ${sidebarOpen ? "flex-col lg:flex-row" : ""}`}>
-        {/* Main Content */}
         <div className="flex-1 min-w-0 space-y-4 overflow-y-auto">
           <VideoPlayer
             lecture={activeLecture}
@@ -747,7 +732,6 @@ const Learn = ({ course, activeLecture, setActiveLecture, onMarkComplete }) => {
             hasPrev={hasPrev}
           />
 
-          {/* Action Buttons */}
           <div className="flex gap-3 flex-wrap">
             <button
               onClick={goPrev}
@@ -777,7 +761,6 @@ const Learn = ({ course, activeLecture, setActiveLecture, onMarkComplete }) => {
             </button>
           </div>
 
-          {/* Sub Tabs */}
           <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
             <div className="flex border-b border-gray-100 overflow-x-auto">
               {subTabs.map(t => (
@@ -831,7 +814,6 @@ const Learn = ({ course, activeLecture, setActiveLecture, onMarkComplete }) => {
           </div>
         </div>
 
-        {/* Sidebar */}
         {sidebarOpen && (
           <div className="lg:w-72 flex-shrink-0 bg-white border border-gray-100 rounded-2xl overflow-hidden flex flex-col max-h-96 lg:max-h-none">
             <div className="p-4 border-b bg-gray-50 flex-shrink-0">
@@ -934,7 +916,6 @@ const Certificates = ({ courses, student }) => {
         <div className="bg-white border border-gray-100 rounded-2xl p-16 text-center">
           <div className="text-5xl mb-4">🎓</div>
           <h4 className="text-lg font-bold text-gray-700">No certificates yet</h4>
-          <p className="text-sm text-gray-400 mt-1">Complete a course to earn your first certificate!</p>
         </div>
       ) : (
         <div className="grid sm:grid-cols-2 gap-6">
@@ -1006,7 +987,6 @@ const Profile = ({ student }) => {
         )}
       </div>
 
-      {/* Profile Card */}
       <div className="bg-white border border-gray-100 rounded-2xl p-6">
         <div className="flex items-center gap-5 flex-wrap">
           <img
@@ -1049,7 +1029,6 @@ const Profile = ({ student }) => {
         </div>
       </div>
 
-      {/* Learning Stats */}
       <div className="bg-white border border-gray-100 rounded-2xl p-6">
         <h4 className="font-black text-gray-900 mb-4">Learning Stats</h4>
         <div className="grid grid-cols-2 gap-4">
@@ -1087,7 +1066,7 @@ const TABS = [
   { id: "Profile", icon: User, label: "Profile" },
 ];
 
-export default function StudentPortal() {
+export default function Portals() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState("Dashboard");
   const [activeCourse, setActiveCourse] = useState(null);
@@ -1098,7 +1077,6 @@ export default function StudentPortal() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Load data on mount
   useEffect(() => {
     async function loadAll() {
       setLoading(true);
@@ -1164,7 +1142,7 @@ export default function StudentPortal() {
       } catch (err) {
         console.error("Portal error:", err);
         if (err.response?.status === 401) {
-          navigate("/auth");
+          navigate("/auth/login");
         } else {
           setError(err.response?.data?.message || "Could not load dashboard");
         }
@@ -1201,7 +1179,7 @@ export default function StudentPortal() {
   const handleLogout = () => {
     localStorage.removeItem("token");
     localStorage.removeItem("user");
-    navigate("/auth");
+    navigate("/auth/login");
   };
 
   const renderContent = () => {
@@ -1277,7 +1255,6 @@ export default function StudentPortal() {
             sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
           }`}
         >
-          {/* Logo */}
           <div className="px-5 py-5 border-b border-white/10 flex-shrink-0">
             <div className="flex items-center gap-2.5">
               <div className="w-8 h-8 bg-indigo-500 rounded-xl flex items-center justify-center text-white font-black">
@@ -1290,7 +1267,6 @@ export default function StudentPortal() {
             </div>
           </div>
 
-          {/* User Info */}
           <div className="px-5 py-4 border-b border-white/10 flex-shrink-0">
             <div className="flex items-center gap-3">
               <img
@@ -1310,7 +1286,6 @@ export default function StudentPortal() {
             </div>
           </div>
 
-          {/* Navigation */}
           <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
             {TABS.map(tab => {
               const Icon = tab.icon;
@@ -1334,7 +1309,6 @@ export default function StudentPortal() {
             })}
           </nav>
 
-          {/* Footer */}
           <div className="px-5 py-4 border-t border-white/10 flex-shrink-0 space-y-2">
             <div className="bg-white/5 rounded-xl p-3">
               <p className="text-xs text-slate-400">Current Streak</p>
