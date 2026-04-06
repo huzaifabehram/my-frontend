@@ -1,5 +1,6 @@
 // client/src/Pages/InstructorDashboard.jsx
 // ─── Instructor Dashboard — connected to real MERN backend ───────────────────
+// MOBILE OPTIMIZED + BUNNY.NET SUPPORT
 // All dummy data is replaced with real API calls via useInstructorCourses hook.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -8,6 +9,7 @@ import React, {
   useRef,
   useCallback,
   useMemo,
+  useEffect,
 } from "react";
 import {
   Routes,
@@ -63,7 +65,6 @@ const STUDENT_SOURCE = [
 
 const PIE_COLORS = ["#a435f0", "#6610f2", "#e84393", "#fd7e14", "#20c997"];
 
-// ─── FIX 1: Added missing CATEGORIES constant ────────────────────────────────
 const CATEGORIES = [
   { value: "Marketing",        label: "Marketing" },
   { value: "Development",      label: "Development" },
@@ -79,7 +80,6 @@ const CATEGORIES = [
   { value: "Office Prod",      label: "Office Productivity" },
 ];
 
-// ─── FIX 2: Added missing LECTURE_TYPES constant ─────────────────────────────
 const LECTURE_TYPES = [
   { value: "video",    label: "📹 Video" },
   { value: "article",  label: "📄 Article" },
@@ -121,6 +121,43 @@ function uid() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// VIDEO DETECTION HELPERS — YouTube + Bunny.net + Direct URLs
+// ─────────────────────────────────────────────────────────────────────────────
+
+function getYouTubeId(url) {
+  if (!url) return null;
+  const m = url.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/watch\?v=|\/shorts\/))([^&?/\s]{11})/);
+  return m ? m[1] : null;
+}
+
+function getBunnyVideoId(url) {
+  if (!url) return null;
+  // Matches: https://vod-cdn.bunny.net/[id].mp4 or bunny.net/[id] patterns
+  const patterns = [
+    /bunny\.net\/(.+?)(?:\.mp4)?$/i,
+    /vod-cdn\.bunny\.net\/(.+?)(?:\.mp4)?$/i,
+    /bunny\.net\/v\/([a-zA-Z0-9-]+)/i,
+  ];
+  for (let pattern of patterns) {
+    const m = url.match(pattern);
+    if (m) return m[1];
+  }
+  return null;
+}
+
+function isBunnyUrl(url) {
+  return url && (url.includes('bunny.net') || url.includes('vod-cdn.bunny.net'));
+}
+
+function isYouTubeUrl(url) {
+  return url && (url.includes('youtube.com') || url.includes('youtu.be'));
+}
+
+function isDirectVideo(url) {
+  return url && (url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov'));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SHARED UI PRIMITIVES
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -151,13 +188,13 @@ function StatCard({ icon, label, value, sub, color = "purple" }) {
   const bg = { purple: "bg-purple-50", green: "bg-emerald-50", blue: "bg-blue-50", amber: "bg-amber-50" };
   const ic = { purple: "text-purple-600", green: "text-emerald-600", blue: "text-blue-600", amber: "text-amber-600" };
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-5 flex gap-4 items-center shadow-sm hover:shadow-md transition-shadow">
-      <div className={`w-12 h-12 rounded-xl ${bg[color]} flex items-center justify-center flex-shrink-0`}>
-        <span className={`text-2xl ${ic[color]}`}>{icon}</span>
+    <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 flex gap-3 sm:gap-4 items-center shadow-sm hover:shadow-md transition-shadow">
+      <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl ${bg[color]} flex items-center justify-center flex-shrink-0`}>
+        <span className={`text-lg sm:text-2xl ${ic[color]}`}>{icon}</span>
       </div>
-      <div>
-        <p className="text-2xl font-bold text-gray-900 leading-none">{value}</p>
-        <p className="text-sm text-gray-500 mt-1">{label}</p>
+      <div className="min-w-0">
+        <p className="text-lg sm:text-2xl font-bold text-gray-900 leading-none">{value}</p>
+        <p className="text-xs sm:text-sm text-gray-500 mt-1">{label}</p>
         {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
       </div>
     </div>
@@ -166,23 +203,23 @@ function StatCard({ icon, label, value, sub, color = "purple" }) {
 
 function SectionHeader({ title, action }) {
   return (
-    <div className="flex items-center justify-between mb-4">
-      <h2 className="text-lg font-bold text-gray-900">{title}</h2>
+    <div className="flex items-center justify-between gap-2 mb-4">
+      <h2 className="text-base sm:text-lg font-bold text-gray-900">{title}</h2>
       {action}
     </div>
   );
 }
 
 function Btn({ children, onClick, variant = "primary", size = "md", disabled, className = "" }) {
-  const base = "inline-flex items-center gap-2 font-semibold rounded-lg transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed";
+  const base = "inline-flex items-center gap-2 font-semibold rounded-lg transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95";
   const variants = {
-    primary:   "bg-purple-600 hover:bg-purple-700 active:scale-95 text-white shadow-sm",
-    secondary: "bg-white border border-gray-200 hover:bg-gray-50 active:scale-95 text-gray-700",
-    danger:    "bg-red-50 border border-red-200 hover:bg-red-100 active:scale-95 text-red-600",
-    ghost:     "hover:bg-gray-100 active:scale-95 text-gray-600",
-    success:   "bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white shadow-sm",
+    primary:   "bg-purple-600 hover:bg-purple-700 text-white shadow-sm",
+    secondary: "bg-white border border-gray-200 hover:bg-gray-50 text-gray-700",
+    danger:    "bg-red-50 border border-red-200 hover:bg-red-100 text-red-600",
+    ghost:     "hover:bg-gray-100 text-gray-600",
+    success:   "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm",
   };
-  const sizes = { sm: "px-3 py-1.5 text-xs", md: "px-4 py-2 text-sm", lg: "px-6 py-3 text-base" };
+  const sizes = { sm: "px-2.5 sm:px-3 py-1.5 text-xs", md: "px-3 sm:px-4 py-2 text-sm", lg: "px-4 sm:px-6 py-2.5 sm:py-3 text-sm sm:text-base" };
   return (
     <button onClick={onClick} disabled={disabled} className={`${base} ${variants[variant]} ${sizes[size]} ${className}`}>
       {children}
@@ -193,7 +230,7 @@ function Btn({ children, onClick, variant = "primary", size = "md", disabled, cl
 function Input({ label, value, onChange, placeholder, type = "text", className = "" }) {
   return (
     <div className={`flex flex-col gap-1 ${className}`}>
-      {label && <label className="text-sm font-medium text-gray-700">{label}</label>}
+      {label && <label className="text-xs sm:text-sm font-medium text-gray-700">{label}</label>}
       <input
         type={type} value={value} onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
@@ -206,7 +243,7 @@ function Input({ label, value, onChange, placeholder, type = "text", className =
 function Textarea({ label, value, onChange, placeholder, rows = 4, className = "" }) {
   return (
     <div className={`flex flex-col gap-1 ${className}`}>
-      {label && <label className="text-sm font-medium text-gray-700">{label}</label>}
+      {label && <label className="text-xs sm:text-sm font-medium text-gray-700">{label}</label>}
       <textarea
         value={value} onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder} rows={rows}
@@ -219,7 +256,7 @@ function Textarea({ label, value, onChange, placeholder, rows = 4, className = "
 function Select({ label, value, onChange, options, className = "" }) {
   return (
     <div className={`flex flex-col gap-1 ${className}`}>
-      {label && <label className="text-sm font-medium text-gray-700">{label}</label>}
+      {label && <label className="text-xs sm:text-sm font-medium text-gray-700">{label}</label>}
       <select
         value={value} onChange={(e) => onChange(e.target.value)}
         className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition bg-white"
@@ -232,10 +269,10 @@ function Select({ label, value, onChange, options, className = "" }) {
 
 function EmptyState({ icon, title, body, action }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      <div className="text-5xl mb-4">{icon}</div>
-      <h3 className="text-lg font-bold text-gray-800 mb-1">{title}</h3>
-      <p className="text-sm text-gray-500 mb-5 max-w-xs">{body}</p>
+    <div className="flex flex-col items-center justify-center py-12 sm:py-16 text-center">
+      <div className="text-4xl sm:text-5xl mb-4">{icon}</div>
+      <h3 className="text-base sm:text-lg font-bold text-gray-800 mb-1">{title}</h3>
+      <p className="text-xs sm:text-sm text-gray-500 mb-5 max-w-xs">{body}</p>
       {action}
     </div>
   );
@@ -270,11 +307,11 @@ function useToast() {
 function ToastContainer({ toasts }) {
   const colors = { success: "bg-emerald-600", error: "bg-red-600", info: "bg-blue-600" };
   return (
-    <div className="fixed bottom-5 right-5 z-[200] flex flex-col gap-2 pointer-events-none">
+    <div className="fixed bottom-4 sm:bottom-5 right-4 sm:right-5 z-[200] flex flex-col gap-2 pointer-events-none">
       {toasts.map((t) => (
         <div
           key={t.id}
-          className={`${colors[t.type] || colors.info} text-white text-sm font-medium px-4 py-3 rounded-xl shadow-lg pointer-events-auto`}
+          className={`${colors[t.type] || colors.info} text-white text-xs sm:text-sm font-medium px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl shadow-lg pointer-events-auto`}
           style={{ animation: "slideUp 0.3s ease" }}
         >
           {t.msg}
@@ -285,7 +322,7 @@ function ToastContainer({ toasts }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SIDEBAR
+// SIDEBAR — MOBILE OPTIMIZED
 // ─────────────────────────────────────────────────────────────────────────────
 
 const NAV_ITEMS = [
@@ -296,14 +333,16 @@ const NAV_ITEMS = [
   { to: "/instructor/profile",   label: "Profile",       icon: "◉" },
 ];
 
-function Sidebar({ instructor, collapsed, setCollapsed }) {
+function Sidebar({ instructor, collapsed, setCollapsed, isMobile }) {
   const navigate = useNavigate();
   const { logout } = useAuth();
 
   return (
     <aside
-      className="fixed top-0 left-0 h-screen bg-[#1c1d1f] flex flex-col z-50 transition-all duration-300"
-      style={{ width: collapsed ? 64 : 230 }}
+      className={`fixed top-0 left-0 h-screen bg-[#1c1d1f] flex flex-col z-50 transition-all duration-300 ${
+        isMobile && collapsed ? "-translate-x-full" : "translate-x-0"
+      }`}
+      style={{ width: isMobile ? 240 : collapsed ? 64 : 230 }}
     >
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-4 h-16 border-b border-white/10 flex-shrink-0">
@@ -313,16 +352,25 @@ function Sidebar({ instructor, collapsed, setCollapsed }) {
           </svg>
         </div>
         {!collapsed && (
-          <span className="font-extrabold text-white text-base tracking-tight whitespace-nowrap">
+          <span className="font-extrabold text-white text-base tracking-tight whitespace-nowrap flex-1">
             LearnFlow
           </span>
         )}
-        <button
-          onClick={() => setCollapsed((c) => !c)}
-          className="ml-auto text-gray-400 hover:text-white transition-colors text-lg"
-        >
-          {collapsed ? "›" : "‹"}
-        </button>
+        {isMobile ? (
+          <button
+            onClick={() => setCollapsed(true)}
+            className="ml-auto text-gray-400 hover:text-white transition-colors text-lg"
+          >
+            ✕
+          </button>
+        ) : (
+          <button
+            onClick={() => setCollapsed((c) => !c)}
+            className="ml-auto text-gray-400 hover:text-white transition-colors text-lg"
+          >
+            {collapsed ? "›" : "‹"}
+          </button>
+        )}
       </div>
 
       {/* Instructor mini-profile */}
@@ -343,6 +391,7 @@ function Sidebar({ instructor, collapsed, setCollapsed }) {
             key={item.to}
             to={item.to}
             end={item.exact}
+            onClick={() => isMobile && setCollapsed(true)}
             className={({ isActive }) =>
               `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 ${
                 isActive ? "bg-purple-600 text-white" : "text-gray-400 hover:bg-white/10 hover:text-white"
@@ -370,17 +419,25 @@ function Sidebar({ instructor, collapsed, setCollapsed }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TOP BAR
+// TOP BAR — MOBILE OPTIMIZED
 // ─────────────────────────────────────────────────────────────────────────────
 
-function TopBar({ instructor, sidebarWidth }) {
+function TopBar({ instructor, sidebarWidth, isMobile, onMenuClick }) {
   return (
     <header
-      className="fixed top-0 right-0 h-16 bg-white border-b border-gray-100 flex items-center justify-between px-6 z-40 transition-all duration-300"
-      style={{ left: sidebarWidth }}
+      className="fixed top-0 right-0 h-16 bg-white border-b border-gray-100 flex items-center justify-between px-4 sm:px-6 z-40 transition-all duration-300"
+      style={{ left: isMobile ? 0 : sidebarWidth }}
     >
-      <h1 className="text-base font-bold text-gray-900">Instructor Studio</h1>
-      <div className="flex items-center gap-3">
+      {isMobile && (
+        <button
+          onClick={onMenuClick}
+          className="text-gray-600 hover:text-gray-900 transition text-lg"
+        >
+          ☰
+        </button>
+      )}
+      <h1 className="text-sm sm:text-base font-bold text-gray-900">Instructor Studio</h1>
+      <div className="flex items-center gap-2 sm:gap-3 ml-auto">
         <button className="relative p-2 rounded-lg hover:bg-gray-100 transition text-gray-500">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/>
@@ -408,14 +465,14 @@ function DashboardPage({ instructor, courses, loading }) {
     : "—";
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 sm:space-y-8">
       {/* Welcome banner */}
-      <div className="bg-gradient-to-r from-purple-700 to-purple-500 rounded-2xl p-7 text-white relative overflow-hidden">
+      <div className="bg-gradient-to-r from-purple-700 to-purple-500 rounded-2xl p-5 sm:p-7 text-white relative overflow-hidden">
         <div className="absolute right-0 top-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4 pointer-events-none"/>
-        <p className="text-purple-200 text-sm font-medium mb-1">Welcome back 👋</p>
-        <h2 className="text-3xl font-extrabold mb-1">{instructor?.name || "Instructor"}</h2>
-        <p className="text-purple-200 text-sm">{instructor?.email}</p>
-        <div className="flex gap-3 mt-5">
+        <p className="text-purple-200 text-xs sm:text-sm font-medium mb-1">Welcome back 👋</p>
+        <h2 className="text-2xl sm:text-3xl font-extrabold mb-1">{instructor?.name || "Instructor"}</h2>
+        <p className="text-purple-200 text-xs sm:text-sm">{instructor?.email}</p>
+        <div className="flex gap-2 sm:gap-3 mt-5 flex-wrap">
           <Btn onClick={() => navigate("/instructor/create")} variant="secondary" size="sm">+ New Course</Btn>
           <Btn onClick={() => navigate("/instructor/analytics")} size="sm" className="bg-white/20 hover:bg-white/30 text-white border-white/30 border">
             View Analytics
@@ -424,7 +481,7 @@ function DashboardPage({ instructor, courses, loading }) {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard icon="👥" label="Total Students" value={fmtNum(totalStudents)} sub="All courses" color="purple"/>
         <StatCard icon="💰" label="Total Revenue" value={fmt(totalRevenue)} sub="All time" color="green"/>
         <StatCard icon="📚" label="Published Courses" value={publishedCount} sub={`of ${courses.length} total`} color="blue"/>
@@ -432,9 +489,9 @@ function DashboardPage({ instructor, courses, loading }) {
       </div>
 
       {/* Revenue chart */}
-      <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm overflow-x-auto">
         <SectionHeader title="Revenue Overview — 2024"/>
-        <ResponsiveContainer width="100%" height={240}>
+        <ResponsiveContainer width="100%" height={240} minWidth={300}>
           <AreaChart data={REVENUE_DATA} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
             <defs>
               <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
@@ -452,8 +509,8 @@ function DashboardPage({ instructor, courses, loading }) {
       </div>
 
       {/* Top courses + reviews */}
-      <div className="grid lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+      <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
+        <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
           <SectionHeader
             title="My Courses"
             action={<Btn onClick={() => navigate("/instructor/courses")} variant="ghost" size="sm">View all</Btn>}
@@ -480,16 +537,16 @@ function DashboardPage({ instructor, courses, loading }) {
           )}
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+        <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
           <SectionHeader title="Recent Reviews"/>
           <div className="space-y-4">
             {RECENT_REVIEWS.map((r) => (
               <div key={r.id} className="border-b border-gray-50 pb-3 last:border-0 last:pb-0">
                 <div className="flex items-start justify-between gap-2 mb-1">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <Avatar name={r.student} size={28}/>
-                    <div>
-                      <p className="text-sm font-semibold text-gray-800 leading-none">{r.student}</p>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-gray-800 leading-none truncate">{r.student}</p>
                       <p className="text-xs text-gray-400">{r.date}</p>
                     </div>
                   </div>
@@ -543,26 +600,26 @@ function CoursesPage({ courses, loading, deleteCourse, togglePublish, toast }) {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col gap-3">
         <div>
-          <h2 className="text-2xl font-extrabold text-gray-900">My Courses</h2>
-          <p className="text-sm text-gray-500 mt-0.5">{courses.length} courses total</p>
+          <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900">My Courses</h2>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">{courses.length} courses total</p>
         </div>
-        <Btn onClick={() => navigate("/instructor/create")}>+ Create New Course</Btn>
+        <Btn onClick={() => navigate("/instructor/create")} className="sm:w-auto w-full">+ Create New Course</Btn>
       </div>
 
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
         <input
           value={search} onChange={(e) => setSearch(e.target.value)}
           placeholder="Search courses…"
           className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition"
         />
-        <div className="flex gap-2">
+        <div className="flex gap-1.5 overflow-x-auto pb-1">
           {["all", "published", "draft", "review"].map((s) => (
             <button
               key={s} onClick={() => setFilter(s)}
-              className={`px-3 py-2 rounded-lg text-xs font-semibold transition ${filter === s ? "bg-purple-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
+              className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs font-semibold transition whitespace-nowrap ${filter === s ? "bg-purple-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}
             >
               {s.charAt(0).toUpperCase() + s.slice(1)}
             </button>
@@ -585,42 +642,42 @@ function CoursesPage({ courses, loading, deleteCourse, togglePublish, toast }) {
               <thead className="bg-gray-50 border-b border-gray-100">
                 <tr>
                   {["Course", "Status", "Students", "Revenue", "Rating", "Updated", "Actions"].map((h) => (
-                    <th key={h} className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-4 py-3 whitespace-nowrap">{h}</th>
+                    <th key={h} className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-3 sm:px-4 py-3 whitespace-nowrap">{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {filtered.map((c) => (
                   <tr key={c._id} className="hover:bg-gray-50 transition">
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600 font-bold text-sm flex-shrink-0">
+                    <td className="px-3 sm:px-4 py-4">
+                      <div className="flex items-center gap-2 sm:gap-3">
+                        <div className="w-8 sm:w-10 h-8 sm:h-10 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600 font-bold text-xs sm:text-sm flex-shrink-0">
                           {c.title?.charAt(0)}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-gray-800 truncate max-w-[200px]">{c.title}</p>
-                          <p className="text-xs text-gray-400">{c.category} · ${c.price}</p>
+                          <p className="text-xs sm:text-sm font-semibold text-gray-800 truncate max-w-[120px] sm:max-w-[200px]">{c.title}</p>
+                          <p className="text-xs text-gray-400 hidden sm:block">{c.category} · ${c.price}</p>
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-4"><Badge status={c.status}/></td>
-                    <td className="px-4 py-4 text-sm text-gray-700 font-medium">{fmtNum(c.studentsEnrolled)}</td>
-                    <td className="px-4 py-4 text-sm text-gray-700 font-medium">{fmt(c.revenue)}</td>
-                    <td className="px-4 py-4">
+                    <td className="px-3 sm:px-4 py-4"><Badge status={c.status}/></td>
+                    <td className="px-3 sm:px-4 py-4 text-xs sm:text-sm text-gray-700 font-medium">{fmtNum(c.studentsEnrolled)}</td>
+                    <td className="px-3 sm:px-4 py-4 text-xs sm:text-sm text-gray-700 font-medium">{fmt(c.revenue)}</td>
+                    <td className="px-3 sm:px-4 py-4">
                       {c.rating > 0
-                        ? <div className="flex items-center gap-1"><Stars rating={c.rating}/><span className="text-xs text-gray-500">{c.rating}</span></div>
+                        ? <div className="flex items-center gap-1"><Stars rating={c.rating}/><span className="text-xs text-gray-500 hidden sm:inline">{c.rating}</span></div>
                         : <span className="text-xs text-gray-400">—</span>}
                     </td>
-                    <td className="px-4 py-4 text-xs text-gray-400 whitespace-nowrap">
+                    <td className="px-3 sm:px-4 py-4 text-xs text-gray-400 whitespace-nowrap">
                       {c.updatedAt ? new Date(c.updatedAt).toLocaleDateString() : "—"}
                     </td>
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-1.5">
-                        <Btn size="sm" variant="secondary" onClick={() => navigate(`/instructor/edit/${c._id}`)}>Edit</Btn>
-                        <Btn size="sm" variant={c.status === "published" ? "ghost" : "success"} onClick={() => handleToggle(c._id, c.status)}>
-                          {c.status === "published" ? "Unpublish" : "Publish"}
+                    <td className="px-3 sm:px-4 py-4">
+                      <div className="flex items-center gap-1">
+                        <Btn size="sm" variant="secondary" onClick={() => navigate(`/instructor/edit/${c._id}`)} className="text-xs">Edit</Btn>
+                        <Btn size="sm" variant={c.status === "published" ? "ghost" : "success"} onClick={() => handleToggle(c._id, c.status)} className="text-xs hidden sm:inline-flex">
+                          {c.status === "published" ? "Unpub" : "Pub"}
                         </Btn>
-                        <Btn size="sm" variant="danger" onClick={() => handleDelete(c._id, c.title)}>Delete</Btn>
+                        <Btn size="sm" variant="danger" onClick={() => handleDelete(c._id, c.title)} className="text-xs">Del</Btn>
                       </div>
                     </td>
                   </tr>
@@ -635,7 +692,7 @@ function CoursesPage({ courses, loading, deleteCourse, togglePublish, toast }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PAGE: COURSE EDITOR (Create & Edit) — saves to real API
+// PAGE: COURSE EDITOR (Create & Edit) — BUNNY.NET SUPPORT
 // ─────────────────────────────────────────────────────────────────────────────
 
 function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
@@ -645,7 +702,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
   const existing = isEdit ? courses.find((c) => c._id === id) : null;
 
   const [title, setTitle]           = useState(existing?.title || "");
-  const [category, setCategory]     = useState(existing?.category || "Marketing"); // FIX 3: setCategory is now used in the Select below
+  const [category, setCategory]     = useState(existing?.category || "Marketing");
   const [price, setPrice]           = useState(existing?.price?.toString() || "49.99");
   const [discountPrice, setDiscountPrice] = useState(existing?.discountPrice?.toString() || "");
   const [status, setStatus]         = useState(existing?.status || "draft");
@@ -663,16 +720,12 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
   const thumbnailRef = useRef();
   const { API: api } = useAuth();
 
-  // YouTube ID extractor
-  function getYouTubeId(url) {
-    if (!url) return null;
-    const m = url.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/watch\?v=|\/shorts\/))([^&?/\s]{11})/);
-    return m ? m[1] : null;
-  }
-
   const ytId = getYouTubeId(previewVideoUrl);
+  const bunnyId = getBunnyVideoId(previewVideoUrl);
+  const isBunny = isBunnyUrl(previewVideoUrl);
+  const isYT = isYouTubeUrl(previewVideoUrl);
 
-  // Handle thumbnail file upload → Cloudinary or local
+  // Handle thumbnail file upload
   const handleThumbnailFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -765,22 +818,22 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
   return (
     <div className="space-y-6 max-w-4xl">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-extrabold text-gray-900">{isEdit ? "Edit Course" : "Create New Course"}</h2>
-          <p className="text-sm text-gray-500 mt-0.5">{sections.length} sections · {totalLectures} lectures</p>
+          <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900">{isEdit ? "Edit Course" : "Create New Course"}</h2>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">{sections.length} sections · {totalLectures} lectures</p>
         </div>
-        <div className="flex gap-2">
-          <Btn variant="secondary" onClick={() => navigate("/instructor/courses")}>Cancel</Btn>
-          <Btn variant="secondary" onClick={() => handleSave(false)} disabled={saving}>Save Draft</Btn>
-          <Btn onClick={() => handleSave(true)} disabled={saving}>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Btn variant="secondary" onClick={() => navigate("/instructor/courses")} className="flex-1 sm:flex-none">Cancel</Btn>
+          <Btn variant="secondary" onClick={() => handleSave(false)} disabled={saving} className="flex-1 sm:flex-none">Save Draft</Btn>
+          <Btn onClick={() => handleSave(true)} disabled={saving} className="flex-1 sm:flex-none">
             {saving ? "Saving..." : isEdit && existing?.status === "published" ? "Update" : "Publish"}
           </Btn>
         </div>
       </div>
 
       {/* THUMBNAIL UPLOAD */}
-      <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
         <h3 className="font-bold text-gray-800 text-base mb-4">Course Thumbnail</h3>
         <div className="flex flex-col sm:flex-row gap-6 items-start">
           <div className="w-full sm:w-64 flex-shrink-0">
@@ -790,7 +843,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
               ) : (
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <span className="text-3xl mb-2">🖼️</span>
-                  <p className="text-xs text-gray-400 text-center px-4">Click to upload thumbnail<br/>(16:9 recommended)</p>
+                  <p className="text-xs text-gray-400 text-center px-2">Click to upload<br/>(16:9 recommended)</p>
                 </div>
               )}
               {uploadingThumb && (
@@ -810,22 +863,22 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
             <input value={thumbnail} onChange={e=>{setThumbnail(e.target.value);setThumbnailPreview(e.target.value);}}
               placeholder="https://example.com/image.jpg"
               className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"/>
-            <p className="text-xs text-gray-400">Recommended: 1280×720px, under 5MB. This is shown on the course landing page and student portal.</p>
+            <p className="text-xs text-gray-400">Recommended: 1280×720px, under 5MB.</p>
           </div>
         </div>
       </div>
 
       {/* COURSE PREVIEW VIDEO */}
-      <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
         <h3 className="font-bold text-gray-800 text-base mb-1">Course Preview Video</h3>
-        <p className="text-sm text-gray-500 mb-4">Paste a YouTube link or direct video URL. This is the free preview shown to non-enrolled visitors.</p>
+        <p className="text-xs sm:text-sm text-gray-500 mb-4">YouTube link, Bunny.net URL, or direct video URL. This is the free preview shown to non-enrolled visitors.</p>
         <div className="grid sm:grid-cols-2 gap-4 items-start">
           <div>
-            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">YouTube Link or Video URL</label>
+            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Video URL</label>
             <input value={previewVideoUrl} onChange={e=>setPreviewVideoUrl(e.target.value)}
-              placeholder="https://www.youtube.com/watch?v=..."
+              placeholder="https://www.youtube.com/watch?v=... or bunny.net/..."
               className="w-full mt-1.5 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"/>
-            <p className="text-xs text-gray-400 mt-1">Supports: YouTube links, YouTube Shorts, direct MP4 URLs</p>
+            <p className="text-xs text-gray-400 mt-1">YouTube • Bunny.net • MP4 URLs</p>
           </div>
           {ytId ? (
             <div>
@@ -834,29 +887,39 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                 <img src={`https://img.youtube.com/vi/${ytId}/mqdefault.jpg`} alt="YT Preview" className="w-full aspect-video object-cover"/>
                 <div className="bg-red-600 px-3 py-1.5 flex items-center gap-2">
                   <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
-                  <span className="text-white text-xs font-bold">YouTube video detected ✓</span>
+                  <span className="text-white text-xs font-bold">YouTube detected ✓</span>
                 </div>
               </div>
             </div>
-          ) : previewVideoUrl ? (
+          ) : isBunny ? (
             <div>
               <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Preview</label>
-              <video src={previewVideoUrl} className="w-full aspect-video object-cover mt-1.5 rounded-xl border border-gray-200" controls/>
+              <div className="mt-1.5 rounded-xl overflow-hidden border border-gray-200">
+                <video src={previewVideoUrl} className="w-full aspect-video object-cover bg-black" controls/>
+                <div className="bg-orange-600 px-3 py-1.5 flex items-center gap-2">
+                  <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>
+                  <span className="text-white text-xs font-bold">Bunny.net video linked ✓</span>
+                </div>
+              </div>
+            </div>
+          ) : previewVideoUrl && isDirectVideo(previewVideoUrl) ? (
+            <div>
+              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Preview</label>
+              <video src={previewVideoUrl} className="w-full aspect-video object-cover mt-1.5 rounded-xl border border-gray-200 bg-black" controls/>
             </div>
           ) : null}
         </div>
       </div>
 
       {/* BASIC INFO */}
-      <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm space-y-5">
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm space-y-5">
         <h3 className="font-bold text-gray-800 text-base">Course Information</h3>
         <div className="grid sm:grid-cols-2 gap-4">
           <Input label="Course Title *" value={title} onChange={setTitle} placeholder="e.g. Complete React Bootcamp 2024" className="sm:col-span-2"/>
-          {/* FIX 3: Restored Category select so setCategory is actually used */}
           <Select label="Category" value={category} onChange={setCategory} options={CATEGORIES} />
           <Input label="Tags (comma-separated)" value={tags} onChange={setTags} placeholder="React, Node.js, MongoDB"/>
           <Input label="Full Price (USD)" value={price} onChange={setPrice} placeholder="89.99" type="number"/>
-          <Input label="Discount Price (USD)" value={discountPrice} onChange={setDiscountPrice} placeholder="13.99 (leave blank for no discount)" type="number"/>
+          <Input label="Discount Price (USD)" value={discountPrice} onChange={setDiscountPrice} placeholder="13.99 (optional)" type="number"/>
           <Select label="Status" value={status} onChange={setStatus} options={[{value:"draft",label:"Draft"},{value:"published",label:"Published"},{value:"review",label:"Under Review"}]}/>
         </div>
         <Textarea label="Course Description" value={description} onChange={setDescription} placeholder="What will students learn? Who is this for?" rows={4}/>
@@ -865,20 +928,20 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
       </div>
 
       {/* CURRICULUM */}
-      <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
         <SectionHeader title="Course Curriculum" action={<Btn size="sm" onClick={addSection}>+ Add Section</Btn>}/>
         <div className="space-y-3">
           {sections.map((sec) => {
             const secId = sec._id || sec.id;
             return (
               <div key={secId} className="border border-gray-200 rounded-xl overflow-hidden">
-                <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition" onClick={() => setExpandedSection(expandedSection === secId ? null : secId)}>
-                  <span className="text-gray-400 text-sm select-none">☰</span>
+                <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition" onClick={() => setExpandedSection(expandedSection === secId ? null : secId)}>
+                  <span className="text-gray-400 text-xs sm:text-sm select-none">☰</span>
                   <input value={sec.title} onChange={(e) => { e.stopPropagation(); updateSectionTitle(secId, e.target.value); }} onClick={(e) => e.stopPropagation()}
-                    className="flex-1 bg-transparent text-sm font-semibold text-gray-800 focus:outline-none" placeholder="Section title"/>
-                  <span className="text-xs text-gray-400 whitespace-nowrap">{sec.lectures.length} lectures</span>
-                  <button onClick={(e) => { e.stopPropagation(); deleteSection(secId); }} className="text-red-400 hover:text-red-600 transition text-sm ml-1">✕</button>
-                  <span className="text-gray-400 text-sm">{expandedSection === secId ? "▲" : "▼"}</span>
+                    className="flex-1 bg-transparent text-xs sm:text-sm font-semibold text-gray-800 focus:outline-none" placeholder="Section title"/>
+                  <span className="text-xs text-gray-400 whitespace-nowrap ml-auto">{sec.lectures.length} lectures</span>
+                  <button onClick={(e) => { e.stopPropagation(); deleteSection(secId); }} className="text-red-400 hover:text-red-600 transition text-xs ml-1">✕</button>
+                  <span className="text-gray-400 text-xs">{expandedSection === secId ? "▲" : "▼"}</span>
                 </div>
 
                 {expandedSection === secId && (
@@ -886,43 +949,52 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                     {sec.lectures.map((lec) => {
                       const lecId = lec._id || lec.id;
                       const ytLecId = getYouTubeId(lec.videoUrl);
+                      const bunnyLecId = getBunnyVideoId(lec.videoUrl);
+                      const isBunnyLec = isBunnyUrl(lec.videoUrl);
                       return (
-                        <div key={lecId} className="px-4 py-4 space-y-3">
-                          <div className="flex items-center gap-3">
+                        <div key={lecId} className="px-3 sm:px-4 py-3 sm:py-4 space-y-3">
+                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
                             <span className="text-gray-300 text-xs select-none">⋮⋮</span>
-                            <div className="flex-1 grid sm:grid-cols-3 gap-2">
+                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2 w-full">
                               <input value={lec.title} onChange={(e) => updateLecture(secId, lecId, "title", e.target.value)}
                                 className="border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-purple-400 sm:col-span-2" placeholder="Lecture title"/>
-                              {/* FIX 2: LECTURE_TYPES now defined above */}
                               <select value={lec.type} onChange={(e) => updateLecture(secId, lecId, "type", e.target.value)}
                                 className="border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-purple-400 bg-white">
                                 {LECTURE_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                               </select>
                             </div>
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
                               <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
                                 <input type="checkbox" checked={lec.free} onChange={(e) => updateLecture(secId, lecId, "free", e.target.checked)} className="accent-purple-600"/>
                                 Free
                               </label>
                               <input value={lec.duration||""} onChange={e=>updateLecture(secId, lecId, "duration", e.target.value)}
-                                placeholder="10:30" className="w-14 border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400"/>
+                                placeholder="10:30" className="w-12 sm:w-14 border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400"/>
                               <button onClick={() => deleteLecture(secId, lecId)} className="text-red-300 hover:text-red-500 transition text-xs">✕</button>
                             </div>
                           </div>
 
                           {lec.type === "video" && (
-                            <div className="flex gap-3 items-start pl-6">
-                              <div className="flex-1">
+                            <div className="flex gap-2 sm:gap-3 items-start pl-6 flex-col sm:flex-row">
+                              <div className="flex-1 w-full">
                                 <div className="flex items-center gap-2">
                                   <svg className="w-4 h-4 text-red-500 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
                                   <input value={lec.videoUrl||""} onChange={e=>updateLectureVideo(secId, lecId, e.target.value)}
-                                    placeholder="YouTube link or video URL (e.g. https://youtube.com/watch?v=...)"
+                                    placeholder="YouTube link, Bunny.net URL, or video URL"
                                     className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400"/>
                                 </div>
                                 {ytLecId && (
                                   <div className="flex items-center gap-1.5 mt-1.5">
-                                    <img src={`https://img.youtube.com/vi/${ytLecId}/default.jpg`} className="w-12 h-8 object-cover rounded" alt="yt thumb"/>
-                                    <span className="text-xs text-emerald-600 font-semibold">✓ YouTube video linked</span>
+                                    <img src={`https://img.youtube.com/vi/${ytLecId}/default.jpg`} className="w-10 sm:w-12 h-6 sm:h-8 object-cover rounded" alt="yt thumb"/>
+                                    <span className="text-xs text-emerald-600 font-semibold">✓ YouTube video</span>
+                                  </div>
+                                )}
+                                {isBunnyLec && (
+                                  <div className="flex items-center gap-1.5 mt-1.5">
+                                    <div className="w-10 sm:w-12 h-6 sm:h-8 object-cover rounded bg-orange-100 flex items-center justify-center">
+                                      <span className="text-xs font-bold text-orange-600">🐰</span>
+                                    </div>
+                                    <span className="text-xs text-orange-600 font-semibold">✓ Bunny.net video</span>
                                   </div>
                                 )}
                               </div>
@@ -931,8 +1003,8 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                         </div>
                       );
                     })}
-                    <div className="px-4 py-3">
-                      <button onClick={() => addLecture(secId)} className="text-sm text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1.5 transition">
+                    <div className="px-3 sm:px-4 py-3">
+                      <button onClick={() => addLecture(secId)} className="text-xs sm:text-sm text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1.5 transition">
                         <span className="text-lg leading-none">＋</span> Add Lecture
                       </button>
                     </div>
@@ -961,33 +1033,33 @@ function AnalyticsPage({ courses }) {
   }));
 
   return (
-    <div className="space-y-8">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+    <div className="space-y-6 sm:space-y-8">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-extrabold text-gray-900">Analytics</h2>
-          <p className="text-sm text-gray-500 mt-0.5">Performance overview across all courses</p>
+          <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900">Analytics</h2>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Performance overview across all courses</p>
         </div>
         <div className="flex gap-2">
           {["6m","12m"].map((r) => (
             <button key={r} onClick={() => setRange(r)}
-              className={`px-4 py-2 rounded-lg text-xs font-semibold transition ${range === r ? "bg-purple-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-              {r === "12m" ? "Last 12 months" : "Last 6 months"}
+              className={`px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold transition ${range === r ? "bg-purple-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+              {r === "12m" ? "Last 12m" : "Last 6m"}
             </button>
           ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard icon="💰" label="Chart Revenue" value={fmt(data.reduce((a,d)=>a+d.revenue,0))} color="green"/>
         <StatCard icon="👥" label="New Students" value={fmtNum(data.reduce((a,d)=>a+d.students,0))} color="purple"/>
         <StatCard icon="📈" label="Best Month" value={`$${Math.max(...data.map(d=>d.revenue)).toLocaleString()}`} color="blue"/>
         <StatCard icon="⭐" label="Avg / Month" value={Math.round(data.reduce((a,d)=>a+d.students,0)/data.length)} color="amber"/>
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+      <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
+        <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm overflow-x-auto">
           <SectionHeader title="Monthly Revenue"/>
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer width="100%" height={220} minWidth={300}>
             <AreaChart data={data} margin={{ top:4, right:4, left:0, bottom:0 }}>
               <defs>
                 <linearGradient id="revGrad2" x1="0" y1="0" x2="0" y2="1">
@@ -1004,9 +1076,9 @@ function AnalyticsPage({ courses }) {
           </ResponsiveContainer>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+        <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm overflow-x-auto">
           <SectionHeader title="Monthly Enrollments"/>
-          <ResponsiveContainer width="100%" height={220}>
+          <ResponsiveContainer width="100%" height={220} minWidth={300}>
             <BarChart data={data} margin={{ top:4, right:4, left:0, bottom:0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6"/>
               <XAxis dataKey="month" tick={{ fontSize:10, fill:"#9ca3af" }} axisLine={false} tickLine={false}/>
@@ -1018,11 +1090,11 @@ function AnalyticsPage({ courses }) {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid lg:grid-cols-3 gap-4 sm:gap-6">
         {courseRevenue.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm lg:col-span-2">
+          <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm lg:col-span-2 overflow-x-auto">
             <SectionHeader title="Revenue by Course"/>
-            <ResponsiveContainer width="100%" height={220}>
+            <ResponsiveContainer width="100%" height={220} minWidth={300}>
               <BarChart data={courseRevenue} layout="vertical" margin={{ top:0, right:8, left:0, bottom:0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" horizontal={false}/>
                 <XAxis type="number" tickFormatter={(v)=>`$${v/1000}k`} tick={{ fontSize:10, fill:"#9ca3af" }} axisLine={false} tickLine={false}/>
@@ -1033,9 +1105,9 @@ function AnalyticsPage({ courses }) {
             </ResponsiveContainer>
           </div>
         )}
-        <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+        <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
           <SectionHeader title="Traffic Sources"/>
-          <ResponsiveContainer width="100%" height={180}>
+          <ResponsiveContainer width="100%" height={180} minWidth={250}>
             <PieChart>
               <Pie data={STUDENT_SOURCE} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3} dataKey="value">
                 {STUDENT_SOURCE.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]}/>)}
@@ -1046,11 +1118,11 @@ function AnalyticsPage({ courses }) {
           <div className="space-y-2 mt-2">
             {STUDENT_SOURCE.map((s,i) => (
               <div key={s.name} className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 min-w-0">
                   <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}/>
-                  <span className="text-gray-600">{s.name}</span>
+                  <span className="text-gray-600 truncate">{s.name}</span>
                 </div>
-                <span className="font-semibold text-gray-800">{s.value}%</span>
+                <span className="font-semibold text-gray-800 ml-1">{s.value}%</span>
               </div>
             ))}
           </div>
@@ -1061,7 +1133,7 @@ function AnalyticsPage({ courses }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PAGE: PROFILE — reads from AuthContext, saves to backend
+// PAGE: PROFILE
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ProfilePage({ toast }) {
@@ -1093,13 +1165,13 @@ function ProfilePage({ toast }) {
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
-        <h2 className="text-2xl font-extrabold text-gray-900">Instructor Profile</h2>
-        <p className="text-sm text-gray-500 mt-0.5">Shown on your public instructor page.</p>
+        <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900">Instructor Profile</h2>
+        <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Shown on your public instructor page.</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm">
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
         <h3 className="font-bold text-gray-800 mb-5">Profile Photo</h3>
-        <div className="flex items-center gap-6">
+        <div className="flex items-center gap-4 sm:gap-6">
           <div className="relative">
             <Avatar name={form.name || "I"} size={96}/>
             <button onClick={() => fileRef.current.click()} className="absolute -bottom-1 -right-1 w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-white text-sm hover:bg-purple-700 transition shadow-md">✎</button>
@@ -1113,7 +1185,7 @@ function ProfilePage({ toast }) {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm space-y-5">
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm space-y-5">
         <h3 className="font-bold text-gray-800">Basic Information</h3>
         <div className="grid sm:grid-cols-2 gap-4">
           <Input label="Full Name" value={form.name} onChange={(v)=>update("name",v)} placeholder="Your name"/>
@@ -1124,7 +1196,7 @@ function ProfilePage({ toast }) {
         <Textarea label="Bio" value={form.bio} onChange={(v)=>update("bio",v)} placeholder="Tell students about yourself..." rows={5}/>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm space-y-4">
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm space-y-4">
         <h3 className="font-bold text-gray-800">Links & Social</h3>
         <div className="grid sm:grid-cols-2 gap-4">
           <Input label="Website" value={form.website} onChange={(v)=>update("website",v)} placeholder="https://yoursite.com"/>
@@ -1141,43 +1213,60 @@ function ProfilePage({ toast }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LAYOUT
+// LAYOUT — MOBILE OPTIMIZED
 // ─────────────────────────────────────────────────────────────────────────────
 
-function Layout({ children, sidebarWidth }) {
+function Layout({ children, sidebarWidth, isMobile }) {
   return (
-    <main className="min-h-screen pt-16 bg-gray-50 transition-all duration-300" style={{ marginLeft: sidebarWidth }}>
-      <div className="p-6 md:p-8 max-w-[1400px]">{children}</div>
+    <main
+      className="min-h-screen pt-16 bg-gray-50 transition-all duration-300 will-change-[margin-left]"
+      style={{ marginLeft: isMobile ? 0 : sidebarWidth, overflowX: "hidden" }}
+    >
+      <div className="p-4 sm:p-6 md:p-8 max-w-[1400px]">{children}</div>
     </main>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ROOT EXPORT — no Router wrapper (App.jsx provides BrowserRouter)
+// ROOT EXPORT — RESPONSIVE WITH MOBILE DETECTION
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function InstructorDashboard() {
   const { user } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const { toasts, add: toast } = useToast();
   const {
     courses, loading,
     createCourse, updateCourse, deleteCourse, togglePublish,
   } = useInstructorCourses();
 
-  const sidebarWidth = collapsed ? 64 : 230;
+  useEffect(() => {
+    function handleResize() {
+      setIsMobile(window.innerWidth < 768);
+      if (window.innerWidth >= 768) setCollapsed(false);
+    }
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  const sidebarWidth = isMobile ? 0 : collapsed ? 64 : 230;
 
   return (
     <>
       <style>{`
         @keyframes slideUp { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
         * { box-sizing: border-box; }
+        html, body { overflow-x: hidden; }
+        body { -webkit-tap-highlight-color: transparent; }
+        main { will-change: margin-left; }
       `}</style>
 
-      <Sidebar instructor={user} collapsed={collapsed} setCollapsed={setCollapsed}/>
-      <TopBar instructor={user} sidebarWidth={sidebarWidth}/>
+      <Sidebar instructor={user} collapsed={collapsed} setCollapsed={setCollapsed} isMobile={isMobile}/>
+      <TopBar instructor={user} sidebarWidth={sidebarWidth} isMobile={isMobile} onMenuClick={() => setCollapsed(false)}/>
 
-      <Layout sidebarWidth={sidebarWidth}>
+      <Layout sidebarWidth={sidebarWidth} isMobile={isMobile}>
         <Routes>
           <Route index element={<DashboardPage instructor={user} courses={courses} loading={loading}/>}/>
           <Route path="courses" element={<CoursesPage courses={courses} loading={loading} deleteCourse={deleteCourse} togglePublish={togglePublish} toast={toast}/>}/>
