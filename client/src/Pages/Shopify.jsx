@@ -247,7 +247,7 @@ export default function CourseLandingPage() {
         <span className="text-gray-900 font-medium">Complete Web Development Bootcamp</span>
       </div>
 
-      {/* COURSE HEADER - ABOVE VIDEO PLAYER */}
+      {/* COURSE HEADER */}
       <section className="w-full bg-black text-white py-8 lg:py-12">
         <div className="max-w-7xl mx-auto px-4">
           <div className="mb-4 lg:mb-6">
@@ -261,9 +261,9 @@ export default function CourseLandingPage() {
             {courseData.title}
           </h1>
 
-          {/* VIDEO PREVIEW PLAYER - POSITIONED HERE */}
-          <div className="mb-6 lg:mb-8">
-            <div className="relative bg-gray-800 rounded-lg overflow-hidden aspect-video flex items-center justify-center cursor-pointer hover:bg-gray-700 transition group max-w-2xl">
+          {/* VIDEO PREVIEW PLAYER */}
+          <div className="mb-6 lg:mb-8 flex flex-col items-start">
+            <div className="relative bg-gray-800 rounded-lg overflow-hidden aspect-video flex items-center justify-center cursor-pointer hover:bg-gray-700 transition group w-full max-w-2xl">
               <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-t from-black/40 to-transparent">
                 <button 
                   className="bg-white text-black p-4 rounded-full hover:bg-gray-100 transition transform group-hover:scale-110 duration-200 shadow-lg border-none cursor-pointer"
@@ -273,9 +273,9 @@ export default function CourseLandingPage() {
                 </button>
               </div>
             </div>
-            {/* PREVIEW TEXT BOX - SMALLER AND LIGHT GREY */}
-            <div className="mt-3 inline-block bg-gray-200 rounded px-3 py-1.5">
-              <p className="text-gray-800 font-medium text-xs">Preview this course</p>
+            {/* PREVIEW TEXT - CENTERED BELOW PLAY BUTTON */}
+            <div className="mt-4 text-center w-full">
+              <p className="text-gray-300 font-medium text-sm">Preview this course</p>
             </div>
           </div>
 
@@ -413,7 +413,6 @@ export default function CourseLandingPage() {
                           className="px-4 lg:px-6 py-3 lg:py-4 border-b border-gray-200 last:border-b-0 flex items-center justify-between hover:bg-white transition"
                         >
                           <div className="flex items-center gap-3 flex-1 min-w-0">
-                            {/* PLAY BUTTON ICON */}
                             <div className="flex-shrink-0 w-6 h-6 border-2 border-gray-600 rounded-full flex items-center justify-center">
                               {lecture.type === 'video' ? (
                                 <Play size={12} className="text-gray-600" fill="currentColor" />
@@ -427,7 +426,6 @@ export default function CourseLandingPage() {
                             </div>
                           </div>
                           
-                          {/* PREVIEW BUTTON */}
                           {lecture.preview && (
                             <button 
                               onClick={() => handlePreviewClick(lecture.title)}
@@ -569,107 +567,87 @@ export default function CourseLandingPage() {
             </div>
           </div>
 
-          {/* COURSE REVIEWS - CAROUSEL SLIDER */}
+          {/* COURSE REVIEWS - CAROUSEL NO ARROWS - BIGGER CARDS */}
           <div className="mb-16 py-12 border-t border-gray-200">
             <h2 className="text-3xl font-bold text-gray-900 mb-8">Student reviews</h2>
             
-            <div className="flex items-center justify-between gap-4">
-              <button
-                onClick={() => setReviewCarouselIndex((prev) => (prev - 1 + courseData.reviews_list.length) % courseData.reviews_list.length)}
-                className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600 bg-transparent border-none cursor-pointer flex-shrink-0"
-              >
-                ←
-              </button>
-
-              <div className="flex-1 overflow-hidden">
-                <div className="flex gap-6">
-                  {courseData.reviews_list.map((review, idx) => (
-                    <div
-                      key={idx}
-                      className={`flex-shrink-0 w-full transition-opacity duration-300 ${
-                        idx === reviewCarouselIndex ? 'opacity-100' : 'hidden'
-                      }`}
-                    >
-                      <div className="border border-gray-300 rounded-lg p-6 hover:shadow-md transition">
-                        <div className="flex items-center justify-between mb-3">
-                          <div>
-                            <p className="font-bold text-gray-900 text-lg">{review.author}</p>
-                            <div className="flex items-center gap-2 mt-1">
-                              <div className="flex gap-0.5">
-                                {Array.from({ length: 5 }).map((_, i) => (
-                                  <Star
-                                    key={i}
-                                    size={16}
-                                    className="text-yellow-400"
-                                    fill={i < review.rating ? 'currentColor' : 'none'}
-                                  />
-                                ))}
-                              </div>
-                              <span className="text-xs text-gray-600">2 months ago</span>
-                            </div>
-                          </div>
-                          <button
-                            className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition bg-transparent border-none cursor-pointer text-lg"
-                            aria-label="More options"
-                          >
-                            ⋮
-                          </button>
-                        </div>
-
-                        {review.verified && (
-                          <div className="flex items-center gap-1 bg-green-100 text-green-800 text-xs font-bold px-3 py-1 rounded inline-block mb-4">
-                            <span>✓</span>
-                            <span>Verified Purchase</span>
-                          </div>
-                        )}
-
-                        <p className="text-gray-700 leading-relaxed mb-4 text-sm">{review.text}</p>
-
-                        <div className="flex items-center gap-4 pt-4 border-t border-gray-200">
-                          <button className="flex items-center gap-1 text-gray-600 hover:text-gray-900 text-xs bg-transparent border-none cursor-pointer transition p-0">
-                            <span>👍</span>
-                            <span>Helpful</span>
-                          </button>
-                          <button className="flex items-center gap-1 text-gray-600 hover:text-gray-900 text-xs bg-transparent border-none cursor-pointer transition p-0">
-                            <span>👎</span>
-                            <span>Not helpful</span>
-                          </button>
-                        </div>
+            <div className="w-full">
+              {/* LARGER REVIEW CARD */}
+              <div className="w-full bg-white rounded-lg border border-gray-300 p-8 hover:shadow-lg transition">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="font-bold text-gray-900 text-2xl">{courseData.reviews_list[reviewCarouselIndex].author}</p>
+                    <div className="flex items-center gap-2 mt-2">
+                      <div className="flex gap-1">
+                        {Array.from({ length: 5 }).map((_, i) => (
+                          <Star
+                            key={i}
+                            size={18}
+                            className="text-yellow-400"
+                            fill={i < courseData.reviews_list[reviewCarouselIndex].rating ? 'currentColor' : 'none'}
+                          />
+                        ))}
                       </div>
+                      <span className="text-sm text-gray-600">2 months ago</span>
                     </div>
-                  ))}
+                  </div>
+                  <button
+                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition bg-transparent border-none cursor-pointer text-lg"
+                    aria-label="More options"
+                  >
+                    ⋮
+                  </button>
+                </div>
+
+                {courseData.reviews_list[reviewCarouselIndex].verified && (
+                  <div className="flex items-center gap-1 bg-green-100 text-green-800 text-xs font-bold px-3 py-1 rounded inline-block mb-4">
+                    <span>✓</span>
+                    <span>Verified Purchase</span>
+                  </div>
+                )}
+
+                <p className="text-gray-700 leading-relaxed mb-6 text-base lg:text-lg">{courseData.reviews_list[reviewCarouselIndex].text}</p>
+
+                <div className="flex items-center gap-4 pt-4 border-t border-gray-200">
+                  <button className="flex items-center gap-1 text-gray-600 hover:text-gray-900 text-sm bg-transparent border-none cursor-pointer transition p-0">
+                    <span>👍</span>
+                    <span>Helpful</span>
+                  </button>
+                  <button className="flex items-center gap-1 text-gray-600 hover:text-gray-900 text-sm bg-transparent border-none cursor-pointer transition p-0">
+                    <span>👎</span>
+                    <span>Not helpful</span>
+                  </button>
                 </div>
               </div>
 
-              <button
-                onClick={() => setReviewCarouselIndex((prev) => (prev + 1) % courseData.reviews_list.length)}
-                className="p-2 hover:bg-gray-100 rounded-full transition text-gray-600 bg-transparent border-none cursor-pointer flex-shrink-0"
-              >
-                →
-              </button>
+              {/* NAVIGATION DOTS ONLY */}
+              <div className="flex justify-center gap-3 mt-8">
+                {courseData.reviews_list.map((_, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setReviewCarouselIndex(idx)}
+                    className={`w-3 h-3 rounded-full transition bg-transparent border-none cursor-pointer ${
+                      idx === reviewCarouselIndex ? 'bg-purple-600' : 'bg-gray-300'
+                    }`}
+                    aria-label={`Go to review ${idx + 1}`}
+                  />
+                ))}
+              </div>
             </div>
 
-            <div className="flex justify-center gap-2 mt-6">
-              {courseData.reviews_list.map((_, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setReviewCarouselIndex(idx)}
-                  className={`w-2 h-2 rounded-full transition bg-transparent border-none cursor-pointer ${
-                    idx === reviewCarouselIndex ? 'bg-purple-600' : 'bg-gray-300'
-                  }`}
-                  aria-label={`Go to review ${idx + 1}`}
-                />
-              ))}
-            </div>
+            {/* SHOW ALL REVIEWS BUTTON */}
+            <button className="w-full mt-8 border-2 border-gray-300 text-gray-900 font-bold py-3 rounded-lg hover:bg-gray-50 transition bg-transparent cursor-pointer text-sm">
+              Show all reviews
+            </button>
           </div>
 
           {/* STUDENTS ALSO BOUGHT */}
           <div className="mb-16 py-12 border-t border-gray-200">
             <h2 className="text-3xl font-bold text-gray-900 mb-8">Students also bought</h2>
             
-            <div className="flex gap-6 overflow-x-auto pb-4 -mx-4 px-4 scroll-smooth">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
               {studentsBoughtCourses.map(course => (
-                <div key={course.id} className="flex-shrink-0 w-64 bg-white border border-gray-300 rounded-lg overflow-hidden hover:shadow-lg transition cursor-pointer">
+                <div key={course.id} className="bg-white border border-gray-300 rounded-lg overflow-hidden hover:shadow-lg transition cursor-pointer">
                   <div className="bg-gradient-to-br from-gray-300 to-gray-400 h-40 flex items-center justify-center text-4xl">
                     📚
                   </div>
@@ -698,17 +676,15 @@ export default function CourseLandingPage() {
           <div className="mb-16 py-12 border-t border-gray-200">
             <h2 className="text-3xl font-bold text-gray-900 mb-8">Student testimonials</h2>
             
-            <div className="relative">
-              <div className="flex gap-6 overflow-x-auto pb-4 -mx-4 px-4 scroll-smooth">
-                {videoReviews.map((review, idx) => (
-                  <div
-                    key={idx}
-                    className="flex-shrink-0 w-96 h-64 bg-gray-300 rounded-lg flex items-center justify-center text-6xl cursor-pointer hover:shadow-lg transition"
-                  >
-                    {review.thumbnail}
-                  </div>
-                ))}
-              </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {videoReviews.map((review, idx) => (
+                <div
+                  key={idx}
+                  className="w-full h-64 bg-gray-300 rounded-lg flex items-center justify-center text-6xl cursor-pointer hover:shadow-lg transition"
+                >
+                  {review.thumbnail}
+                </div>
+              ))}
             </div>
             
             <div className="flex justify-center gap-2 mt-6">
@@ -727,28 +703,26 @@ export default function CourseLandingPage() {
           <div className="mb-16 py-12 border-t border-gray-200">
             <h2 className="text-3xl font-bold text-gray-900 mb-8">Project gallery</h2>
             
-            <div className="relative">
-              <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 scroll-smooth">
-                {imageGallery.map((item, idx) => (
-                  <div
-                    key={idx}
-                    onClick={() => setImageCarouselIndex(idx)}
-                    className={`flex-shrink-0 w-64 h-64 bg-gray-300 rounded-lg flex items-center justify-center text-5xl cursor-pointer transition ${
-                      idx === imageCarouselIndex ? 'ring-4 ring-purple-600' : 'hover:shadow-lg'
-                    }`}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        setImageCarouselIndex(idx);
-                      }
-                    }}
-                    aria-label={`Select image ${idx + 1}`}
-                  >
-                    {item.image}
-                  </div>
-                ))}
-              </div>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+              {imageGallery.map((item, idx) => (
+                <div
+                  key={idx}
+                  onClick={() => setImageCarouselIndex(idx)}
+                  className={`w-full h-48 bg-gray-300 rounded-lg flex items-center justify-center text-4xl cursor-pointer transition ${
+                    idx === imageCarouselIndex ? 'ring-4 ring-purple-600' : 'hover:shadow-lg'
+                  }`}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      setImageCarouselIndex(idx);
+                    }
+                  }}
+                  aria-label={`Select image ${idx + 1}`}
+                >
+                  {item.image}
+                </div>
+              ))}
             </div>
           </div>
         </div>
