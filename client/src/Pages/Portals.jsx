@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { ChevronDown, Menu, X, Bell, LogOut, Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings, Home, BookOpen, FileText, Award, User, Search, Clock, Users, Star, MessageCircle, CheckCircle, ChevronRight } from "lucide-react";
+import { ChevronDown, Menu, Bell, LogOut, Play, Pause, Volume2, VolumeX, Maximize, Minimize, Home, BookOpen, FileText, Award, User, Search, Star, CheckCircle, ChevronRight } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // API SETUP - SAME AS ORIGINAL
