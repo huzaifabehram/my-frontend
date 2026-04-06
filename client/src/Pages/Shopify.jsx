@@ -8,7 +8,6 @@ export default function CourseLandingPage() {
   const [expandedSection, setExpandedSection] = useState([0]);
   const [videoCarouselIndex, setVideoCarouselIndex] = useState(0);
   const [imageCarouselIndex, setImageCarouselIndex] = useState(0);
-  const [reviewCarouselIndex, setReviewCarouselIndex] = useState(0);
   const [showFullDescription, setShowFullDescription] = useState(false);
 
   const courseData = {
@@ -112,17 +111,28 @@ export default function CourseLandingPage() {
     { id: 4, title: 'Web Design Fundamentals', rating: 4.5, students: '62K', duration: '24h', bestseller: false }
   ];
 
+  // Handle button navigation safely
   const handleNavigate = (path) => {
     setMobileMenuOpen(false);
     navigate(path);
   };
 
+  // Handle preview click
   const handlePreviewClick = (lectureTitle) => {
     console.log('Previewing:', lectureTitle);
+    // Add preview logic here if needed
+  };
+
+  // CHANGE 6: Format number in K format
+  const formatNumber = (num) => {
+    if (num >= 1000) {
+      return (num / 1000).toFixed(1) + 'K';
+    }
+    return num.toString();
   };
 
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white overflow-x-hidden">
       {/* ANNOUNCEMENT BAR */}
       <div className="bg-amber-50 text-center py-3 px-4">
         <p className="text-sm font-medium text-gray-800">
@@ -185,123 +195,109 @@ export default function CourseLandingPage() {
             >
               Sign Up
             </button>
-            {/* MOBILE LOGIN BUTTON */}
-            <button
-              onClick={() => handleNavigate('/auth/login')}
-              className="lg:hidden px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium border-none cursor-pointer text-sm"
-            >
-              Login
-            </button>
           </div>
         </div>
 
-        {/* MOBILE MENU - HALF SCREEN DARK */}
+        {/* CHANGE 2: Fixed mobile menu with close button */}
         {mobileMenuOpen && (
-          <div className="lg:hidden fixed inset-0 top-16 z-50 w-1/2 bg-gray-900 text-white p-4 space-y-3 h-screen overflow-y-auto">
+          <div className="lg:hidden border-t border-gray-200 bg-white p-4 space-y-3">
+            <div className="flex justify-end mb-2">
+              <button
+                onClick={() => setMobileMenuOpen(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition bg-transparent border-none cursor-pointer"
+                aria-label="Close menu"
+              >
+                <X size={24} />
+              </button>
+            </div>
             <button
               onClick={() => handleNavigate('/courses')}
-              className="block text-white hover:text-gray-300 bg-transparent border-none cursor-pointer w-full text-left p-3 rounded hover:bg-gray-800 text-sm"
+              className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left p-2 rounded hover:bg-gray-100"
             >
               Categories
             </button>
             <button
               onClick={() => handleNavigate('/instructor')}
-              className="block text-white hover:text-gray-300 bg-transparent border-none cursor-pointer w-full text-left p-3 rounded hover:bg-gray-800 text-sm"
+              className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left p-2 rounded hover:bg-gray-100"
             >
               Instructor
             </button>
             <button
               onClick={() => handleNavigate('/courses')}
-              className="block text-white hover:text-gray-300 bg-transparent border-none cursor-pointer w-full text-left p-3 rounded hover:bg-gray-800 text-sm"
+              className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left p-2 rounded hover:bg-gray-100"
             >
               About
             </button>
-            <div className="border-t border-gray-700 pt-3 mt-3">
-              <button
-                onClick={() => handleNavigate('/auth/register')}
-                className="block text-white hover:text-gray-300 bg-transparent border-none cursor-pointer w-full text-left p-3 rounded hover:bg-gray-800 text-sm"
-              >
-                Sign Up
-              </button>
-            </div>
+            <button
+              onClick={() => handleNavigate('/auth/login')}
+              className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left p-2 rounded hover:bg-gray-100"
+            >
+              Login
+            </button>
+            <button
+              onClick={() => handleNavigate('/auth/register')}
+              className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left p-2 rounded hover:bg-gray-100"
+            >
+              Sign Up
+            </button>
           </div>
         )}
       </header>
 
-      {/* BREADCRUMB - SMALLER FONT */}
-      <div className="max-w-7xl mx-auto px-4 py-2 text-xs text-gray-600">
+      {/* BREADCRUMB */}
+      <div className="max-w-7xl mx-auto px-4 py-3 text-sm text-gray-600">
         <button 
           onClick={() => handleNavigate('/')} 
           className="hover:underline bg-transparent border-none cursor-pointer text-gray-600 p-0"
         >
           Development
         </button>
-        <span className="mx-1">›</span>
+        <span className="mx-2">›</span>
         <button 
           onClick={() => handleNavigate('/courses')} 
           className="hover:underline bg-transparent border-none cursor-pointer text-gray-600 p-0"
         >
           Web Development
         </button>
-        <span className="mx-1">›</span>
+        <span className="mx-2">›</span>
         <span className="text-gray-900 font-medium">Complete Web Development Bootcamp</span>
       </div>
 
-      {/* COURSE HEADER */}
+      {/* COURSE HEADER - ABOVE VIDEO PLAYER */}
       <section className="w-full bg-black text-white py-8 lg:py-12">
         <div className="max-w-7xl mx-auto px-4">
-          <div className="mb-4 lg:mb-6">
-            <span className="inline-block bg-yellow-400 text-black font-bold px-4 py-2 rounded-full text-xs lg:text-sm">
+          <div className="mb-6 lg:mb-8">
+            <span className="inline-block bg-yellow-400 text-black font-bold px-4 py-2 rounded-full text-sm">
               Bestseller
             </span>
           </div>
 
-          {/* COURSE TITLE - SMALLER */}
-          <h1 className="text-3xl lg:text-4xl font-bold text-white mb-4 leading-tight">
+          <h1 className="text-4xl lg:text-5xl font-bold text-white mb-6 leading-tight">
             {courseData.title}
           </h1>
 
-          {/* VIDEO PREVIEW PLAYER */}
-          <div className="mb-6 lg:mb-8 flex flex-col items-start">
-            <div className="relative bg-gray-800 rounded-lg overflow-hidden aspect-video flex items-center justify-center cursor-pointer hover:bg-gray-700 transition group w-full max-w-2xl">
-              <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-t from-black/40 to-transparent">
-                <button 
-                  className="bg-white text-black p-4 rounded-full hover:bg-gray-100 transition transform group-hover:scale-110 duration-200 shadow-lg border-none cursor-pointer"
-                  aria-label="Play preview"
-                >
-                  <Play size={32} fill="currentColor" />
-                </button>
-              </div>
-            </div>
-            {/* PREVIEW TEXT - CENTERED BELOW PLAY BUTTON */}
-            <div className="mt-4 text-center w-full">
-              <p className="text-gray-300 font-medium text-sm">Preview this course</p>
-            </div>
-          </div>
-
-          {/* COURSE SUBTITLE */}
-          <p className="text-lg lg:text-xl text-gray-300 mb-6 leading-relaxed max-w-3xl">
+          <p className="text-xl text-gray-300 mb-8 leading-relaxed max-w-3xl">
             {courseData.subtitle}
           </p>
 
-          <div className="flex flex-wrap items-center gap-6 mb-6">
+          <div className="flex flex-wrap items-center gap-6 mb-8">
             <div className="flex items-center gap-2">
               <div className="flex items-center gap-1">
                 <Star size={22} className="text-yellow-400" fill="currentColor" />
-                <span className="text-2xl lg:text-3xl font-bold text-white">{courseData.rating}</span>
+                <span className="text-3xl font-bold text-white">{courseData.rating}</span>
               </div>
               <div>
-                <p className="text-gray-300 font-semibold text-sm">({courseData.reviews.toLocaleString()} ratings)</p>
+                <p className="text-gray-300 font-semibold">({courseData.reviews.toLocaleString()} ratings)</p>
               </div>
             </div>
-            <div className="flex items-center gap-2 text-gray-300 text-sm">
-              <Users size={18} />
+            <div className="flex items-center gap-2 text-gray-300">
+              <Users size={20} />
               <span className="font-semibold">{courseData.students.toLocaleString()} students</span>
             </div>
           </div>
 
-          <div className="mb-6">
-            <p className="text-gray-400 text-sm">
+          <div className="mb-8">
+            <p className="text-gray-400">
               Created by{' '}
               <button
                 onClick={() => handleNavigate('/instructor')}
@@ -312,9 +308,9 @@ export default function CourseLandingPage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-4 lg:gap-6 text-gray-400 text-xs lg:text-sm border-t border-gray-800 pt-6">
+          <div className="flex flex-wrap gap-6 text-gray-400 text-sm border-t border-gray-800 pt-8">
             <div className="flex items-center gap-2">
-              <Clock size={16} />
+              <Clock size={18} />
               <span>Last updated {courseData.lastUpdated}</span>
             </div>
             <div className="flex items-center gap-2">
@@ -324,6 +320,23 @@ export default function CourseLandingPage() {
             <div className="flex items-center gap-2">
               <span>📝</span>
               <span>English, Spanish [+2]</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* CHANGE 3: VIDEO PREVIEW PLAYER - Preview text below play button */}
+      <section className="w-full bg-black text-white py-8 lg:py-16">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="relative bg-gray-800 rounded-xl overflow-hidden aspect-video flex items-center justify-center cursor-pointer hover:bg-gray-700 transition group">
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-t from-black/40 to-transparent gap-4">
+              <button 
+                className="bg-white text-black p-5 rounded-full hover:bg-gray-100 transition transform group-hover:scale-110 duration-200 shadow-lg border-none cursor-pointer"
+                aria-label="Play preview"
+              >
+                <Play size={40} fill="currentColor" />
+              </button>
+              <p className="text-white font-bold text-lg">Preview this course</p>
             </div>
           </div>
         </div>
@@ -342,7 +355,7 @@ export default function CourseLandingPage() {
                     <div className="flex-shrink-0">
                       <Zap size={20} className="text-purple-600 mt-1" />
                     </div>
-                    <p className="text-gray-700 text-sm lg:text-base">{outcome}</p>
+                    <p className="text-gray-700">{outcome}</p>
                   </div>
                 ))}
               </div>
@@ -358,7 +371,7 @@ export default function CourseLandingPage() {
                 return (
                   <div key={idx} className="text-center">
                     <Icon size={32} className="text-purple-600 mx-auto mb-3" />
-                    <p className="text-xs lg:text-sm text-gray-700 font-medium">{item.text}</p>
+                    <p className="text-sm text-gray-700 font-medium">{item.text}</p>
                   </div>
                 );
               })}
@@ -368,7 +381,7 @@ export default function CourseLandingPage() {
           {/* COURSE CONTENT HEADER */}
           <div className="mb-8">
             <h2 className="text-3xl lg:text-4xl font-bold text-gray-900 mb-4">Course content</h2>
-            <div className="flex flex-wrap gap-3 text-gray-700 text-sm lg:text-lg font-semibold">
+            <div className="flex flex-wrap gap-3 text-gray-700 lg:text-lg font-semibold">
               <span>{courseData.sections.length} sections</span>
               <span>•</span>
               <span>{courseData.sections.reduce((acc, s) => acc + s.lectures, 0)} lectures</span>
@@ -377,7 +390,7 @@ export default function CourseLandingPage() {
             </div>
           </div>
 
-          {/* COURSE CONTENT ACCORDION */}
+          {/* CHANGE 4: COURSE CONTENT ACCORDION - YouTube-style video icon */}
           <div className="space-y-2 mb-16">
             {courseData.sections.map((section, idx) => {
               const isExpanded = expandedSection.includes(idx);
@@ -399,7 +412,7 @@ export default function CourseLandingPage() {
                         className={`text-gray-600 transition flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`}
                       />
                       <div className="flex-1">
-                        <h3 className="font-semibold text-gray-900 text-sm lg:text-base">{section.title}</h3>
+                        <h3 className="font-semibold text-gray-900">{section.title}</h3>
                         <p className="text-xs text-gray-600">{section.lectures} lectures • {section.duration}</p>
                       </div>
                     </div>
@@ -410,29 +423,35 @@ export default function CourseLandingPage() {
                       {section.lectures_list.map((lecture, lectureIdx) => (
                         <div
                           key={lectureIdx}
-                          className="px-4 lg:px-6 py-3 lg:py-4 border-b border-gray-200 last:border-b-0 flex items-center justify-between hover:bg-white transition"
+                          className="px-6 py-4 border-b border-gray-200 last:border-b-0 flex items-center justify-between hover:bg-white transition"
                         >
-                          <div className="flex items-center gap-3 flex-1 min-w-0">
-                            <div className="flex-shrink-0 w-6 h-6 border-2 border-gray-600 rounded-full flex items-center justify-center">
+                          <div className="flex items-center gap-4 flex-1">
+                            {/* CHANGE 4: YouTube-style video icon */}
+                            <div className="flex-shrink-0">
                               {lecture.type === 'video' ? (
-                                <Play size={12} className="text-gray-600" fill="currentColor" />
+                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                  <circle cx="12" cy="12" r="10" fill="#4B5563"/>
+                                  <path d="M10 8.5L15.5 12L10 15.5V8.5Z" fill="white"/>
+                                </svg>
                               ) : (
-                                <span className="text-gray-600 text-xs font-bold">✓</span>
+                                <div className="w-6 h-6 border-2 border-gray-600 rounded-full flex items-center justify-center">
+                                  <span className="text-gray-600 text-sm font-bold">✓</span>
+                                </div>
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="text-gray-900 text-sm lg:text-base font-medium truncate">{lecture.title}</p>
+                              <p className="text-gray-900 text-base font-medium">{lecture.title}</p>
                               <p className="text-xs text-gray-600">{lecture.duration}</p>
                             </div>
                           </div>
                           
+                          {/* Preview Button */}
                           {lecture.preview && (
                             <button 
                               onClick={() => handlePreviewClick(lecture.title)}
-                              className="text-purple-600 hover:text-purple-700 font-bold text-xs lg:text-sm cursor-pointer bg-transparent border-none whitespace-nowrap ml-3 transition p-0 flex items-center gap-1"
+                              className="text-purple-600 hover:text-purple-700 font-bold text-sm cursor-pointer bg-transparent border-none whitespace-nowrap ml-4 transition p-0"
                             >
-                              <Play size={12} fill="currentColor" />
-                              <span>Preview</span>
+                              Preview
                             </button>
                           )}
                         </div>
@@ -460,7 +479,7 @@ export default function CourseLandingPage() {
               <div className="py-6 space-y-4">
                 <ul className="space-y-3">
                   {courseData.requirements.map((req, idx) => (
-                    <li key={idx} className="flex gap-3 text-gray-700 text-base lg:text-lg">
+                    <li key={idx} className="flex gap-3 text-gray-700 text-lg">
                       <span className="text-purple-600 font-bold flex-shrink-0">•</span>
                       {req}
                     </li>
@@ -474,7 +493,7 @@ export default function CourseLandingPage() {
           <div className="mb-16 py-12 border-t border-gray-200">
             <h2 className="text-3xl font-bold text-gray-900 mb-6">Description</h2>
             
-            <div className={`text-gray-700 leading-relaxed text-sm lg:text-base space-y-4 ${!showFullDescription ? 'max-h-40 overflow-hidden' : ''}`}>
+            <div className={`text-gray-700 leading-relaxed text-base space-y-4 ${!showFullDescription ? 'max-h-40 overflow-hidden' : ''}`}>
               <div>
                 <h3 className="text-lg font-semibold text-gray-900 mb-3">What you'll learn</h3>
                 <p className="text-gray-700">
@@ -502,7 +521,7 @@ export default function CourseLandingPage() {
             
             <button
               onClick={() => setShowFullDescription(!showFullDescription)}
-              className="text-purple-600 hover:text-purple-700 mt-4 text-xs lg:text-sm font-semibold transition flex items-center gap-2 bg-transparent border-none cursor-pointer p-0"
+              className="text-purple-600 hover:text-purple-700 mt-4 text-sm font-semibold transition flex items-center gap-2 bg-transparent border-none cursor-pointer p-0"
             >
               <span>{showFullDescription ? '▲ Show less' : '▼ Show more'}</span>
             </button>
@@ -511,6 +530,7 @@ export default function CourseLandingPage() {
           {/* INSTRUCTOR SECTION */}
           <div className="mb-16 py-12 border-t border-gray-200">
             <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+              {/* Instructor Image - Left */}
               <div className="lg:col-span-1 flex flex-col items-center lg:items-start">
                 <div className="w-40 h-40 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-6xl mb-6">
                   {courseData.instructor.image}
@@ -528,126 +548,139 @@ export default function CourseLandingPage() {
                 </p>
               </div>
 
+              {/* Instructor Stats & Bio - Right */}
               <div className="lg:col-span-3">
+                {/* Stats Section */}
                 <div className="mb-8 pb-8 border-b border-gray-200">
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
+                    {/* Rating */}
                     <div>
                       <div className="flex items-center gap-2 mb-2">
                         <Star size={18} className="text-yellow-400" fill="currentColor" />
                         <span className="font-bold text-gray-900 text-lg">{courseData.instructor.rating}</span>
                       </div>
-                      <p className="text-xs lg:text-sm text-gray-600">Instructor Rating</p>
+                      <p className="text-sm text-gray-600">Instructor Rating</p>
                     </div>
 
+                    {/* Reviews */}
                     <div>
                       <p className="font-bold text-gray-900 text-lg mb-2">
                         {(courseData.instructor.reviews / 1000).toFixed(1)}K
                       </p>
-                      <p className="text-xs lg:text-sm text-gray-600">Reviews</p>
+                      <p className="text-sm text-gray-600">Reviews</p>
                     </div>
 
+                    {/* Students */}
                     <div>
                       <p className="font-bold text-gray-900 text-lg mb-2">
                         {(courseData.instructor.students / 1000000).toFixed(1)}M
                       </p>
-                      <p className="text-xs lg:text-sm text-gray-600">Students</p>
+                      <p className="text-sm text-gray-600">Students</p>
                     </div>
 
+                    {/* Courses */}
                     <div>
                       <p className="font-bold text-gray-900 text-lg mb-2">{courseData.instructor.courses}</p>
-                      <p className="text-xs lg:text-sm text-gray-600">Courses</p>
+                      <p className="text-sm text-gray-600">Courses</p>
                     </div>
                   </div>
                 </div>
 
+                {/* Bio Section */}
                 <div>
-                  <p className="text-gray-700 leading-relaxed text-sm lg:text-base">{courseData.instructor.bio}</p>
+                  <p className="text-gray-700 leading-relaxed text-base">{courseData.instructor.bio}</p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* COURSE REVIEWS - CAROUSEL NO ARROWS - BIGGER CARDS */}
+          {/* CHANGE 5 & 6: COURSE REVIEWS - Slidable with rating stars and K format */}
           <div className="mb-16 py-12 border-t border-gray-200">
-            <h2 className="text-3xl font-bold text-gray-900 mb-8">Student reviews</h2>
-            
-            <div className="w-full">
-              {/* LARGER REVIEW CARD */}
-              <div className="w-full bg-white rounded-lg border border-gray-300 p-8 hover:shadow-lg transition">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <p className="font-bold text-gray-900 text-2xl">{courseData.reviews_list[reviewCarouselIndex].author}</p>
-                    <div className="flex items-center gap-2 mt-2">
-                      <div className="flex gap-1">
-                        {Array.from({ length: 5 }).map((_, i) => (
-                          <Star
-                            key={i}
-                            size={18}
-                            className="text-yellow-400"
-                            fill={i < courseData.reviews_list[reviewCarouselIndex].rating ? 'currentColor' : 'none'}
-                          />
-                        ))}
-                      </div>
-                      <span className="text-sm text-gray-600">2 months ago</span>
-                    </div>
-                  </div>
-                  <button
-                    className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition bg-transparent border-none cursor-pointer text-lg"
-                    aria-label="More options"
-                  >
-                    ⋮
-                  </button>
+            <div className="mb-10">
+              <div className="flex items-center gap-4 mb-4">
+                <div className="flex items-center gap-2">
+                  <Star size={32} className="text-yellow-400" fill="currentColor" />
+                  <span className="text-3xl font-bold text-gray-900">{courseData.rating}</span>
                 </div>
-
-                {courseData.reviews_list[reviewCarouselIndex].verified && (
-                  <div className="flex items-center gap-1 bg-green-100 text-green-800 text-xs font-bold px-3 py-1 rounded inline-block mb-4">
-                    <span>✓</span>
-                    <span>Verified Purchase</span>
-                  </div>
-                )}
-
-                <p className="text-gray-700 leading-relaxed mb-6 text-base lg:text-lg">{courseData.reviews_list[reviewCarouselIndex].text}</p>
-
-                <div className="flex items-center gap-4 pt-4 border-t border-gray-200">
-                  <button className="flex items-center gap-1 text-gray-600 hover:text-gray-900 text-sm bg-transparent border-none cursor-pointer transition p-0">
-                    <span>👍</span>
-                    <span>Helpful</span>
-                  </button>
-                  <button className="flex items-center gap-1 text-gray-600 hover:text-gray-900 text-sm bg-transparent border-none cursor-pointer transition p-0">
-                    <span>👎</span>
-                    <span>Not helpful</span>
-                  </button>
+                <div>
+                  <p className="text-gray-700 font-semibold">Course Rating</p>
+                  <p className="text-sm text-gray-600">{formatNumber(courseData.reviews)} reviews</p>
                 </div>
-              </div>
-
-              {/* NAVIGATION DOTS ONLY */}
-              <div className="flex justify-center gap-3 mt-8">
-                {courseData.reviews_list.map((_, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => setReviewCarouselIndex(idx)}
-                    className={`w-3 h-3 rounded-full transition bg-transparent border-none cursor-pointer ${
-                      idx === reviewCarouselIndex ? 'bg-purple-600' : 'bg-gray-300'
-                    }`}
-                    aria-label={`Go to review ${idx + 1}`}
-                  />
-                ))}
               </div>
             </div>
 
-            {/* SHOW ALL REVIEWS BUTTON */}
-            <button className="w-full mt-8 border-2 border-gray-300 text-gray-900 font-bold py-3 rounded-lg hover:bg-gray-50 transition bg-transparent cursor-pointer text-sm">
+            {/* CHANGE 5: Individual Reviews - Horizontal scroll */}
+            <div className="flex gap-6 overflow-x-auto pb-4 -mx-4 px-4 scroll-smooth mb-8" style={{scrollbarWidth: 'thin'}}>
+              {courseData.reviews_list.map((review, idx) => (
+                <div key={idx} className="flex-shrink-0 w-80 lg:w-96 border border-gray-300 rounded-lg p-6 hover:shadow-md transition">
+                  {/* Review Header */}
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <p className="font-bold text-gray-900 text-lg">{review.author}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        <div className="flex gap-0.5">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <Star
+                              key={i}
+                              size={16}
+                              className="text-yellow-400"
+                              fill={i < review.rating ? 'currentColor' : 'none'}
+                            />
+                          ))}
+                        </div>
+                        <span className="text-xs text-gray-600">2 months ago</span>
+                      </div>
+                    </div>
+
+                    {/* Action Buttons */}
+                    <button
+                      className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition bg-transparent border-none cursor-pointer text-lg"
+                      title="More options"
+                      aria-label="More options"
+                    >
+                      ⋮
+                    </button>
+                  </div>
+
+                  {/* Verified Badge */}
+                  {review.verified && (
+                    <div className="flex items-center gap-1 bg-green-100 text-green-800 text-xs font-bold px-3 py-1 rounded inline-block mb-4">
+                      <span>✓</span>
+                      <span>Verified Purchase</span>
+                    </div>
+                  )}
+
+                  {/* Review Text */}
+                  <p className="text-gray-700 leading-relaxed mb-4">{review.text}</p>
+
+                  {/* Helpful Buttons */}
+                  <div className="flex items-center gap-4 pt-4 border-t border-gray-200">
+                    <button className="flex items-center gap-1 text-gray-600 hover:text-gray-900 text-sm bg-transparent border-none cursor-pointer transition p-0">
+                      <span>👍</span>
+                      <span>Helpful</span>
+                    </button>
+                    <button className="flex items-center gap-1 text-gray-600 hover:text-gray-900 text-sm bg-transparent border-none cursor-pointer transition p-0">
+                      <span>👎</span>
+                      <span>Not helpful</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Show All Reviews Button */}
+            <button className="w-full border-2 border-gray-300 text-gray-900 font-bold py-3 rounded-lg hover:bg-gray-50 transition bg-transparent cursor-pointer">
               Show all reviews
             </button>
           </div>
 
-          {/* STUDENTS ALSO BOUGHT */}
+          {/* CHANGE 5: STUDENTS ALSO BOUGHT - Already slidable, ensuring smooth scroll */}
           <div className="mb-16 py-12 border-t border-gray-200">
             <h2 className="text-3xl font-bold text-gray-900 mb-8">Students also bought</h2>
             
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <div className="flex gap-6 overflow-x-auto pb-4 -mx-4 px-4 scroll-smooth" style={{scrollbarWidth: 'thin'}}>
               {studentsBoughtCourses.map(course => (
-                <div key={course.id} className="bg-white border border-gray-300 rounded-lg overflow-hidden hover:shadow-lg transition cursor-pointer">
+                <div key={course.id} className="flex-shrink-0 w-64 bg-white border border-gray-300 rounded-lg overflow-hidden hover:shadow-lg transition cursor-pointer">
                   <div className="bg-gradient-to-br from-gray-300 to-gray-400 h-40 flex items-center justify-center text-4xl">
                     📚
                   </div>
@@ -672,57 +705,50 @@ export default function CourseLandingPage() {
             </div>
           </div>
 
-          {/* VIDEO TESTIMONIALS */}
+          {/* CHANGE 5: VIDEO TESTIMONIALS - Slidable without arrows */}
           <div className="mb-16 py-12 border-t border-gray-200">
             <h2 className="text-3xl font-bold text-gray-900 mb-8">Student testimonials</h2>
             
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              {videoReviews.map((review, idx) => (
-                <div
-                  key={idx}
-                  className="w-full h-64 bg-gray-300 rounded-lg flex items-center justify-center text-6xl cursor-pointer hover:shadow-lg transition"
-                >
-                  {review.thumbnail}
-                </div>
-              ))}
-            </div>
-            
-            <div className="flex justify-center gap-2 mt-6">
-              {videoReviews.map((_, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setVideoCarouselIndex(idx)}
-                  className={`w-3 h-3 rounded-full transition bg-transparent border-none cursor-pointer ${idx === videoCarouselIndex ? 'bg-purple-600' : 'bg-gray-300'}`}
-                  aria-label={`Go to video ${idx + 1}`}
-                />
-              ))}
+            <div className="relative">
+              <div className="flex gap-6 overflow-x-auto pb-4 -mx-4 px-4 scroll-smooth" style={{scrollbarWidth: 'thin'}}>
+                {videoReviews.map((review, idx) => (
+                  <div
+                    key={idx}
+                    className="flex-shrink-0 w-96 h-64 bg-gray-300 rounded-lg flex items-center justify-center text-6xl cursor-pointer hover:shadow-lg transition"
+                  >
+                    {review.thumbnail}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* PROJECT GALLERY */}
+          {/* CHANGE 5: PROJECT GALLERY - Slidable without arrows */}
           <div className="mb-16 py-12 border-t border-gray-200">
             <h2 className="text-3xl font-bold text-gray-900 mb-8">Project gallery</h2>
             
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-              {imageGallery.map((item, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => setImageCarouselIndex(idx)}
-                  className={`w-full h-48 bg-gray-300 rounded-lg flex items-center justify-center text-4xl cursor-pointer transition ${
-                    idx === imageCarouselIndex ? 'ring-4 ring-purple-600' : 'hover:shadow-lg'
-                  }`}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      setImageCarouselIndex(idx);
-                    }
-                  }}
-                  aria-label={`Select image ${idx + 1}`}
-                >
-                  {item.image}
-                </div>
-              ))}
+            <div className="relative">
+              <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 scroll-smooth" style={{scrollbarWidth: 'thin'}}>
+                {imageGallery.map((item, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => setImageCarouselIndex(idx)}
+                    className={`flex-shrink-0 w-64 h-64 bg-gray-300 rounded-lg flex items-center justify-center text-5xl cursor-pointer transition ${
+                      idx === imageCarouselIndex ? 'ring-4 ring-purple-600' : 'hover:shadow-lg'
+                    }`}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        setImageCarouselIndex(idx);
+                      }
+                    }}
+                    aria-label={`Select image ${idx + 1}`}
+                  >
+                    {item.image}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -733,23 +759,23 @@ export default function CourseLandingPage() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-8 mb-8">
             <div>
-              <h3 className="font-bold text-white mb-4 text-sm">Courseify</h3>
-              <ul className="space-y-2 text-xs">
+              <h3 className="font-bold text-white mb-4">Courseify</h3>
+              <ul className="space-y-2 text-sm">
                 <li><button onClick={() => handleNavigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Press</button></li>
                 <li><button onClick={() => handleNavigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Contact</button></li>
               </ul>
             </div>
             <div>
-              <h3 className="font-bold text-white mb-4 text-sm">Instructors</h3>
-              <ul className="space-y-2 text-xs">
+              <h3 className="font-bold text-white mb-4">Instructors</h3>
+              <ul className="space-y-2 text-sm">
                 <li><button onClick={() => handleNavigate('/instructor')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Teach</button></li>
                 <li><button onClick={() => handleNavigate('/instructor')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Resources</button></li>
                 <li><button onClick={() => handleNavigate('/instructor')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Benefits</button></li>
               </ul>
             </div>
             <div>
-              <h3 className="font-bold text-white mb-4 text-sm">Learning</h3>
-              <ul className="space-y-2 text-xs">
+              <h3 className="font-bold text-white mb-4">Learning</h3>
+              <ul className="space-y-2 text-sm">
                 <li><button onClick={() => handleNavigate('/courses')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Categories</button></li>
                 <li><button onClick={() => handleNavigate('/courses')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Trending</button></li>
                 <li><button onClick={() => handleNavigate('/courses')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Collections</button></li>
@@ -757,16 +783,16 @@ export default function CourseLandingPage() {
               </ul>
             </div>
             <div>
-              <h3 className="font-bold text-white mb-4 text-sm">Support</h3>
-              <ul className="space-y-2 text-xs">
+              <h3 className="font-bold text-white mb-4">Support</h3>
+              <ul className="space-y-2 text-sm">
                 <li><button onClick={() => handleNavigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Help</button></li>
                 <li><button onClick={() => handleNavigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Support</button></li>
                 <li><button onClick={() => handleNavigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">FAQ</button></li>
               </ul>
             </div>
             <div>
-              <h3 className="font-bold text-white mb-4 text-sm">Legal</h3>
-              <ul className="space-y-2 text-xs">
+              <h3 className="font-bold text-white mb-4">Legal</h3>
+              <ul className="space-y-2 text-sm">
                 <li><button onClick={() => handleNavigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Privacy</button></li>
                 <li><button onClick={() => handleNavigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Terms</button></li>
                 <li><button onClick={() => handleNavigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Cookies</button></li>
@@ -774,7 +800,7 @@ export default function CourseLandingPage() {
             </div>
           </div>
           <div className="border-t border-gray-700 pt-8">
-            <p className="text-xs text-gray-400">© 2024 Courseify. All rights reserved.</p>
+            <p className="text-sm text-gray-400">© 2024 Courseify. All rights reserved.</p>
           </div>
         </div>
       </footer>
@@ -783,7 +809,7 @@ export default function CourseLandingPage() {
       <div className="fixed bottom-0 left-0 right-0 lg:hidden bg-white border-t border-gray-300 p-4 z-50 flex items-center justify-between gap-4">
         <div className="flex flex-col">
           <span className="text-2xl font-bold text-gray-900">${courseData.price}</span>
-          <span className="text-xs text-gray-600 line-through">${courseData.originalPrice}</span>
+          <span className="text-sm text-gray-600 line-through">${courseData.originalPrice}</span>
         </div>
         <button
           onClick={() => handleNavigate('/auth/register')}
