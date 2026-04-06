@@ -123,7 +123,7 @@ export default function CourseLandingPage() {
     // Add preview logic here if needed
   };
 
-  // CHANGE 6: Format number in K format
+  // Format number in K format
   const formatNumber = (num) => {
     if (num >= 1000) {
       return (num / 1000).toFixed(1) + 'K';
@@ -198,49 +198,60 @@ export default function CourseLandingPage() {
           </div>
         </div>
 
-        {/* CHANGE 2: Fixed mobile menu with close button */}
+        {/* CHANGE: Mobile menu - half screen with dark background and white text */}
         {mobileMenuOpen && (
-          <div className="lg:hidden border-t border-gray-200 bg-white p-4 space-y-3">
-            <div className="flex justify-end mb-2">
-              <button
-                onClick={() => setMobileMenuOpen(false)}
-                className="p-2 hover:bg-gray-100 rounded-lg transition bg-transparent border-none cursor-pointer"
-                aria-label="Close menu"
-              >
-                <X size={24} />
-              </button>
+          <>
+            {/* Backdrop overlay */}
+            <div 
+              className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+              onClick={() => setMobileMenuOpen(false)}
+            />
+            
+            {/* Menu sidebar - half screen */}
+            <div className="fixed top-0 left-0 h-full w-1/2 bg-gray-900 z-50 lg:hidden shadow-2xl">
+              <div className="p-4 space-y-3">
+                <div className="flex justify-end mb-4">
+                  <button
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="p-2 hover:bg-gray-800 rounded-lg transition bg-transparent border-none cursor-pointer text-white"
+                    aria-label="Close menu"
+                  >
+                    <X size={24} />
+                  </button>
+                </div>
+                <button
+                  onClick={() => handleNavigate('/courses')}
+                  className="block text-white hover:text-gray-300 bg-transparent border-none cursor-pointer w-full text-left p-3 rounded hover:bg-gray-800 font-medium"
+                >
+                  Categories
+                </button>
+                <button
+                  onClick={() => handleNavigate('/instructor')}
+                  className="block text-white hover:text-gray-300 bg-transparent border-none cursor-pointer w-full text-left p-3 rounded hover:bg-gray-800 font-medium"
+                >
+                  Instructor
+                </button>
+                <button
+                  onClick={() => handleNavigate('/courses')}
+                  className="block text-white hover:text-gray-300 bg-transparent border-none cursor-pointer w-full text-left p-3 rounded hover:bg-gray-800 font-medium"
+                >
+                  About
+                </button>
+                <button
+                  onClick={() => handleNavigate('/auth/login')}
+                  className="block text-white hover:text-gray-300 bg-transparent border-none cursor-pointer w-full text-left p-3 rounded hover:bg-gray-800 font-medium"
+                >
+                  Login
+                </button>
+                <button
+                  onClick={() => handleNavigate('/auth/register')}
+                  className="block text-white hover:text-gray-300 bg-transparent border-none cursor-pointer w-full text-left p-3 rounded hover:bg-gray-800 font-medium"
+                >
+                  Sign Up
+                </button>
+              </div>
             </div>
-            <button
-              onClick={() => handleNavigate('/courses')}
-              className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left p-2 rounded hover:bg-gray-100"
-            >
-              Categories
-            </button>
-            <button
-              onClick={() => handleNavigate('/instructor')}
-              className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left p-2 rounded hover:bg-gray-100"
-            >
-              Instructor
-            </button>
-            <button
-              onClick={() => handleNavigate('/courses')}
-              className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left p-2 rounded hover:bg-gray-100"
-            >
-              About
-            </button>
-            <button
-              onClick={() => handleNavigate('/auth/login')}
-              className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left p-2 rounded hover:bg-gray-100"
-            >
-              Login
-            </button>
-            <button
-              onClick={() => handleNavigate('/auth/register')}
-              className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left p-2 rounded hover:bg-gray-100"
-            >
-              Sign Up
-            </button>
-          </div>
+          </>
         )}
       </header>
 
@@ -263,7 +274,7 @@ export default function CourseLandingPage() {
         <span className="text-gray-900 font-medium">Complete Web Development Bootcamp</span>
       </div>
 
-      {/* COURSE HEADER - ABOVE VIDEO PLAYER */}
+      {/* CHANGE: COURSE HEADER WITH VIDEO PLAYER BETWEEN TITLE AND SUBTITLE */}
       <section className="w-full bg-black text-white py-8 lg:py-12">
         <div className="max-w-7xl mx-auto px-4">
           <div className="mb-6 lg:mb-8">
@@ -272,10 +283,33 @@ export default function CourseLandingPage() {
             </span>
           </div>
 
-          <h1 className="text-4xl lg:text-5xl font-bold text-white mb-6 leading-tight">
+          {/* Course Title */}
+          <h1 className="text-4xl lg:text-5xl font-bold text-white mb-8 leading-tight">
             {courseData.title}
           </h1>
 
+          {/* CHANGE: VIDEO PREVIEW PLAYER - Between title and subtitle */}
+          <div className="mb-8">
+            <div className="relative bg-gray-800 rounded-xl overflow-hidden aspect-video flex items-center justify-center cursor-pointer hover:bg-gray-700 transition group">
+              <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-t from-black/40 to-transparent gap-4">
+                {/* CHANGE: YouTube-style play button - red/maroon with white triangle */}
+                <button 
+                  className="relative w-16 h-16 lg:w-20 lg:h-20 rounded-full transition transform group-hover:scale-110 duration-200 shadow-lg border-none cursor-pointer"
+                  style={{background: '#FF0000'}}
+                  aria-label="Play preview"
+                >
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M8 5v14l11-7L8 5z" fill="white"/>
+                    </svg>
+                  </div>
+                </button>
+                <p className="text-white font-semibold text-base lg:text-lg">Preview this course</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Course Subtitle */}
           <p className="text-xl text-gray-300 mb-8 leading-relaxed max-w-3xl">
             {courseData.subtitle}
           </p>
@@ -320,23 +354,6 @@ export default function CourseLandingPage() {
             <div className="flex items-center gap-2">
               <span>📝</span>
               <span>English, Spanish [+2]</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* CHANGE 3: VIDEO PREVIEW PLAYER - Preview text below play button */}
-      <section className="w-full bg-black text-white py-8 lg:py-16">
-        <div className="max-w-7xl mx-auto px-4">
-          <div className="relative bg-gray-800 rounded-xl overflow-hidden aspect-video flex items-center justify-center cursor-pointer hover:bg-gray-700 transition group">
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-t from-black/40 to-transparent gap-4">
-              <button 
-                className="bg-white text-black p-5 rounded-full hover:bg-gray-100 transition transform group-hover:scale-110 duration-200 shadow-lg border-none cursor-pointer"
-                aria-label="Play preview"
-              >
-                <Play size={40} fill="currentColor" />
-              </button>
-              <p className="text-white font-bold text-lg">Preview this course</p>
             </div>
           </div>
         </div>
@@ -390,7 +407,7 @@ export default function CourseLandingPage() {
             </div>
           </div>
 
-          {/* CHANGE 4: COURSE CONTENT ACCORDION - YouTube-style video icon */}
+          {/* CHANGE: COURSE CONTENT ACCORDION - YouTube-style icons for video and preview */}
           <div className="space-y-2 mb-16">
             {courseData.sections.map((section, idx) => {
               const isExpanded = expandedSection.includes(idx);
@@ -426,11 +443,11 @@ export default function CourseLandingPage() {
                           className="px-6 py-4 border-b border-gray-200 last:border-b-0 flex items-center justify-between hover:bg-white transition"
                         >
                           <div className="flex items-center gap-4 flex-1">
-                            {/* CHANGE 4: YouTube-style video icon */}
+                            {/* CHANGE: YouTube-style video icon */}
                             <div className="flex-shrink-0">
                               {lecture.type === 'video' ? (
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <circle cx="12" cy="12" r="10" fill="#4B5563"/>
+                                  <circle cx="12" cy="12" r="11" fill="#FF0000"/>
                                   <path d="M10 8.5L15.5 12L10 15.5V8.5Z" fill="white"/>
                                 </svg>
                               ) : (
@@ -445,13 +462,17 @@ export default function CourseLandingPage() {
                             </div>
                           </div>
                           
-                          {/* Preview Button */}
+                          {/* CHANGE: Preview Button with YouTube-style play icon */}
                           {lecture.preview && (
                             <button 
                               onClick={() => handlePreviewClick(lecture.title)}
-                              className="text-purple-600 hover:text-purple-700 font-bold text-sm cursor-pointer bg-transparent border-none whitespace-nowrap ml-4 transition p-0"
+                              className="flex items-center gap-2 text-purple-600 hover:text-purple-700 font-bold text-sm cursor-pointer bg-transparent border-none whitespace-nowrap ml-4 transition p-0"
                             >
-                              Preview
+                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <circle cx="12" cy="12" r="11" fill="#FF0000"/>
+                                <path d="M10 8.5L15.5 12L10 15.5V8.5Z" fill="white"/>
+                              </svg>
+                              <span>Preview</span>
                             </button>
                           )}
                         </div>
@@ -594,7 +615,7 @@ export default function CourseLandingPage() {
             </div>
           </div>
 
-          {/* CHANGE 5 & 6: COURSE REVIEWS - Slidable with rating stars and K format */}
+          {/* COURSE REVIEWS - Slidable with rating stars and K format */}
           <div className="mb-16 py-12 border-t border-gray-200">
             <div className="mb-10">
               <div className="flex items-center gap-4 mb-4">
@@ -609,7 +630,7 @@ export default function CourseLandingPage() {
               </div>
             </div>
 
-            {/* CHANGE 5: Individual Reviews - Horizontal scroll */}
+            {/* Individual Reviews - Horizontal scroll */}
             <div className="flex gap-6 overflow-x-auto pb-4 -mx-4 px-4 scroll-smooth mb-8" style={{scrollbarWidth: 'thin'}}>
               {courseData.reviews_list.map((review, idx) => (
                 <div key={idx} className="flex-shrink-0 w-80 lg:w-96 border border-gray-300 rounded-lg p-6 hover:shadow-md transition">
@@ -674,7 +695,7 @@ export default function CourseLandingPage() {
             </button>
           </div>
 
-          {/* CHANGE 5: STUDENTS ALSO BOUGHT - Already slidable, ensuring smooth scroll */}
+          {/* STUDENTS ALSO BOUGHT */}
           <div className="mb-16 py-12 border-t border-gray-200">
             <h2 className="text-3xl font-bold text-gray-900 mb-8">Students also bought</h2>
             
@@ -705,7 +726,7 @@ export default function CourseLandingPage() {
             </div>
           </div>
 
-          {/* CHANGE 5: VIDEO TESTIMONIALS - Slidable without arrows */}
+          {/* VIDEO TESTIMONIALS */}
           <div className="mb-16 py-12 border-t border-gray-200">
             <h2 className="text-3xl font-bold text-gray-900 mb-8">Student testimonials</h2>
             
@@ -723,7 +744,7 @@ export default function CourseLandingPage() {
             </div>
           </div>
 
-          {/* CHANGE 5: PROJECT GALLERY - Slidable without arrows */}
+          {/* PROJECT GALLERY */}
           <div className="mb-16 py-12 border-t border-gray-200">
             <h2 className="text-3xl font-bold text-gray-900 mb-8">Project gallery</h2>
             
