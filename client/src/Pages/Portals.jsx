@@ -1,1382 +1,2081 @@
-import { useState, useRef, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import axios from "axios";
-import { ChevronDown, Menu, Bell, LogOut, Play, Pause, Volume2, VolumeX, Maximize, Minimize, Home, BookOpen, FileText, Award, User, Search, Star, CheckCircle, ChevronRight } from "lucide-react";
+import React, { useState, useEffect } from 'react';
+import { 
+  Play, Pause, SkipForward, SkipBack, Volume2, Maximize, 
+  CheckCircle, Circle, Clock, BookOpen, Download, FileText,
+  MessageSquare, Star, Award, Search, Menu, X, Home, 
+  GraduationCap, User, Settings, LogOut, Bell, ChevronDown,
+  ChevronRight, Filter, Grid, List, TrendingUp, Calendar,
+  Share2, Bookmark, Eye, ThumbsUp, Edit3, Trash2, Send
+} from 'lucide-react';
 
-// ─────────────────────────────────────────────────────────────────────────────
-// API SETUP - SAME AS ORIGINAL
-// ─────────────────────────────────────────────────────────────────────────────
-const BASE_URL = "https://my-course-backend-8u69.onrender.com/api";
-
-function authHeaders() {
-  const token = localStorage.getItem("token");
-  return { headers: { Authorization: `Bearer ${token}` } };
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// FALLBACK DATA
-// ─────────────────────────────────────────────────────────────────────────────
-const FALLBACK_STUDENT = {
-  name: "Student",
-  email: "",
-  avatar: "https://i.pravatar.cc/150?img=11",
-  joinedDate: "2024",
-  bio: "Passionate learner.",
-  totalCourses: 0,
-  completedCourses: 0,
-  totalHours: 0,
-  certificates: 0,
-  streak: 0,
-  xp: 0,
-  level: 1,
-  weeklyGoal: 5,
-  weeklyDone: 0,
+// Mock Data
+const mockUser = {
+  name: "Sarah Johnson",
+  email: "sarah.j@example.com",
+  avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Sarah",
+  enrolledCourses: 12,
+  completedCourses: 4,
+  certificates: 4,
+  totalHours: 145
 };
 
-const ACTIVITY_DATA = [
-  { day: "Mon", minutes: 45 },
-  { day: "Tue", minutes: 90 },
-  { day: "Wed", minutes: 30 },
-  { day: "Thu", minutes: 120 },
-  { day: "Fri", minutes: 60 },
-  { day: "Sat", minutes: 0 },
-  { day: "Sun", minutes: 75 },
+const mockCourses = [
+  {
+    id: 1,
+    title: "Complete Web Development Bootcamp 2024",
+    instructor: "Dr. Angela Yu",
+    thumbnail: "https://images.unsplash.com/photo-1498050108023-c5249f4df085?w=800&h=450&fit=crop",
+    progress: 67,
+    totalLessons: 45,
+    completedLessons: 30,
+    duration: "52h 30m",
+    rating: 4.8,
+    students: 125000,
+    lastAccessed: "2 hours ago",
+    category: "Web Development"
+  },
+  {
+    id: 2,
+    title: "Advanced React & Redux Masterclass",
+    instructor: "Maximilian Schwarzmüller",
+    thumbnail: "https://images.unsplash.com/photo-1633356122544-f134324a6cee?w=800&h=450&fit=crop",
+    progress: 34,
+    totalLessons: 38,
+    completedLessons: 13,
+    duration: "45h 15m",
+    rating: 4.9,
+    students: 98000,
+    lastAccessed: "1 day ago",
+    category: "Frontend"
+  },
+  {
+    id: 3,
+    title: "Node.js, Express & MongoDB - Full Stack",
+    instructor: "Jonas Schmedtmann",
+    thumbnail: "https://images.unsplash.com/photo-1627398242454-45a1465c2479?w=800&h=450&fit=crop",
+    progress: 89,
+    totalLessons: 32,
+    completedLessons: 28,
+    duration: "38h 45m",
+    rating: 4.7,
+    students: 87500,
+    lastAccessed: "3 days ago",
+    category: "Backend"
+  }
 ];
 
-// ─────────────────────────────────────────────────────────────────────────────
-// UTILITY FUNCTIONS
-// ─────────────────────────────────────────────────────────────────────────────
-function normalizeCourse(c, index, completedLectureIds = []) {
-  const colors = ["#6366f1", "#0ea5e9", "#10b981", "#f59e0b", "#ec4899"];
-  const sections = c.sections || [];
-  const allLectures = sections.flatMap(s => s.lectures || []);
-  const totalLectures = allLectures.length;
-  const completedLectures = allLectures.filter(
-    l => completedLectureIds.includes(String(l._id))
-  ).length;
-  const progress = totalLectures > 0
-    ? Math.round((completedLectures / totalLectures) * 100) : 0;
-
-  return {
-    _id: c._id,
-    id: c._id,
-    title: c.title || "Untitled Course",
-    instructor: typeof c.instructor === "object" ? c.instructor?.name : c.instructor || "Instructor",
-    instructorAvatar: `https://i.pravatar.cc/60?img=${(index + 10) % 70}`,
-    thumbnail: c.thumbnail || "https://images.unsplash.com/photo-1516116216624-53e697fedbea?w=600&q=80",
-    progress,
-    totalLectures,
-    completedLectures,
-    totalDuration: `${totalLectures * 15}m`,
-    category: c.category || "Course",
-    rating: c.rating || 4.5,
-    color: colors[index % colors.length],
-    certificateReady: progress === 100,
-    description: c.description || "",
-    sections,
-    completedLectureIds,
-  };
-}
-
-function normalizeSections(sections) {
-  return (sections || []).map((sec, si) => ({
-    id: sec._id || `sec${si}`,
-    title: sec.title || `Section ${si + 1}`,
-    lectures: (sec.lectures || []).map((lec, li) => ({
-      id: lec._id || `lec${li}`,
-      title: lec.title || `Lecture ${li + 1}`,
-      duration: lec.duration || "10:00",
-      completed: lec.completed || false,
-      type: lec.type || "video",
-      videoUrl: lec.videoUrl || "https://www.w3schools.com/html/mov_bbb.mp4",
-      resources: lec.resources || [],
-    })),
-  }));
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ADVANCED VIDEO PLAYER WITH BUNNY.NET SUPPORT
-// ─────────────────────────────────────────────────────────────────────────────
-const VideoPlayer = ({ lecture, onComplete, onNext, onPrev, hasNext, hasPrev }) => {
-  const videoRef = useRef(null);
-  const containerRef = useRef(null);
-  const [playing, setPlaying] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [buffered, setBuffered] = useState(0);
-  const [currentTime, setCurrentTime] = useState("0:00");
-  const [duration, setDuration] = useState("0:00");
-  const [muted, setMuted] = useState(false);
-  const [volume, setVolume] = useState(1);
-  const [playbackRate, setPlaybackRate] = useState(1);
-  const [fullscreen, setFullscreen] = useState(false);
-  const [showControls, setShowControls] = useState(true);
-  const [completed90, setCompleted90] = useState(false);
-  const [showRateMenu, setShowRateMenu] = useState(false);
-  const timer = useRef(null);
-
-  const fmt = (s) => {
-    if (!s || isNaN(s)) return "0:00";
-    return `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-  };
-
-  const resetControls = () => {
-    setShowControls(true);
-    clearTimeout(timer.current);
-    timer.current = setTimeout(() => { if (playing) setShowControls(false); }, 3000);
-  };
-
-  const togglePlay = () => {
-    if (!videoRef.current) return;
-    playing ? videoRef.current.pause() : videoRef.current.play();
-    setPlaying(p => !p);
-  };
-
-  const handleTimeUpdate = () => {
-    if (!videoRef.current) return;
-    const pct = (videoRef.current.currentTime / videoRef.current.duration) * 100 || 0;
-    setProgress(pct);
-    setCurrentTime(fmt(videoRef.current.currentTime));
-    if (videoRef.current.buffered.length > 0)
-      setBuffered((videoRef.current.buffered.end(0) / videoRef.current.duration) * 100);
-    if (pct > 90 && !completed90) {
-      setCompleted90(true);
-      onComplete && onComplete();
+const mockCurrentCourse = {
+  id: 1,
+  title: "Complete Web Development Bootcamp 2024",
+  instructor: "Dr. Angela Yu",
+  rating: 4.8,
+  students: 125000,
+  lastUpdated: "March 2024",
+  sections: [
+    {
+      id: 1,
+      title: "Introduction to Web Development",
+      lessons: [
+        { id: 1, title: "Welcome to the Course", duration: "5:30", completed: true, type: "video" },
+        { id: 2, title: "Course Resources", duration: "3:15", completed: true, type: "article" },
+        { id: 3, title: "Setup Your Development Environment", duration: "12:45", completed: true, type: "video" }
+      ]
+    },
+    {
+      id: 2,
+      title: "HTML Fundamentals",
+      lessons: [
+        { id: 4, title: "HTML Basics", duration: "15:20", completed: true, type: "video" },
+        { id: 5, title: "HTML Elements & Tags", duration: "18:30", completed: true, type: "video" },
+        { id: 6, title: "Forms and Input Elements", duration: "22:15", completed: false, type: "video", current: true },
+        { id: 7, title: "HTML Project: Build a Portfolio", duration: "35:40", completed: false, type: "project" }
+      ]
+    },
+    {
+      id: 3,
+      title: "CSS Mastery",
+      lessons: [
+        { id: 8, title: "CSS Selectors", duration: "16:45", completed: false, type: "video" },
+        { id: 9, title: "Flexbox Layout", duration: "25:30", completed: false, type: "video" },
+        { id: 10, title: "CSS Grid", duration: "28:15", completed: false, type: "video" },
+        { id: 11, title: "Responsive Design", duration: "32:20", completed: false, type: "video" }
+      ]
     }
-  };
+  ]
+};
 
-  const seek = (e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    if (videoRef.current) videoRef.current.currentTime = pct * videoRef.current.duration;
-  };
+const mockNotes = [
+  {
+    id: 1,
+    lesson: "HTML Basics",
+    timestamp: "5:23",
+    content: "Remember: Semantic HTML improves accessibility and SEO. Use <header>, <nav>, <main>, <article>, <section>, <footer>",
+    created: "2 hours ago"
+  },
+  {
+    id: 2,
+    lesson: "HTML Elements & Tags",
+    timestamp: "12:45",
+    content: "Block vs Inline elements: Block takes full width, inline only takes necessary width. Use display property to change behavior.",
+    created: "1 day ago"
+  }
+];
 
-  const changeVolume = (e) => {
-    const v = parseFloat(e.target.value);
-    setVolume(v);
-    setMuted(v === 0);
-    if (videoRef.current) {
-      videoRef.current.volume = v;
-      videoRef.current.muted = v === 0;
-    }
-  };
+const mockQA = [
+  {
+    id: 1,
+    user: "Michael Chen",
+    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Michael",
+    question: "How do I center a div both horizontally and vertically?",
+    lesson: "CSS Flexbox",
+    timestamp: "2 hours ago",
+    answers: 3,
+    upvotes: 12,
+    resolved: true
+  },
+  {
+    id: 2,
+    user: "Emily Roberts",
+    avatar: "https://api.dicebear.com/7.x/avataaars/svg?seed=Emily",
+    question: "What's the difference between let, const, and var?",
+    lesson: "JavaScript Fundamentals",
+    timestamp: "5 hours ago",
+    answers: 5,
+    upvotes: 24,
+    resolved: true
+  }
+];
 
-  const changeRate = (r) => {
-    setPlaybackRate(r);
-    setShowRateMenu(false);
-    if (videoRef.current) videoRef.current.playbackRate = r;
-  };
-
-  const toggleFullscreen = async () => {
-    try {
-      if (!document.fullscreenElement) {
-        await containerRef.current?.requestFullscreen();
-        setFullscreen(true);
-      } else {
-        await document.exitFullscreen();
-        setFullscreen(false);
-      }
-    } catch (err) {
-      console.error("Fullscreen error:", err);
-    }
-  };
+function StudentPortal() {
+  const [currentView, setCurrentView] = useState('dashboard');
+  const [selectedCourse, setSelectedCourse] = useState(null);
+  const [currentLesson, setCurrentLesson] = useState(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [videoProgress, setVideoProgress] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState('overview');
+  const [noteText, setNoteText] = useState('');
+  const [questionText, setQuestionText] = useState('');
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    setPlaying(false);
-    setProgress(0);
-    setCurrentTime("0:00");
-    setCompleted90(false);
-    if (videoRef.current) {
-      videoRef.current.load();
-      videoRef.current.playbackRate = playbackRate;
-    }
-  }, [lecture?.id, playbackRate]);
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
-  useEffect(() => () => clearTimeout(timer.current), []);
-
-  return (
-    <div
-      ref={containerRef}
-      className="relative bg-black rounded-2xl overflow-hidden select-none w-full aspect-video"
-      onMouseMove={resetControls}
-      onMouseLeave={() => playing && setShowControls(false)}
-      onClick={() => setShowRateMenu(false)}
-    >
-      <video
-        ref={videoRef}
-        src={lecture?.videoUrl}
-        className="w-full h-full cursor-pointer"
-        onTimeUpdate={handleTimeUpdate}
-        onLoadedMetadata={() => setDuration(fmt(videoRef.current?.duration))}
-        onEnded={() => { setPlaying(false); setShowControls(true); }}
-        muted={muted}
-        onClick={togglePlay}
-        crossOrigin="anonymous"
-      />
-
-      {!playing && (
-        <div
-          className="absolute inset-0 flex items-center justify-center bg-black/40 cursor-pointer"
-          onClick={togglePlay}
-        >
-          <div className="w-20 h-20 rounded-full bg-white/15 backdrop-blur border-2 border-white/50 flex items-center justify-center hover:scale-110 hover:bg-white/25 transition-all duration-200">
-            <Play className="w-8 h-8 text-white ml-1" fill="white" />
+  // Navigation Component
+  const Navbar = () => (
+    <nav className="navbar">
+      <div className="navbar-content">
+        <div className="navbar-left">
+          <button className="menu-btn" onClick={() => setIsSidebarOpen(!isSidebarOpen)}>
+            {isSidebarOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+          <div className="logo">
+            <GraduationCap size={32} />
+            <span>EduPortal</span>
           </div>
         </div>
-      )}
-
-      <div
-        className={`absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black via-black/60 to-transparent px-4 md:px-5 pb-4 pt-12 transition-opacity duration-300 ${
-          showControls ? "opacity-100" : "opacity-0 pointer-events-none"
-        }`}
-      >
-        <div
-          className="relative w-full h-1 bg-white/20 rounded-full cursor-pointer mb-4 group hover:h-2 transition-all"
-          onClick={seek}
-        >
-          <div className="absolute h-full bg-white/30 rounded-full" style={{ width: `${buffered}%` }} />
-          <div className="absolute h-full bg-indigo-500 rounded-full" style={{ width: `${progress}%` }}>
-            <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3.5 h-3.5 bg-white rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity" />
-          </div>
+        
+        <div className="search-bar">
+          <Search size={20} />
+          <input 
+            type="text" 
+            placeholder="Search courses, lessons, instructors..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
         </div>
 
-        <div className="flex items-center justify-between gap-2 md:gap-3 flex-wrap">
-          <div className="flex items-center gap-2 md:gap-3 flex-wrap">
-            <button
-              onClick={onPrev}
-              disabled={!hasPrev}
-              className="text-white/60 hover:text-white disabled:opacity-30 transition-colors p-1"
-            >
-              <ChevronDown className="w-5 h-5 rotate-90" />
-            </button>
-
-            <button onClick={togglePlay} className="text-white hover:text-indigo-300 transition-colors p-1">
-              {playing ? (
-                <Pause className="w-6 h-6" fill="white" />
-              ) : (
-                <Play className="w-6 h-6" fill="white" />
-              )}
-            </button>
-
-            <button
-              onClick={onNext}
-              disabled={!hasNext}
-              className="text-white/60 hover:text-white disabled:opacity-30 transition-colors p-1"
-            >
-              <ChevronDown className="w-5 h-5 -rotate-90" />
-            </button>
-
-            <div className="flex items-center gap-1.5 group">
-              <button
-                onClick={() => {
-                  setMuted(m => !m);
-                  if (videoRef.current) videoRef.current.muted = !muted;
-                }}
-                className="text-white hover:text-indigo-300 transition-colors p-1"
-              >
-                {muted || volume === 0 ? (
-                  <VolumeX className="w-5 h-5" />
-                ) : (
-                  <Volume2 className="w-5 h-5" />
-                )}
-              </button>
-              <input
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={muted ? 0 : volume}
-                onChange={changeVolume}
-                className="w-0 group-hover:w-12 transition-all duration-200 accent-indigo-400 cursor-pointer"
-              />
-            </div>
-
-            <span className="text-white/80 text-xs font-mono">{currentTime} / {duration}</span>
+        <div className="navbar-right">
+          <button className="icon-btn">
+            <Bell size={20} />
+            <span className="badge">3</span>
+          </button>
+          <div className="user-menu">
+            <img src={mockUser.avatar} alt={mockUser.name} />
+            <span>{isMobile ? '' : mockUser.name}</span>
+            <ChevronDown size={16} />
           </div>
+        </div>
+      </div>
+    </nav>
+  );
 
-          <div className="flex items-center gap-2 md:gap-3">
-            <div className="relative">
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowRateMenu(m => !m);
-                }}
-                className="text-white/80 hover:text-white text-xs font-bold bg-white/10 hover:bg-white/20 px-2 py-1 rounded transition-colors"
-              >
-                {playbackRate}x
-              </button>
-              {showRateMenu && (
-                <div className="absolute bottom-8 right-0 bg-gray-900 border border-white/10 rounded-xl overflow-hidden shadow-2xl z-10">
-                  {[0.5, 0.75, 1, 1.25, 1.5, 1.75, 2].map(r => (
-                    <button
-                      key={r}
-                      onClick={() => changeRate(r)}
-                      className={`block w-full px-3 py-2 text-xs text-left hover:bg-white/10 transition-colors ${
-                        playbackRate === r ? "text-indigo-400 font-bold" : "text-white/80"
-                      }`}
-                    >
-                      {r}x
-                    </button>
-                  ))}
+  // Sidebar Component
+  const Sidebar = () => (
+    <aside className={`sidebar ${isSidebarOpen ? 'open' : ''}`}>
+      <div className="sidebar-content">
+        <button 
+          className={`sidebar-item ${currentView === 'dashboard' ? 'active' : ''}`}
+          onClick={() => { setCurrentView('dashboard'); setIsSidebarOpen(false); }}
+        >
+          <Home size={20} />
+          <span>Dashboard</span>
+        </button>
+        <button 
+          className={`sidebar-item ${currentView === 'courses' ? 'active' : ''}`}
+          onClick={() => { setCurrentView('courses'); setIsSidebarOpen(false); }}
+        >
+          <BookOpen size={20} />
+          <span>My Courses</span>
+        </button>
+        <button 
+          className={`sidebar-item ${currentView === 'progress' ? 'active' : ''}`}
+          onClick={() => { setCurrentView('progress'); setIsSidebarOpen(false); }}
+        >
+          <TrendingUp size={20} />
+          <span>Progress</span>
+        </button>
+        <button 
+          className={`sidebar-item ${currentView === 'certificates' ? 'active' : ''}`}
+          onClick={() => { setCurrentView('certificates'); setIsSidebarOpen(false); }}
+        >
+          <Award size={20} />
+          <span>Certificates</span>
+        </button>
+        <button 
+          className={`sidebar-item ${currentView === 'profile' ? 'active' : ''}`}
+          onClick={() => { setCurrentView('profile'); setIsSidebarOpen(false); }}
+        >
+          <User size={20} />
+          <span>Profile</span>
+        </button>
+        <button className="sidebar-item">
+          <Settings size={20} />
+          <span>Settings</span>
+        </button>
+        <button className="sidebar-item logout">
+          <LogOut size={20} />
+          <span>Logout</span>
+        </button>
+      </div>
+    </aside>
+  );
+
+  // Dashboard View
+  const Dashboard = () => (
+    <div className="dashboard">
+      <div className="dashboard-header">
+        <div>
+          <h1>Welcome back, {mockUser.name.split(' ')[0]}! 👋</h1>
+          <p>Continue your learning journey</p>
+        </div>
+      </div>
+
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-icon" style={{background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'}}>
+            <BookOpen size={24} />
+          </div>
+          <div className="stat-content">
+            <h3>{mockUser.enrolledCourses}</h3>
+            <p>Enrolled Courses</p>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon" style={{background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'}}>
+            <CheckCircle size={24} />
+          </div>
+          <div className="stat-content">
+            <h3>{mockUser.completedCourses}</h3>
+            <p>Completed</p>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon" style={{background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'}}>
+            <Clock size={24} />
+          </div>
+          <div className="stat-content">
+            <h3>{mockUser.totalHours}h</h3>
+            <p>Learning Time</p>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon" style={{background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)'}}>
+            <Award size={24} />
+          </div>
+          <div className="stat-content">
+            <h3>{mockUser.certificates}</h3>
+            <p>Certificates</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="section">
+        <h2>Continue Learning</h2>
+        <div className="courses-grid">
+          {mockCourses.map(course => (
+            <div key={course.id} className="course-card" onClick={() => {
+              setSelectedCourse(course);
+              setCurrentView('course');
+            }}>
+              <div className="course-thumbnail">
+                <img src={course.thumbnail} alt={course.title} />
+                <div className="course-overlay">
+                  <button className="play-btn">
+                    <Play size={24} fill="white" />
+                  </button>
                 </div>
-              )}
+              </div>
+              <div className="course-info">
+                <span className="course-category">{course.category}</span>
+                <h3>{course.title}</h3>
+                <p className="course-instructor">{course.instructor}</p>
+                <div className="course-meta">
+                  <div className="rating">
+                    <Star size={14} fill="#fbbf24" stroke="#fbbf24" />
+                    <span>{course.rating}</span>
+                  </div>
+                  <span>•</span>
+                  <span>{course.duration}</span>
+                </div>
+                <div className="progress-bar">
+                  <div className="progress-fill" style={{width: `${course.progress}%`}}></div>
+                </div>
+                <p className="progress-text">{course.progress}% Complete • {course.lastAccessed}</p>
+              </div>
             </div>
+          ))}
+        </div>
+      </div>
 
-            <button onClick={toggleFullscreen} className="text-white/80 hover:text-white transition-colors p-1">
-              {fullscreen ? (
-                <Minimize className="w-5 h-5" />
-              ) : (
-                <Maximize className="w-5 h-5" />
-              )}
-            </button>
-          </div>
+      <div className="section">
+        <h2>Recommended for You</h2>
+        <div className="recommended-grid">
+          {[1, 2, 3, 4].map(i => (
+            <div key={i} className="recommended-card">
+              <div className="recommended-thumbnail">
+                <img src={`https://images.unsplash.com/photo-${1550000000000 + i}?w=400&h=225&fit=crop`} alt="Course" />
+              </div>
+              <div className="recommended-info">
+                <h4>Advanced JavaScript Concepts</h4>
+                <p>Master closures, prototypes, and async patterns</p>
+                <div className="recommended-meta">
+                  <Star size={14} fill="#fbbf24" stroke="#fbbf24" />
+                  <span>4.9</span>
+                  <span>•</span>
+                  <span>32h</span>
+                </div>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
   );
-};
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DASHBOARD TAB
-// ─────────────────────────────────────────────────────────────────────────────
-const Dashboard = ({ student, courses, setActiveTab, setActiveCourse, setActiveLecture }) => {
-  const inProgress = courses.filter(c => c.progress > 0 && c.progress < 100);
-  const maxMin = Math.max(...ACTIVITY_DATA.map(d => d.minutes), 1);
-
-  return (
-    <div className="space-y-6">
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6 md:p-8 text-white">
-        <div
-          className="absolute inset-0 opacity-20"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 20% 50%, #6366f1 0%, transparent 60%), radial-gradient(circle at 80% 20%, #8b5cf6 0%, transparent 50%)",
-          }}
-        />
-        <div className="relative flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <img
-                src={student.avatar}
-                alt={student.name}
-                className="w-16 h-16 rounded-2xl object-cover border-2 border-indigo-400/50"
+  // Course Player View
+  const CoursePlayer = () => {
+    const currentLessonData = currentLesson || mockCurrentCourse.sections[1].lessons[2];
+    
+    return (
+      <div className="course-player">
+        <div className="player-main">
+          <div className="video-container">
+            <div className="video-player">
+              <img 
+                src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=1200&h=675&fit=crop" 
+                alt="Video" 
+                className="video-placeholder"
               />
-              <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-indigo-500 rounded-lg flex items-center justify-center text-xs font-black">
-                Lv{student.level}
+              <div className="video-overlay">
+                <button className="video-play-btn" onClick={() => setIsPlaying(!isPlaying)}>
+                  {isPlaying ? <Pause size={48} /> : <Play size={48} fill="white" />}
+                </button>
               </div>
-            </div>
-            <div>
-              <p className="text-indigo-300 text-sm">Welcome back 👋</p>
-              <h2 className="text-2xl font-black">{student.name}</h2>
-              <div className="flex items-center gap-3 mt-1 text-xs text-indigo-300">
-                <span>🔥 {student.streak} day streak</span>
-                <span>⚡ {student.xp.toLocaleString()} XP</span>
-              </div>
-            </div>
-          </div>
-          <div className="bg-white/10 backdrop-blur rounded-2xl p-4 min-w-[180px] w-full sm:w-auto">
-            <p className="text-xs text-indigo-300 mb-2">Weekly Learning Goal</p>
-            <div className="flex justify-between text-xs text-white/70 mb-1">
-              <span>{student.weeklyDone} of {student.weeklyGoal} days</span>
-              <span>{Math.round((student.weeklyDone / student.weeklyGoal) * 100)}%</span>
-            </div>
-            <div className="h-2 bg-white/10 rounded-full">
-              <div
-                className="h-full bg-indigo-400 rounded-full"
-                style={{ width: `${(student.weeklyDone / student.weeklyGoal) * 100}%` }}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          { label: "Enrolled", value: student.totalCourses, icon: "📚", bg: "bg-indigo-50", text: "text-indigo-700", border: "border-indigo-100" },
-          { label: "Completed", value: student.completedCourses, icon: "✅", bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-100" },
-          { label: "Hours", value: `${student.totalHours}h`, icon: "⏱️", bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-100" },
-          { label: "Certificates", value: student.certificates, icon: "🏆", bg: "bg-violet-50", text: "text-violet-700", border: "border-violet-100" },
-        ].map(s => (
-          <div key={s.label} className={`${s.bg} border ${s.border} rounded-2xl p-4`}>
-            <div className="text-2xl mb-2">{s.icon}</div>
-            <div className={`text-3xl font-black ${s.text}`}>{s.value}</div>
-            <div className="text-xs text-gray-500 mt-0.5">{s.label}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="grid lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-4">
-          <h3 className="text-lg font-black text-gray-900">Continue Learning</h3>
-          {courses.length === 0 ? (
-            <div className="bg-white border border-gray-100 rounded-2xl p-8 text-center">
-              <p className="text-4xl mb-3">🎯</p>
-              <p className="font-bold text-gray-700">No courses enrolled yet.</p>
-            </div>
-          ) : inProgress.length === 0 ? (
-            courses.slice(0, 3).map(course => {
-              const allLecs = normalizeSections(course.sections).flatMap(s => s.lectures);
-              const nextLec = allLecs[0];
-              return (
-                <div
-                  key={course.id}
-                  onClick={() => {
-                    setActiveCourse(course);
-                    setActiveLecture(nextLec);
-                    setActiveTab("Learn");
-                  }}
-                  className="bg-white border border-gray-100 rounded-2xl p-4 flex gap-4 hover:shadow-lg hover:border-indigo-200 transition-all cursor-pointer group"
-                >
-                  <img
-                    src={course.thumbnail}
-                    className="w-20 h-20 rounded-xl object-cover flex-shrink-0"
-                    alt={course.title}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
-                      {course.category}
-                    </span>
-                    <h4 className="font-bold text-gray-900 text-sm mt-1 truncate">{course.title}</h4>
-                    <p className="text-xs text-gray-500 mt-0.5">Instructor: {course.instructor}</p>
+              <div className="video-controls">
+                <div className="progress-timeline">
+                  <div className="timeline-fill" style={{width: `${videoProgress}%`}}></div>
+                </div>
+                <div className="controls-bottom">
+                  <div className="controls-left">
+                    <button onClick={() => setIsPlaying(!isPlaying)}>
+                      {isPlaying ? <Pause size={20} /> : <Play size={20} />}
+                    </button>
+                    <button><SkipBack size={20} /></button>
+                    <button><SkipForward size={20} /></button>
+                    <button><Volume2 size={20} /></button>
+                    <span className="time-display">5:23 / 22:15</span>
                   </div>
-                  <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0 self-center">
-                    <Play className="w-5 h-5 text-indigo-600 ml-0.5" />
+                  <div className="controls-right">
+                    <button><Settings size={20} /></button>
+                    <button><Maximize size={20} /></button>
                   </div>
                 </div>
-              );
-            })
-          ) : (
-            inProgress.map(course => {
-              const allLecs = normalizeSections(course.sections).flatMap(s => s.lectures);
-              const nextLec = allLecs.find(l => !l.completed) || allLecs[0];
-              return (
-                <div
-                  key={course.id}
-                  onClick={() => {
-                    setActiveCourse(course);
-                    setActiveLecture(nextLec);
-                    setActiveTab("Learn");
-                  }}
-                  className="bg-white border border-gray-100 rounded-2xl p-4 flex gap-4 hover:shadow-lg transition-all cursor-pointer group"
-                >
-                  <img
-                    src={course.thumbnail}
-                    className="w-20 h-20 rounded-xl object-cover flex-shrink-0"
-                    alt={course.title}
-                  />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
-                      {course.category}
-                    </span>
-                    <h4 className="font-bold text-gray-900 text-sm mt-1 truncate">{course.title}</h4>
-                    <p className="text-xs text-gray-500 mt-0.5">Next: {nextLec?.title}</p>
-                    <div className="mt-2">
-                      <div className="flex justify-between text-xs text-gray-400 mb-1">
-                        <span>
-                          {course.completedLectures}/{course.totalLectures} lectures
-                        </span>
-                        <span className="font-bold text-indigo-600">{course.progress}%</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="player-content">
+            <div className="content-header">
+              <div>
+                <h1>{currentLessonData.title}</h1>
+                <div className="content-meta">
+                  <span>{mockCurrentCourse.instructor}</span>
+                  <span>•</span>
+                  <span>Updated {mockCurrentCourse.lastUpdated}</span>
+                  <span>•</span>
+                  <div className="rating">
+                    <Star size={14} fill="#fbbf24" stroke="#fbbf24" />
+                    <span>{mockCurrentCourse.rating}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="content-actions">
+                <button className="action-btn">
+                  <Bookmark size={20} />
+                  <span>Save</span>
+                </button>
+                <button className="action-btn">
+                  <Share2 size={20} />
+                  <span>Share</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="tabs">
+              <button 
+                className={`tab ${activeTab === 'overview' ? 'active' : ''}`}
+                onClick={() => setActiveTab('overview')}
+              >
+                Overview
+              </button>
+              <button 
+                className={`tab ${activeTab === 'notes' ? 'active' : ''}`}
+                onClick={() => setActiveTab('notes')}
+              >
+                <Edit3 size={16} />
+                Notes ({mockNotes.length})
+              </button>
+              <button 
+                className={`tab ${activeTab === 'qa' ? 'active' : ''}`}
+                onClick={() => setActiveTab('qa')}
+              >
+                <MessageSquare size={16} />
+                Q&A ({mockQA.length})
+              </button>
+              <button 
+                className={`tab ${activeTab === 'resources' ? 'active' : ''}`}
+                onClick={() => setActiveTab('resources')}
+              >
+                <Download size={16} />
+                Resources
+              </button>
+            </div>
+
+            <div className="tab-content">
+              {activeTab === 'overview' && (
+                <div className="overview-tab">
+                  <h3>About this lesson</h3>
+                  <p>In this comprehensive lesson, you'll learn about HTML forms and input elements. We'll cover different input types, form validation, and best practices for creating user-friendly forms.</p>
+                  
+                  <h3>What you'll learn</h3>
+                  <ul className="learning-points">
+                    <li><CheckCircle size={18} /> Understanding form structure and attributes</li>
+                    <li><CheckCircle size={18} /> Different input types (text, email, password, etc.)</li>
+                    <li><CheckCircle size={18} /> Form validation techniques</li>
+                    <li><CheckCircle size={18} /> Accessibility best practices</li>
+                    <li><CheckCircle size={18} /> Styling forms with CSS</li>
+                  </ul>
+
+                  <h3>Course Description</h3>
+                  <p>This complete web development bootcamp will teach you everything you need to become a professional full-stack developer. From HTML and CSS basics to advanced JavaScript frameworks, backend development, and deployment strategies.</p>
+                </div>
+              )}
+
+              {activeTab === 'notes' && (
+                <div className="notes-tab">
+                  <div className="note-editor">
+                    <textarea 
+                      placeholder="Add a note at current timestamp (5:23)..."
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                      rows="4"
+                    />
+                    <button className="btn-primary">
+                      <Send size={16} />
+                      Save Note
+                    </button>
+                  </div>
+
+                  <div className="notes-list">
+                    {mockNotes.map(note => (
+                      <div key={note.id} className="note-card">
+                        <div className="note-header">
+                          <div>
+                            <span className="note-lesson">{note.lesson}</span>
+                            <span className="note-timestamp">{note.timestamp}</span>
+                          </div>
+                          <div className="note-actions">
+                            <button><Edit3 size={16} /></button>
+                            <button><Trash2 size={16} /></button>
+                          </div>
+                        </div>
+                        <p className="note-content">{note.content}</p>
+                        <span className="note-date">{note.created}</span>
                       </div>
-                      <div className="h-1.5 bg-gray-100 rounded-full">
-                        <div
-                          className="h-full bg-indigo-500 rounded-full"
-                          style={{ width: `${course.progress}%` }}
-                        />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'qa' && (
+                <div className="qa-tab">
+                  <div className="question-form">
+                    <h3>Ask a Question</h3>
+                    <input 
+                      type="text" 
+                      placeholder="What's your question?"
+                      value={questionText}
+                      onChange={(e) => setQuestionText(e.target.value)}
+                    />
+                    <textarea 
+                      placeholder="Provide more details..."
+                      rows="4"
+                    />
+                    <button className="btn-primary">
+                      <MessageSquare size={16} />
+                      Post Question
+                    </button>
+                  </div>
+
+                  <div className="qa-list">
+                    <h3>Recent Questions</h3>
+                    {mockQA.map(qa => (
+                      <div key={qa.id} className="qa-card">
+                        <div className="qa-header">
+                          <img src={qa.avatar} alt={qa.user} />
+                          <div>
+                            <h4>{qa.user}</h4>
+                            <span className="qa-meta">{qa.lesson} • {qa.timestamp}</span>
+                          </div>
+                          {qa.resolved && <span className="resolved-badge">Resolved</span>}
+                        </div>
+                        <p className="qa-question">{qa.question}</p>
+                        <div className="qa-footer">
+                          <button className="qa-action">
+                            <ThumbsUp size={16} />
+                            <span>{qa.upvotes}</span>
+                          </button>
+                          <button className="qa-action">
+                            <MessageSquare size={16} />
+                            <span>{qa.answers} answers</span>
+                          </button>
+                        </div>
                       </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'resources' && (
+                <div className="resources-tab">
+                  <div className="resources-list">
+                    <div className="resource-item">
+                      <FileText size={24} />
+                      <div>
+                        <h4>HTML Forms Cheat Sheet.pdf</h4>
+                        <span>2.5 MB</span>
+                      </div>
+                      <button className="btn-secondary">
+                        <Download size={16} />
+                        Download
+                      </button>
+                    </div>
+                    <div className="resource-item">
+                      <FileText size={24} />
+                      <div>
+                        <h4>Form Validation Examples.zip</h4>
+                        <span>5.8 MB</span>
+                      </div>
+                      <button className="btn-secondary">
+                        <Download size={16} />
+                        Download
+                      </button>
+                    </div>
+                    <div className="resource-item">
+                      <FileText size={24} />
+                      <div>
+                        <h4>Source Code - Project Files.zip</h4>
+                        <span>12.3 MB</span>
+                      </div>
+                      <button className="btn-secondary">
+                        <Download size={16} />
+                        Download
+                      </button>
                     </div>
                   </div>
                 </div>
-              );
-            })
-          )}
-        </div>
-
-        <div className="space-y-4">
-          <div className="bg-white border border-gray-100 rounded-2xl p-4">
-            <h3 className="font-bold text-gray-900 text-sm mb-3">This Week's Activity</h3>
-            <div className="flex items-end gap-1.5 h-20">
-              {ACTIVITY_DATA.map(d => (
-                <div key={d.day} className="flex-1 flex flex-col items-center gap-1">
-                  <div className="w-full rounded-t-md bg-indigo-100 relative" style={{ height: `${(d.minutes / maxMin) * 60}px` }}>
-                    <div
-                      className="absolute inset-x-0 bottom-0 bg-indigo-500 rounded-t-md"
-                      style={{ height: `${(d.minutes / maxMin) * 100}%` }}
-                    />
-                  </div>
-                  <span className="text-xs text-gray-400">{d.day}</span>
-                </div>
-              ))}
+              )}
             </div>
           </div>
         </div>
-      </div>
-    </div>
-  );
-};
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MY COURSES TAB
-// ─────────────────────────────────────────────────────────────────────────────
-const MyCourses = ({ courses, setActiveTab, setActiveCourse, setActiveLecture }) => {
-  const [filter, setFilter] = useState("All");
-  const [searchTerm, setSearchTerm] = useState("");
-
-  const filtered = courses
-    .filter(c => {
-      const matchesFilter =
-        filter === "All"
-          ? true
-          : filter === "Completed"
-          ? c.progress === 100
-          : c.progress > 0 && c.progress < 100;
-      const matchesSearch = c.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.instructor.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesFilter && matchesSearch;
-    });
-
-  return (
-    <div>
-      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6">
-        <h3 className="text-2xl font-black text-gray-900">My Courses ({courses.length})</h3>
-        <div className="flex flex-col md:flex-row gap-3 w-full md:w-auto">
-          <div className="relative flex-1 md:flex-none md:w-64">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Search courses..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 w-full border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-400 text-sm"
-            />
+        <div className="curriculum-sidebar">
+          <div className="sidebar-header">
+            <h3>Course Content</h3>
+            <span>{mockCurrentCourse.sections.reduce((acc, s) => acc + s.lessons.length, 0)} lessons</span>
           </div>
-          <div className="flex gap-2">
-            {["All", "In Progress", "Completed"].map(f => (
-              <button
-                key={f}
-                onClick={() => setFilter(f)}
-                className={`text-xs font-bold px-3 py-2 rounded-lg transition-colors whitespace-nowrap ${
-                  filter === f
-                    ? "bg-indigo-600 text-white"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                }`}
-              >
-                {f}
-              </button>
+
+          <div className="curriculum-list">
+            {mockCurrentCourse.sections.map(section => (
+              <div key={section.id} className="curriculum-section">
+                <div className="section-header">
+                  <ChevronDown size={18} />
+                  <h4>{section.title}</h4>
+                  <span>{section.lessons.length} lessons</span>
+                </div>
+                <div className="section-lessons">
+                  {section.lessons.map(lesson => (
+                    <div 
+                      key={lesson.id} 
+                      className={`lesson-item ${lesson.completed ? 'completed' : ''} ${lesson.current ? 'current' : ''}`}
+                      onClick={() => setCurrentLesson(lesson)}
+                    >
+                      <div className="lesson-check">
+                        {lesson.completed ? 
+                          <CheckCircle size={18} fill="#10b981" stroke="#10b981" /> : 
+                          <Circle size={18} />
+                        }
+                      </div>
+                      <div className="lesson-info">
+                        <span className="lesson-title">{lesson.title}</span>
+                        <div className="lesson-meta">
+                          <Play size={12} />
+                          <span>{lesson.duration}</span>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             ))}
           </div>
         </div>
       </div>
-
-      {filtered.length === 0 ? (
-        <div className="bg-white border border-gray-100 rounded-2xl p-16 text-center">
-          <p className="text-4xl mb-4">📭</p>
-          <h4 className="text-lg font-bold text-gray-700">No courses found</h4>
-        </div>
-      ) : (
-        <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map(course => {
-            const allLecs = normalizeSections(course.sections).flatMap(s => s.lectures);
-            const nextLec = allLecs.find(l => !l.completed) || allLecs[0];
-            return (
-              <div
-                key={course.id}
-                className="bg-white border border-gray-100 rounded-2xl overflow-hidden hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group cursor-pointer"
-                onClick={() => {
-                  setActiveCourse(course);
-                  setActiveLecture(nextLec);
-                  setActiveTab("Learn");
-                }}
-              >
-                <div className="relative overflow-hidden h-40">
-                  <img
-                    src={course.thumbnail}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    alt={course.title}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
-                  {course.progress === 100 && (
-                    <div className="absolute top-3 right-3 bg-emerald-500 text-white text-xs font-black px-2 py-1 rounded-full flex items-center gap-1">
-                      <CheckCircle className="w-3 h-3" /> Done
-                    </div>
-                  )}
-                  <div className="absolute bottom-3 left-3 flex items-center gap-1.5">
-                    <div className="w-6 h-6 rounded-full bg-indigo-400 flex items-center justify-center text-white text-xs font-bold border border-white">
-                      {course.instructor?.charAt(0)}
-                    </div>
-                    <span className="text-white text-xs font-medium">{course.instructor}</span>
-                  </div>
-                </div>
-                <div className="p-4">
-                  <span
-                    className="text-xs font-bold px-2 py-0.5 rounded-full"
-                    style={{ backgroundColor: `${course.color}20`, color: course.color }}
-                  >
-                    {course.category}
-                  </span>
-                  <h4 className="font-bold text-gray-900 text-sm mt-2 line-clamp-2">{course.title}</h4>
-                  <div className="flex items-center gap-1 mt-1">
-                    <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                    <span className="text-xs font-bold text-gray-700">{course.rating}</span>
-                    <span className="text-xs text-gray-400">• {course.totalDuration}</span>
-                  </div>
-                  <div className="mt-3">
-                    <div className="flex justify-between text-xs text-gray-400 mb-1">
-                      <span>
-                        {course.completedLectures}/{course.totalLectures}
-                      </span>
-                      <span className="font-bold" style={{ color: course.color }}>
-                        {course.progress}%
-                      </span>
-                    </div>
-                    <div className="h-2 bg-gray-100 rounded-full">
-                      <div
-                        className="h-full rounded-full transition-all"
-                        style={{ width: `${course.progress}%`, backgroundColor: course.color }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// LEARN TAB
-// ─────────────────────────────────────────────────────────────────────────────
-const Learn = ({ course, activeLecture, setActiveLecture, onMarkComplete }) => {
-  const curriculum = normalizeSections(course?.sections || []);
-  const allLectures = curriculum.flatMap(s => s.lectures);
-  const [completedIds, setCompletedIds] = useState(
-    () => (course?.completedLectureIds || []).map(String)
-  );
-  const [openSections, setOpenSections] = useState(curriculum.map(s => s.id));
-  const [subTab, setSubTab] = useState("Overview");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-
-  const currentIdx = allLectures.findIndex(l => l.id === activeLecture?.id);
-  const hasNext = currentIdx < allLectures.length - 1;
-  const hasPrev = currentIdx > 0;
-  const progress = allLectures.length > 0
-    ? Math.round((completedIds.length / allLectures.length) * 100) : 0;
-
-  const markComplete = useCallback((id) => {
-    setCompletedIds(prev => {
-      if (prev.includes(String(id))) return prev;
-      const updated = [...prev, String(id)];
-      onMarkComplete && onMarkComplete(course?.id, id);
-      return updated;
-    });
-  }, [course?.id, onMarkComplete]);
-
-  const goNext = () => {
-    if (hasNext) {
-      setActiveLecture(allLectures[currentIdx + 1]);
-      setSubTab("Overview");
-    }
-  };
-
-  const goPrev = () => {
-    if (hasPrev) {
-      setActiveLecture(allLectures[currentIdx - 1]);
-      setSubTab("Overview");
-    }
-  };
-
-  const subTabs = ["Overview", "Resources"];
-
-  if (!course || allLectures.length === 0) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24 text-center">
-        <p className="text-5xl mb-4">📭</p>
-        <h3 className="text-xl font-black text-gray-800">No content yet</h3>
-      </div>
     );
-  }
+  };
 
-  return (
-    <div className="flex flex-col h-full gap-4">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex-1 min-w-0">
-          <div className="text-xs text-gray-400">{course?.title}</div>
-          <h2 className="text-base md:text-lg font-black text-gray-900 truncate">{activeLecture?.title}</h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="hidden sm:flex items-center gap-2 text-xs text-gray-500">
-            <span>{completedIds.length}/{allLectures.length}</span>
-            <div className="w-20 h-1.5 bg-gray-200 rounded-full">
-              <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${progress}%` }} />
-            </div>
-            <span className="font-bold text-indigo-600">{progress}%</span>
-          </div>
-          <button
-            onClick={() => setSidebarOpen(o => !o)}
-            className="text-xs font-bold bg-gray-100 text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-200 transition-colors"
-          >
-            {sidebarOpen ? "Hide" : "Show"} Content
+  // My Courses View
+  const MyCoursesView = () => (
+    <div className="my-courses">
+      <div className="courses-header">
+        <h1>My Courses</h1>
+        <div className="courses-filters">
+          <button className="filter-btn">
+            <Filter size={18} />
+            Filter
+          </button>
+          <button className="view-btn active">
+            <Grid size={18} />
+          </button>
+          <button className="view-btn">
+            <List size={18} />
           </button>
         </div>
       </div>
 
-      <div className={`flex gap-4 flex-1 overflow-hidden ${sidebarOpen ? "flex-col lg:flex-row" : ""}`}>
-        <div className="flex-1 min-w-0 space-y-4 overflow-y-auto">
-          <VideoPlayer
-            lecture={activeLecture}
-            onComplete={() => markComplete(activeLecture?.id)}
-            onNext={goNext}
-            onPrev={goPrev}
-            hasNext={hasNext}
-            hasPrev={hasPrev}
-          />
+      <div className="filter-tags">
+        <button className="tag active">All Courses</button>
+        <button className="tag">In Progress</button>
+        <button className="tag">Completed</button>
+        <button className="tag">Wishlist</button>
+      </div>
 
-          <div className="flex gap-3 flex-wrap">
-            <button
-              onClick={goPrev}
-              disabled={!hasPrev}
-              className="flex items-center gap-2 text-sm font-bold bg-white border border-gray-200 text-gray-700 px-4 py-2.5 rounded-xl disabled:opacity-40 hover:border-indigo-300 transition-colors"
-            >
-              ← Previous
-            </button>
-            <button
-              onClick={() => markComplete(activeLecture?.id)}
-              className={`flex-1 md:flex-none text-sm font-bold py-2.5 px-6 rounded-xl transition-colors ${
-                completedIds.includes(String(activeLecture?.id))
-                  ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
-                  : "bg-indigo-600 text-white hover:bg-indigo-700"
-              }`}
-            >
-              {completedIds.includes(String(activeLecture?.id))
-                ? "✓ Completed"
-                : "Mark Complete"}
-            </button>
-            <button
-              onClick={goNext}
-              disabled={!hasNext}
-              className="flex items-center gap-2 text-sm font-bold bg-indigo-600 text-white px-4 py-2.5 rounded-xl disabled:opacity-40 hover:bg-indigo-700 transition-colors"
-            >
-              Next →
-            </button>
-          </div>
-
-          <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden">
-            <div className="flex border-b border-gray-100 overflow-x-auto">
-              {subTabs.map(t => (
-                <button
-                  key={t}
-                  onClick={() => setSubTab(t)}
-                  className={`flex-shrink-0 px-4 py-3 text-sm font-semibold border-b-2 transition-colors ${
-                    subTab === t
-                      ? "border-indigo-600 text-indigo-600"
-                      : "border-transparent text-gray-500 hover:text-gray-900"
-                  }`}
-                >
-                  {t}
+      <div className="courses-grid">
+        {mockCourses.map(course => (
+          <div key={course.id} className="course-card" onClick={() => {
+            setSelectedCourse(course);
+            setCurrentView('course');
+          }}>
+            <div className="course-thumbnail">
+              <img src={course.thumbnail} alt={course.title} />
+              <div className="course-overlay">
+                <button className="play-btn">
+                  <Play size={24} fill="white" />
                 </button>
-              ))}
-            </div>
-            <div className="p-5">
-              {subTab === "Overview" && (
-                <div>
-                  <h3 className="font-black text-gray-900 mb-2">{activeLecture?.title}</h3>
-                  <p className="text-sm text-gray-600">Watch the video lecture and take notes. Complete the lecture to mark it as done.</p>
-                </div>
-              )}
-              {subTab === "Resources" && (
-                <div>
-                  <h4 className="font-bold text-gray-900 mb-3">Downloadable Resources</h4>
-                  {activeLecture?.resources?.length > 0 ? (
-                    <div className="space-y-2">
-                      {activeLecture.resources.map((r, i) => (
-                        <a
-                          key={i}
-                          href={r}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center justify-between bg-gray-50 rounded-xl p-3 hover:bg-indigo-50 transition-colors group"
-                        >
-                          <div className="flex items-center gap-3">
-                            <FileText className="w-5 h-5 text-indigo-600" />
-                            <span className="text-sm font-medium text-gray-700 truncate">{r.split('/').pop()}</span>
-                          </div>
-                          <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-indigo-600" />
-                        </a>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-400">No resources available.</p>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {sidebarOpen && (
-          <div className="lg:w-72 flex-shrink-0 bg-white border border-gray-100 rounded-2xl overflow-hidden flex flex-col max-h-96 lg:max-h-none">
-            <div className="p-4 border-b bg-gray-50 flex-shrink-0">
-              <h3 className="font-black text-gray-900 text-sm">Course Content</h3>
-              <div className="mt-3">
-                <div className="flex justify-between text-xs text-gray-400 mb-1">
-                  <span>{completedIds.length}/{allLectures.length}</span>
-                  <span className="font-bold text-indigo-600">{progress}%</span>
-                </div>
-                <div className="h-1.5 bg-gray-200 rounded-full">
-                  <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${progress}%` }} />
-                </div>
               </div>
             </div>
-            <div className="overflow-y-auto flex-1 divide-y divide-gray-50">
-              {curriculum.map(section => (
-                <div key={section.id}>
-                  <button
-                    onClick={() =>
-                      setOpenSections(p =>
-                        p.includes(section.id)
-                          ? p.filter(x => x !== section.id)
-                          : [...p, section.id]
-                      )
-                    }
-                    className="w-full flex justify-between items-center px-4 py-3 bg-gray-50/80 hover:bg-gray-100 transition-colors text-left"
-                  >
-                    <span className="font-bold text-xs text-gray-700 pr-2 leading-snug">
-                      {section.title}
-                    </span>
-                    <ChevronDown
-                      className={`w-3.5 h-3.5 text-gray-400 flex-shrink-0 transition-transform ${
-                        openSections.includes(section.id) ? "rotate-180" : ""
-                      }`}
-                    />
-                  </button>
-                  {openSections.includes(section.id) &&
-                    section.lectures.map(lec => {
-                      const isActive = activeLecture?.id === lec.id;
-                      const isDone = completedIds.includes(String(lec.id));
-                      return (
-                        <button
-                          key={lec.id}
-                          onClick={() => setActiveLecture(lec)}
-                          className={`w-full flex items-start gap-2.5 px-4 py-3 text-left hover:bg-indigo-50 transition-colors ${
-                            isActive ? "bg-indigo-50 border-l-4 border-l-indigo-500" : ""
-                          }`}
-                        >
-                          <div
-                            className={`w-5 h-5 rounded-full flex-shrink-0 flex items-center justify-center mt-0.5 transition-colors ${
-                              isDone
-                                ? "bg-emerald-500"
-                                : isActive
-                                ? "bg-indigo-500"
-                                : "border-2 border-gray-200"
-                            }`}
-                          >
-                            {isDone && (
-                              <CheckCircle className="w-3 h-3 text-white" />
-                            )}
-                            {!isDone && isActive && (
-                              <Play className="w-2.5 h-2.5 text-white ml-0.5" fill="white" />
-                            )}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p
-                              className={`text-xs leading-snug ${
-                                isActive
-                                  ? "text-indigo-700 font-bold"
-                                  : "text-gray-600"
-                              }`}
-                            >
-                              {lec.title}
-                            </p>
-                            <p className="text-xs text-gray-400 mt-0.5">{lec.duration}</p>
-                          </div>
-                        </button>
-                      );
-                    })}
+            <div className="course-info">
+              <span className="course-category">{course.category}</span>
+              <h3>{course.title}</h3>
+              <p className="course-instructor">{course.instructor}</p>
+              <div className="course-meta">
+                <div className="rating">
+                  <Star size={14} fill="#fbbf24" stroke="#fbbf24" />
+                  <span>{course.rating}</span>
                 </div>
-              ))}
+                <span>•</span>
+                <span>{course.students.toLocaleString()} students</span>
+              </div>
+              <div className="progress-bar">
+                <div className="progress-fill" style={{width: `${course.progress}%`}}></div>
+              </div>
+              <p className="progress-text">{course.completedLessons}/{course.totalLessons} lessons • {course.progress}% complete</p>
             </div>
           </div>
-        )}
+        ))}
       </div>
     </div>
   );
-};
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CERTIFICATES TAB
-// ─────────────────────────────────────────────────────────────────────────────
-const Certificates = ({ courses, student }) => {
-  const earned = courses.filter(c => c.certificateReady);
+  // Certificates View
+  const CertificatesView = () => (
+    <div className="certificates">
+      <h1>My Certificates</h1>
+      <p className="subtitle">Showcase your achievements</p>
 
-  return (
-    <div>
-      <h3 className="text-2xl font-black text-gray-900 mb-5">My Certificates</h3>
-      {earned.length === 0 ? (
-        <div className="bg-white border border-gray-100 rounded-2xl p-16 text-center">
-          <div className="text-5xl mb-4">🎓</div>
-          <h4 className="text-lg font-bold text-gray-700">No certificates yet</h4>
-        </div>
-      ) : (
-        <div className="grid sm:grid-cols-2 gap-6">
-          {earned.map(course => (
-            <div key={course.id} className="bg-white border-2 border-amber-200 rounded-2xl overflow-hidden shadow-xl">
-              <div className="relative bg-gradient-to-br from-slate-900 to-indigo-950 p-8 text-center">
-                <div
-                  className="absolute inset-0 opacity-10"
-                  style={{
-                    backgroundImage:
-                      "radial-gradient(circle, #f59e0b 1px, transparent 1px)",
-                    backgroundSize: "20px 20px",
-                  }}
-                />
-                <div className="relative">
-                  <div className="w-16 h-16 bg-amber-400/20 border-2 border-amber-400/40 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
-                    🏆
-                  </div>
-                  <p className="text-amber-400 text-xs font-black uppercase tracking-widest mb-3">
-                    Certificate of Completion
-                  </p>
-                  <p className="text-white/60 text-xs">This certifies that</p>
-                  <p className="text-white text-2xl font-black mt-1">{student.name}</p>
-                  <p className="text-white/60 text-xs mt-2">has successfully completed</p>
-                  <p className="text-amber-300 font-bold text-sm mt-2 leading-snug px-4">
-                    {course.title}
-                  </p>
-                </div>
-              </div>
-              <div className="p-4 flex gap-2">
-                <button className="flex-1 bg-indigo-600 text-white text-sm font-bold py-2.5 rounded-xl hover:bg-indigo-700 transition-colors">
-                  Download PDF
-                </button>
-                <button className="flex-1 bg-amber-50 text-amber-700 text-sm font-bold py-2.5 rounded-xl hover:bg-amber-100 border border-amber-200 transition-colors">
-                  Share
-                </button>
-              </div>
+      <div className="certificates-grid">
+        {[1, 2, 3, 4].map(i => (
+          <div key={i} className="certificate-card">
+            <div className="certificate-badge">
+              <Award size={48} />
             </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PROFILE TAB
-// ─────────────────────────────────────────────────────────────────────────────
-const Profile = ({ student }) => {
-  const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(student.name);
-  const [bio, setBio] = useState(student.bio);
-  const [saved, setSaved] = useState(false);
-
-  const save = () => {
-    setEditing(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-  };
-
-  return (
-    <div className="max-w-2xl space-y-5">
-      <div className="flex items-center justify-between">
-        <h3 className="text-2xl font-black text-gray-900">My Profile</h3>
-        {saved && (
-          <span className="text-sm text-emerald-600 font-bold bg-emerald-50 px-3 py-1 rounded-full">
-            ✓ Saved!
-          </span>
-        )}
-      </div>
-
-      <div className="bg-white border border-gray-100 rounded-2xl p-6">
-        <div className="flex items-center gap-5 flex-wrap">
-          <img
-            src={student.avatar}
-            className="w-20 h-20 rounded-2xl object-cover border-2 border-indigo-100"
-            alt={student.name}
-          />
-          <div className="flex-1">
-            {editing ? (
-              <input
-                value={name}
-                onChange={e => setName(e.target.value)}
-                className="w-full text-xl font-black border border-indigo-300 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-400 mb-2"
-              />
-            ) : (
-              <h4 className="text-xl font-black text-gray-900">{name}</h4>
-            )}
-            <p className="text-sm text-gray-500">{student.email}</p>
-            <p className="text-xs text-gray-400 mt-0.5">Member since {student.joinedDate}</p>
-          </div>
-          <button
-            onClick={() => (editing ? save() : setEditing(true))}
-            className="bg-indigo-600 text-white text-sm font-bold px-4 py-2 rounded-xl hover:bg-indigo-700 transition-colors whitespace-nowrap"
-          >
-            {editing ? "Save" : "Edit"}
-          </button>
-        </div>
-
-        <div className="mt-4">
-          <label className="text-xs font-bold text-gray-500 uppercase">Bio</label>
-          {editing ? (
-            <textarea
-              value={bio}
-              onChange={e => setBio(e.target.value)}
-              className="w-full mt-1 border border-gray-200 rounded-xl p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 h-20"
-            />
-          ) : (
-            <p className="text-sm text-gray-600 mt-1">{bio}</p>
-          )}
-        </div>
-      </div>
-
-      <div className="bg-white border border-gray-100 rounded-2xl p-6">
-        <h4 className="font-black text-gray-900 mb-4">Learning Stats</h4>
-        <div className="grid grid-cols-2 gap-4">
-          {[
-            { label: "Day Streak", value: `${student.streak} days`, icon: "🔥" },
-            { label: "Total Hours", value: `${student.totalHours}h`, icon: "⏱️" },
-            { label: "Courses", value: student.totalCourses, icon: "📚" },
-            { label: "Certificates", value: student.certificates, icon: "🏆" },
-          ].map(s => (
-            <div
-              key={s.label}
-              className="flex items-center gap-3 bg-gray-50 rounded-xl p-3"
-            >
-              <span className="text-2xl">{s.icon}</span>
-              <div>
-                <div className="font-black text-gray-900">{s.value}</div>
-                <div className="text-xs text-gray-500">{s.label}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MAIN PORTAL COMPONENT
-// ─────────────────────────────────────────────────────────────────────────────
-const TABS = [
-  { id: "Dashboard", icon: Home, label: "Dashboard" },
-  { id: "My Courses", icon: BookOpen, label: "My Courses" },
-  { id: "Learn", icon: Play, label: "Learn" },
-  { id: "Certificates", icon: Award, label: "Certificates" },
-  { id: "Profile", icon: User, label: "Profile" },
-];
-
-export default function Portals() {
-  const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("Dashboard");
-  const [activeCourse, setActiveCourse] = useState(null);
-  const [activeLecture, setActiveLecture] = useState(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [student, setStudent] = useState(FALLBACK_STUDENT);
-  const [courses, setCourses] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    async function loadAll() {
-      setLoading(true);
-      setError("");
-      try {
-        const savedUser = JSON.parse(localStorage.getItem("user") || "{}");
-
-        const [enrollRes, progressRes] = await Promise.all([
-          axios.get(`${BASE_URL}/enrollments/my`, authHeaders()),
-          axios.get(`${BASE_URL}/progress/my`, authHeaders()),
-        ]);
-
-        const enrollments = enrollRes.data || [];
-        const progressMap = {};
-        (progressRes.data || []).forEach(p => {
-          progressMap[String(p.courseId)] = p.completedLectures || [];
-        });
-
-        const normalizedCourses = enrollments
-          .map((enrollment, i) => {
-            const courseData = enrollment.course;
-            if (!courseData) return null;
-            const completedLectureIds = progressMap[String(courseData._id)] || [];
-            return normalizeCourse(courseData, i, completedLectureIds);
-          })
-          .filter(Boolean);
-
-        setCourses(normalizedCourses);
-
-        const totalCourses = normalizedCourses.length;
-        const completedCourses = normalizedCourses.filter(c => c.progress === 100).length;
-        const certificates = normalizedCourses.filter(c => c.certificateReady).length;
-
-        setStudent({
-          ...FALLBACK_STUDENT,
-          name: savedUser.name || "Student",
-          email: savedUser.email || "",
-          avatar: savedUser.avatar || `https://i.pravatar.cc/150?img=11`,
-          joinedDate: new Date().toLocaleDateString("en-US", {
-            month: "long",
-            year: "numeric",
-          }),
-          bio: savedUser.bio || "Passionate learner.",
-          totalCourses,
-          completedCourses,
-          certificates,
-          totalHours: Math.round(totalCourses * 8.5),
-          xp: totalCourses * 500 + completedCourses * 1000,
-          level: Math.max(1, Math.floor((totalCourses * 500 + completedCourses * 1000) / 1000)),
-          streak: Math.min(7, totalCourses * 2),
-          weeklyDone: Math.min(5, totalCourses),
-          weeklyGoal: 5,
-        });
-
-        if (normalizedCourses.length > 0) {
-          const first = normalizedCourses[0];
-          const sections = normalizeSections(first.sections);
-          const lecs = sections.flatMap(s => s.lectures);
-          const nextLec = lecs.find(l => !first.completedLectureIds.includes(l.id)) || lecs[0];
-          setActiveCourse(first);
-          if (nextLec) setActiveLecture(nextLec);
-        }
-      } catch (err) {
-        console.error("Portal error:", err);
-        if (err.response?.status === 401) {
-          navigate("/auth/login");
-        } else {
-          setError(err.response?.data?.message || "Could not load dashboard");
-        }
-      } finally {
-        setLoading(false);
-      }
-    }
-    loadAll();
-  }, [navigate]);
-
-  const handleMarkComplete = useCallback(
-    async (courseId, lectureId) => {
-      try {
-        await axios.post(
-          `${BASE_URL}/progress/mark`,
-          { courseId, lectureId },
-          authHeaders()
-        );
-      } catch (err) {
-        console.error("Progress save error:", err);
-      }
-    },
-    []
-  );
-
-  const handleSetActiveCourse = (course) => {
-    setActiveCourse(course);
-    const sections = normalizeSections(course.sections);
-    const all = sections.flatMap(s => s.lectures);
-    const nextLec = all.find(l => !course.completedLectureIds?.includes(l.id)) || all[0];
-    setActiveLecture(nextLec);
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    navigate("/auth/login");
-  };
-
-  const renderContent = () => {
-    if (loading) {
-      return (
-        <div className="flex flex-col items-center justify-center py-32">
-          <div className="w-12 h-12 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin mb-4" />
-          <p className="text-gray-500 font-medium">Loading dashboard...</p>
-        </div>
-      );
-    }
-
-    if (error) {
-      return (
-        <div className="flex flex-col items-center justify-center py-24 text-center px-4">
-          <p className="text-5xl mb-4">⚠️</p>
-          <h3 className="text-xl font-black text-gray-800 mb-2">Error</h3>
-          <p className="text-gray-500 max-w-md mb-6">{error}</p>
-          <button
-            onClick={() => window.location.reload()}
-            className="bg-indigo-600 text-white font-bold px-6 py-2.5 rounded-xl hover:bg-indigo-700"
-          >
-            Retry
-          </button>
-        </div>
-      );
-    }
-
-    switch (activeTab) {
-      case "Dashboard":
-        return (
-          <Dashboard
-            student={student}
-            courses={courses}
-            setActiveTab={setActiveTab}
-            setActiveCourse={handleSetActiveCourse}
-            setActiveLecture={setActiveLecture}
-          />
-        );
-      case "My Courses":
-        return (
-          <MyCourses
-            courses={courses}
-            setActiveTab={setActiveTab}
-            setActiveCourse={handleSetActiveCourse}
-            setActiveLecture={setActiveLecture}
-          />
-        );
-      case "Learn":
-        return (
-          <Learn
-            course={activeCourse}
-            activeLecture={activeLecture}
-            setActiveLecture={setActiveLecture}
-            onMarkComplete={handleMarkComplete}
-          />
-        );
-      case "Certificates":
-        return <Certificates courses={courses} student={student} />;
-      case "Profile":
-        return <Profile student={student} />;
-      default:
-        return null;
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-slate-50" style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}>
-      <div className="flex h-screen overflow-hidden flex-col md:flex-row">
-        {/* Sidebar */}
-        <aside
-          className={`fixed md:static inset-y-0 left-0 z-40 w-64 bg-slate-900 text-white flex flex-col shadow-2xl transition-transform duration-300 ${
-            sidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
-          }`}
-        >
-          <div className="px-5 py-5 border-b border-white/10 flex-shrink-0">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 bg-indigo-500 rounded-xl flex items-center justify-center text-white font-black">
-                L
-              </div>
-              <div>
-                <h1 className="font-black text-white">LearnFlow</h1>
-                <p className="text-slate-400 text-xs">Student Portal</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="px-5 py-4 border-b border-white/10 flex-shrink-0">
-            <div className="flex items-center gap-3">
-              <img
-                src={student.avatar}
-                className="w-10 h-10 rounded-xl object-cover border-2 border-indigo-400/50"
-                alt={student.name}
-              />
-              <div className="min-w-0">
-                <p className="text-sm font-bold text-white truncate">{student.name}</p>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full" />
-                  <p className="text-xs text-slate-400 truncate">
-                    Lv.{student.level} • {student.xp.toLocaleString()} XP
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-            {TABS.map(tab => {
-              const Icon = tab.icon;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    setActiveTab(tab.id);
-                    setSidebarOpen(false);
-                  }}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-semibold transition-all ${
-                    activeTab === tab.id
-                      ? "bg-indigo-600 text-white"
-                      : "text-slate-400 hover:text-white hover:bg-white/5"
-                  }`}
-                >
-                  <Icon className="w-5 h-5" />
-                  <span>{tab.label}</span>
-                </button>
-              );
-            })}
-          </nav>
-
-          <div className="px-5 py-4 border-t border-white/10 flex-shrink-0 space-y-2">
-            <div className="bg-white/5 rounded-xl p-3">
-              <p className="text-xs text-slate-400">Current Streak</p>
-              <div className="flex items-center justify-between">
-                <p className="font-black text-white">{student.streak} days 🔥</p>
-                <p className="text-xs text-indigo-400">Goal: {student.weeklyDone}/{student.weeklyGoal}</p>
-              </div>
-            </div>
-            <button
-              onClick={handleLogout}
-              className="w-full text-sm font-bold text-slate-400 hover:text-red-400 hover:bg-red-500/10 py-2 rounded-xl transition-colors flex items-center gap-2 justify-center"
-            >
-              <LogOut className="w-4 h-4" />
-              Logout
-            </button>
-          </div>
-        </aside>
-
-        {sidebarOpen && (
-          <div
-            className="fixed inset-0 z-30 bg-black/60 md:hidden"
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
-
-        {/* Main Content */}
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Header */}
-          <header className="bg-white border-b border-gray-100 px-4 md:px-6 py-4 flex items-center justify-between flex-shrink-0 shadow-sm">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setSidebarOpen(true)}
-                className="md:hidden text-gray-500 hover:text-gray-900 p-1"
-              >
-                <Menu className="w-6 h-6" />
+            <h3>Complete Web Development Bootcamp</h3>
+            <p>Completed on March 15, 2024</p>
+            <p className="certificate-instructor">Instructor: Dr. Angela Yu</p>
+            <div className="certificate-actions">
+              <button className="btn-primary">
+                <Download size={16} />
+                Download
               </button>
-              <div>
-                <h2 className="text-base md:text-lg font-black text-gray-900">{activeTab}</h2>
-                <p className="text-xs text-gray-400 hidden sm:block">
-                  {activeTab === "Learn" && activeCourse
-                    ? activeCourse.title
-                    : `Welcome back, ${student.name}`}
-                </p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 md:gap-4">
-              <button className="p-2 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-xl transition-colors">
-                <Bell className="w-5 h-5" />
+              <button className="btn-secondary">
+                <Share2 size={16} />
+                Share
               </button>
-              <img
-                src={student.avatar}
-                className="w-8 h-8 rounded-xl object-cover border-2 border-indigo-200 cursor-pointer"
-                alt={student.name}
-                onClick={() => {
-                  setActiveTab("Profile");
-                  setSidebarOpen(false);
-                }}
-              />
             </div>
-          </header>
-
-          {/* Main Content Area */}
-          <main className="flex-1 overflow-y-auto p-4 md:p-6">
-            {renderContent()}
-          </main>
-        </div>
+          </div>
+        ))}
       </div>
+    </div>
+  );
+
+  return (
+    <div className="student-portal">
+      <Navbar />
+      <Sidebar />
+      <main className={`main-content ${isSidebarOpen ? 'sidebar-open' : ''}`}>
+        {currentView === 'dashboard' && <Dashboard />}
+        {currentView === 'courses' && <MyCoursesView />}
+        {currentView === 'course' && <CoursePlayer />}
+        {currentView === 'certificates' && <CertificatesView />}
+      </main>
+
+      <style jsx>{`
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+
+        .student-portal {
+          min-height: 100vh;
+          background: linear-gradient(135deg, #f5f7fa 0%, #e8edf2 100%);
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
+          color: #1a202c;
+        }
+
+        /* Navbar */
+        .navbar {
+          background: white;
+          border-bottom: 1px solid #e2e8f0;
+          position: sticky;
+          top: 0;
+          z-index: 100;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .navbar-content {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 1rem 2rem;
+          max-width: 1920px;
+          margin: 0 auto;
+        }
+
+        .navbar-left {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+        }
+
+        .menu-btn {
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 0.5rem;
+          border-radius: 8px;
+          transition: all 0.2s;
+        }
+
+        .menu-btn:hover {
+          background: #f1f5f9;
+        }
+
+        .logo {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          font-size: 1.5rem;
+          font-weight: 700;
+          color: #6366f1;
+        }
+
+        .search-bar {
+          display: flex;
+          align-items: center;
+          background: #f1f5f9;
+          padding: 0.75rem 1.25rem;
+          border-radius: 12px;
+          gap: 0.75rem;
+          flex: 0 1 600px;
+          transition: all 0.2s;
+        }
+
+        .search-bar:focus-within {
+          background: white;
+          box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .search-bar input {
+          border: none;
+          background: none;
+          outline: none;
+          width: 100%;
+          font-size: 0.95rem;
+        }
+
+        .navbar-right {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+        }
+
+        .icon-btn {
+          position: relative;
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 0.5rem;
+          border-radius: 8px;
+          transition: all 0.2s;
+        }
+
+        .icon-btn:hover {
+          background: #f1f5f9;
+        }
+
+        .badge {
+          position: absolute;
+          top: 4px;
+          right: 4px;
+          background: #ef4444;
+          color: white;
+          font-size: 0.7rem;
+          padding: 2px 6px;
+          border-radius: 10px;
+          font-weight: 600;
+        }
+
+        .user-menu {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.5rem 1rem;
+          border-radius: 12px;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .user-menu:hover {
+          background: #f1f5f9;
+        }
+
+        .user-menu img {
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+        }
+
+        /* Sidebar */
+        .sidebar {
+          position: fixed;
+          left: 0;
+          top: 73px;
+          width: 280px;
+          height: calc(100vh - 73px);
+          background: white;
+          border-right: 1px solid #e2e8f0;
+          padding: 1.5rem 0;
+          transform: translateX(-100%);
+          transition: transform 0.3s;
+          z-index: 50;
+          overflow-y: auto;
+        }
+
+        .sidebar.open {
+          transform: translateX(0);
+        }
+
+        .sidebar-content {
+          display: flex;
+          flex-direction: column;
+          gap: 0.5rem;
+          padding: 0 1rem;
+        }
+
+        .sidebar-item {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          padding: 0.875rem 1.25rem;
+          border-radius: 12px;
+          border: none;
+          background: none;
+          cursor: pointer;
+          font-size: 0.95rem;
+          transition: all 0.2s;
+          text-align: left;
+          color: #64748b;
+          font-weight: 500;
+        }
+
+        .sidebar-item:hover {
+          background: #f1f5f9;
+          color: #1a202c;
+        }
+
+        .sidebar-item.active {
+          background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+          color: white;
+        }
+
+        .sidebar-item.logout {
+          margin-top: auto;
+          color: #ef4444;
+        }
+
+        /* Main Content */
+        .main-content {
+          margin-left: 0;
+          padding: 2rem;
+          transition: margin-left 0.3s;
+          min-height: calc(100vh - 73px);
+        }
+
+        /* Dashboard */
+        .dashboard {
+          max-width: 1400px;
+          margin: 0 auto;
+        }
+
+        .dashboard-header {
+          margin-bottom: 2rem;
+        }
+
+        .dashboard-header h1 {
+          font-size: 2rem;
+          font-weight: 700;
+          margin-bottom: 0.5rem;
+          background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+        }
+
+        .dashboard-header p {
+          color: #64748b;
+          font-size: 1.1rem;
+        }
+
+        .stats-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+          gap: 1.5rem;
+          margin-bottom: 3rem;
+        }
+
+        .stat-card {
+          background: white;
+          padding: 1.75rem;
+          border-radius: 16px;
+          display: flex;
+          align-items: center;
+          gap: 1.25rem;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+          transition: all 0.3s;
+        }
+
+        .stat-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+        }
+
+        .stat-icon {
+          width: 60px;
+          height: 60px;
+          border-radius: 14px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          color: white;
+        }
+
+        .stat-content h3 {
+          font-size: 2rem;
+          font-weight: 700;
+          margin-bottom: 0.25rem;
+        }
+
+        .stat-content p {
+          color: #64748b;
+          font-size: 0.9rem;
+        }
+
+        .section {
+          margin-bottom: 3rem;
+        }
+
+        .section h2 {
+          font-size: 1.5rem;
+          font-weight: 700;
+          margin-bottom: 1.5rem;
+        }
+
+        .courses-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+          gap: 1.75rem;
+        }
+
+        .course-card {
+          background: white;
+          border-radius: 16px;
+          overflow: hidden;
+          cursor: pointer;
+          transition: all 0.3s;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .course-card:hover {
+          transform: translateY(-6px);
+          box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .course-thumbnail {
+          position: relative;
+          width: 100%;
+          height: 180px;
+          overflow: hidden;
+        }
+
+        .course-thumbnail img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          transition: transform 0.3s;
+        }
+
+        .course-card:hover .course-thumbnail img {
+          transform: scale(1.05);
+        }
+
+        .course-overlay {
+          position: absolute;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.3);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          opacity: 0;
+          transition: opacity 0.3s;
+        }
+
+        .course-card:hover .course-overlay {
+          opacity: 1;
+        }
+
+        .play-btn {
+          width: 60px;
+          height: 60px;
+          border-radius: 50%;
+          background: white;
+          border: none;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s;
+        }
+
+        .play-btn:hover {
+          transform: scale(1.1);
+        }
+
+        .course-info {
+          padding: 1.25rem;
+        }
+
+        .course-category {
+          display: inline-block;
+          background: #e0e7ff;
+          color: #6366f1;
+          padding: 0.375rem 0.875rem;
+          border-radius: 6px;
+          font-size: 0.75rem;
+          font-weight: 600;
+          margin-bottom: 0.75rem;
+        }
+
+        .course-info h3 {
+          font-size: 1.05rem;
+          font-weight: 600;
+          margin-bottom: 0.5rem;
+          line-height: 1.4;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+          overflow: hidden;
+        }
+
+        .course-instructor {
+          color: #64748b;
+          font-size: 0.875rem;
+          margin-bottom: 0.75rem;
+        }
+
+        .course-meta {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          margin-bottom: 1rem;
+          font-size: 0.875rem;
+          color: #64748b;
+        }
+
+        .rating {
+          display: flex;
+          align-items: center;
+          gap: 0.25rem;
+          font-weight: 600;
+          color: #1a202c;
+        }
+
+        .progress-bar {
+          width: 100%;
+          height: 6px;
+          background: #e2e8f0;
+          border-radius: 10px;
+          overflow: hidden;
+          margin-bottom: 0.5rem;
+        }
+
+        .progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #6366f1 0%, #8b5cf6 100%);
+          transition: width 0.3s;
+        }
+
+        .progress-text {
+          font-size: 0.8rem;
+          color: #64748b;
+        }
+
+        /* Course Player */
+        .course-player {
+          display: flex;
+          height: calc(100vh - 73px);
+          margin: -2rem;
+        }
+
+        .player-main {
+          flex: 1;
+          overflow-y: auto;
+          background: #0f172a;
+        }
+
+        .video-container {
+          background: black;
+          position: relative;
+        }
+
+        .video-player {
+          position: relative;
+          width: 100%;
+          aspect-ratio: 16/9;
+          max-height: 70vh;
+        }
+
+        .video-placeholder {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .video-overlay {
+          position: absolute;
+          inset: 0;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: rgba(0, 0, 0, 0.3);
+        }
+
+        .video-play-btn {
+          width: 80px;
+          height: 80px;
+          border-radius: 50%;
+          background: rgba(255, 255, 255, 0.95);
+          border: none;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s;
+        }
+
+        .video-play-btn:hover {
+          transform: scale(1.1);
+          background: white;
+        }
+
+        .video-controls {
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+          background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+          padding: 2rem 1.5rem 1rem;
+        }
+
+        .progress-timeline {
+          width: 100%;
+          height: 4px;
+          background: rgba(255, 255, 255, 0.3);
+          border-radius: 2px;
+          cursor: pointer;
+          margin-bottom: 1rem;
+        }
+
+        .timeline-fill {
+          height: 100%;
+          background: #6366f1;
+          border-radius: 2px;
+        }
+
+        .controls-bottom {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .controls-left,
+        .controls-right {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+        }
+
+        .video-controls button {
+          background: none;
+          border: none;
+          color: white;
+          cursor: pointer;
+          padding: 0.5rem;
+          border-radius: 6px;
+          transition: all 0.2s;
+        }
+
+        .video-controls button:hover {
+          background: rgba(255, 255, 255, 0.1);
+        }
+
+        .time-display {
+          color: white;
+          font-size: 0.9rem;
+          margin-left: 0.5rem;
+        }
+
+        .player-content {
+          background: white;
+          padding: 2rem;
+        }
+
+        .content-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+          margin-bottom: 2rem;
+          gap: 2rem;
+        }
+
+        .content-header h1 {
+          font-size: 1.75rem;
+          font-weight: 700;
+          margin-bottom: 0.75rem;
+        }
+
+        .content-meta {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          color: #64748b;
+          font-size: 0.9rem;
+        }
+
+        .content-actions {
+          display: flex;
+          gap: 1rem;
+        }
+
+        .action-btn {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.75rem 1.25rem;
+          border-radius: 10px;
+          border: 1px solid #e2e8f0;
+          background: white;
+          cursor: pointer;
+          font-weight: 500;
+          transition: all 0.2s;
+        }
+
+        .action-btn:hover {
+          background: #f1f5f9;
+          border-color: #cbd5e1;
+        }
+
+        .tabs {
+          display: flex;
+          gap: 2rem;
+          border-bottom: 2px solid #e2e8f0;
+          margin-bottom: 2rem;
+        }
+
+        .tab {
+          padding: 1rem 0;
+          border: none;
+          background: none;
+          cursor: pointer;
+          font-weight: 600;
+          color: #64748b;
+          border-bottom: 2px solid transparent;
+          margin-bottom: -2px;
+          transition: all 0.2s;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .tab:hover {
+          color: #1a202c;
+        }
+
+        .tab.active {
+          color: #6366f1;
+          border-bottom-color: #6366f1;
+        }
+
+        .tab-content {
+          padding-bottom: 2rem;
+        }
+
+        .overview-tab h3 {
+          font-size: 1.25rem;
+          font-weight: 700;
+          margin-bottom: 1rem;
+          margin-top: 2rem;
+        }
+
+        .overview-tab h3:first-child {
+          margin-top: 0;
+        }
+
+        .overview-tab p {
+          color: #475569;
+          line-height: 1.7;
+          margin-bottom: 1rem;
+        }
+
+        .learning-points {
+          list-style: none;
+          display: grid;
+          gap: 0.75rem;
+        }
+
+        .learning-points li {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          color: #475569;
+        }
+
+        .note-editor {
+          background: #f8fafc;
+          padding: 1.5rem;
+          border-radius: 12px;
+          margin-bottom: 2rem;
+        }
+
+        .note-editor textarea {
+          width: 100%;
+          padding: 1rem;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          resize: vertical;
+          font-family: inherit;
+          margin-bottom: 1rem;
+        }
+
+        .note-editor textarea:focus {
+          outline: none;
+          border-color: #6366f1;
+        }
+
+        .notes-list {
+          display: grid;
+          gap: 1rem;
+        }
+
+        .note-card {
+          background: #f8fafc;
+          padding: 1.5rem;
+          border-radius: 12px;
+          border: 1px solid #e2e8f0;
+        }
+
+        .note-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 0.75rem;
+        }
+
+        .note-lesson {
+          font-weight: 600;
+          color: #1a202c;
+          margin-right: 0.5rem;
+        }
+
+        .note-timestamp {
+          color: #6366f1;
+          font-weight: 600;
+          font-size: 0.875rem;
+        }
+
+        .note-actions {
+          display: flex;
+          gap: 0.5rem;
+        }
+
+        .note-actions button {
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 0.5rem;
+          border-radius: 6px;
+          color: #64748b;
+          transition: all 0.2s;
+        }
+
+        .note-actions button:hover {
+          background: #e2e8f0;
+          color: #1a202c;
+        }
+
+        .note-content {
+          color: #475569;
+          line-height: 1.6;
+          margin-bottom: 0.5rem;
+        }
+
+        .note-date {
+          font-size: 0.875rem;
+          color: #94a3b8;
+        }
+
+        .question-form {
+          background: #f8fafc;
+          padding: 1.5rem;
+          border-radius: 12px;
+          margin-bottom: 2rem;
+        }
+
+        .question-form h3 {
+          font-size: 1.125rem;
+          font-weight: 700;
+          margin-bottom: 1rem;
+        }
+
+        .question-form input,
+        .question-form textarea {
+          width: 100%;
+          padding: 1rem;
+          border: 1px solid #e2e8f0;
+          border-radius: 8px;
+          font-family: inherit;
+          margin-bottom: 1rem;
+        }
+
+        .question-form input:focus,
+        .question-form textarea:focus {
+          outline: none;
+          border-color: #6366f1;
+        }
+
+        .qa-list h3 {
+          font-size: 1.125rem;
+          font-weight: 700;
+          margin-bottom: 1.5rem;
+        }
+
+        .qa-card {
+          background: white;
+          padding: 1.5rem;
+          border-radius: 12px;
+          border: 1px solid #e2e8f0;
+          margin-bottom: 1rem;
+        }
+
+        .qa-header {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          margin-bottom: 1rem;
+        }
+
+        .qa-header img {
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+        }
+
+        .qa-header h4 {
+          font-weight: 600;
+          margin-bottom: 0.25rem;
+        }
+
+        .qa-meta {
+          font-size: 0.875rem;
+          color: #64748b;
+        }
+
+        .resolved-badge {
+          margin-left: auto;
+          background: #d1fae5;
+          color: #059669;
+          padding: 0.375rem 0.75rem;
+          border-radius: 6px;
+          font-size: 0.75rem;
+          font-weight: 600;
+        }
+
+        .qa-question {
+          color: #1a202c;
+          line-height: 1.6;
+          margin-bottom: 1rem;
+        }
+
+        .qa-footer {
+          display: flex;
+          gap: 1rem;
+        }
+
+        .qa-action {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.5rem 1rem;
+          border-radius: 8px;
+          border: none;
+          background: #f1f5f9;
+          cursor: pointer;
+          font-size: 0.875rem;
+          font-weight: 500;
+          color: #64748b;
+          transition: all 0.2s;
+        }
+
+        .qa-action:hover {
+          background: #e2e8f0;
+          color: #1a202c;
+        }
+
+        .resources-list {
+          display: grid;
+          gap: 1rem;
+        }
+
+        .resource-item {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          padding: 1.5rem;
+          background: white;
+          border: 1px solid #e2e8f0;
+          border-radius: 12px;
+          transition: all 0.2s;
+        }
+
+        .resource-item:hover {
+          border-color: #6366f1;
+          box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+        }
+
+        .resource-item h4 {
+          font-weight: 600;
+          margin-bottom: 0.25rem;
+        }
+
+        .resource-item span {
+          font-size: 0.875rem;
+          color: #64748b;
+        }
+
+        .curriculum-sidebar {
+          width: 400px;
+          background: white;
+          border-left: 1px solid #e2e8f0;
+          overflow-y: auto;
+        }
+
+        .sidebar-header {
+          padding: 1.5rem;
+          border-bottom: 1px solid #e2e8f0;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .sidebar-header h3 {
+          font-size: 1.125rem;
+          font-weight: 700;
+        }
+
+        .sidebar-header span {
+          font-size: 0.875rem;
+          color: #64748b;
+        }
+
+        .curriculum-list {
+          padding: 0.5rem 0;
+        }
+
+        .curriculum-section {
+          border-bottom: 1px solid #e2e8f0;
+        }
+
+        .section-header {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 1rem 1.5rem;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .section-header:hover {
+          background: #f8fafc;
+        }
+
+        .section-header h4 {
+          flex: 1;
+          font-size: 0.95rem;
+          font-weight: 600;
+        }
+
+        .section-header span {
+          font-size: 0.8rem;
+          color: #64748b;
+        }
+
+        .section-lessons {
+          display: grid;
+        }
+
+        .lesson-item {
+          display: flex;
+          align-items: center;
+          gap: 1rem;
+          padding: 1rem 1.5rem 1rem 3rem;
+          cursor: pointer;
+          transition: all 0.2s;
+          border-left: 3px solid transparent;
+        }
+
+        .lesson-item:hover {
+          background: #f8fafc;
+        }
+
+        .lesson-item.current {
+          background: #eef2ff;
+          border-left-color: #6366f1;
+        }
+
+        .lesson-item.completed .lesson-title {
+          color: #10b981;
+        }
+
+        .lesson-info {
+          flex: 1;
+        }
+
+        .lesson-title {
+          font-size: 0.9rem;
+          font-weight: 500;
+          margin-bottom: 0.25rem;
+        }
+
+        .lesson-meta {
+          display: flex;
+          align-items: center;
+          gap: 0.375rem;
+          font-size: 0.75rem;
+          color: #64748b;
+        }
+
+        .btn-primary,
+        .btn-secondary {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.75rem 1.5rem;
+          border-radius: 10px;
+          border: none;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .btn-primary {
+          background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+          color: white;
+        }
+
+        .btn-primary:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 8px 16px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-secondary {
+          background: white;
+          color: #6366f1;
+          border: 1px solid #e2e8f0;
+        }
+
+        .btn-secondary:hover {
+          background: #f8fafc;
+          border-color: #6366f1;
+        }
+
+        /* My Courses */
+        .my-courses {
+          max-width: 1400px;
+          margin: 0 auto;
+        }
+
+        .courses-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 2rem;
+        }
+
+        .courses-header h1 {
+          font-size: 2rem;
+          font-weight: 700;
+        }
+
+        .courses-filters {
+          display: flex;
+          gap: 0.75rem;
+        }
+
+        .filter-btn,
+        .view-btn {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.75rem 1.25rem;
+          border-radius: 10px;
+          border: 1px solid #e2e8f0;
+          background: white;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .filter-btn:hover,
+        .view-btn:hover {
+          background: #f1f5f9;
+        }
+
+        .view-btn.active {
+          background: #6366f1;
+          color: white;
+          border-color: #6366f1;
+        }
+
+        .filter-tags {
+          display: flex;
+          gap: 0.75rem;
+          margin-bottom: 2rem;
+          flex-wrap: wrap;
+        }
+
+        .tag {
+          padding: 0.625rem 1.25rem;
+          border-radius: 20px;
+          border: 1px solid #e2e8f0;
+          background: white;
+          cursor: pointer;
+          font-weight: 500;
+          transition: all 0.2s;
+        }
+
+        .tag:hover {
+          background: #f1f5f9;
+        }
+
+        .tag.active {
+          background: #6366f1;
+          color: white;
+          border-color: #6366f1;
+        }
+
+        /* Certificates */
+        .certificates {
+          max-width: 1200px;
+          margin: 0 auto;
+        }
+
+        .certificates h1 {
+          font-size: 2rem;
+          font-weight: 700;
+          margin-bottom: 0.5rem;
+        }
+
+        .subtitle {
+          color: #64748b;
+          font-size: 1.1rem;
+          margin-bottom: 2rem;
+        }
+
+        .certificates-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+          gap: 2rem;
+        }
+
+        .certificate-card {
+          background: white;
+          padding: 2rem;
+          border-radius: 16px;
+          text-align: center;
+          border: 2px solid #e2e8f0;
+          transition: all 0.3s;
+        }
+
+        .certificate-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.1);
+          border-color: #6366f1;
+        }
+
+        .certificate-badge {
+          width: 80px;
+          height: 80px;
+          background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 1.5rem;
+          color: white;
+        }
+
+        .certificate-card h3 {
+          font-size: 1.125rem;
+          font-weight: 700;
+          margin-bottom: 0.5rem;
+        }
+
+        .certificate-card p {
+          color: #64748b;
+          font-size: 0.875rem;
+          margin-bottom: 0.5rem;
+        }
+
+        .certificate-instructor {
+          font-weight: 600;
+          margin-bottom: 1.5rem !important;
+        }
+
+        .certificate-actions {
+          display: flex;
+          gap: 0.75rem;
+          justify-content: center;
+        }
+
+        .recommended-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+          gap: 1.5rem;
+        }
+
+        .recommended-card {
+          background: white;
+          border-radius: 12px;
+          overflow: hidden;
+          border: 1px solid #e2e8f0;
+          transition: all 0.3s;
+        }
+
+        .recommended-card:hover {
+          transform: translateY(-4px);
+          box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        .recommended-thumbnail {
+          width: 100%;
+          height: 140px;
+          overflow: hidden;
+        }
+
+        .recommended-thumbnail img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+
+        .recommended-info {
+          padding: 1rem;
+        }
+
+        .recommended-info h4 {
+          font-size: 0.95rem;
+          font-weight: 600;
+          margin-bottom: 0.5rem;
+        }
+
+        .recommended-info p {
+          font-size: 0.85rem;
+          color: #64748b;
+          margin-bottom: 0.75rem;
+        }
+
+        .recommended-meta {
+          display: flex;
+          align-items: center;
+          gap: 0.375rem;
+          font-size: 0.8rem;
+          color: #64748b;
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+          .curriculum-sidebar {
+            width: 350px;
+          }
+        }
+
+        @media (max-width: 968px) {
+          .course-player {
+            flex-direction: column;
+          }
+
+          .curriculum-sidebar {
+            width: 100%;
+            max-height: 400px;
+          }
+
+          .player-main {
+            height: auto;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .navbar-content {
+            padding: 1rem;
+          }
+
+          .search-bar {
+            display: none;
+          }
+
+          .main-content {
+            padding: 1rem;
+          }
+
+          .sidebar.open {
+            width: 100%;
+          }
+
+          .courses-grid,
+          .stats-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .dashboard-header h1 {
+            font-size: 1.5rem;
+          }
+
+          .content-header {
+            flex-direction: column;
+          }
+
+          .content-actions {
+            width: 100%;
+          }
+
+          .action-btn {
+            flex: 1;
+            justify-content: center;
+          }
+
+          .tabs {
+            overflow-x: auto;
+            gap: 1rem;
+          }
+
+          .tab {
+            white-space: nowrap;
+          }
+
+          .courses-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 1rem;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .logo span {
+            display: none;
+          }
+
+          .stat-card {
+            padding: 1.25rem;
+          }
+
+          .stat-icon {
+            width: 50px;
+            height: 50px;
+          }
+
+          .course-card {
+            margin-bottom: 1rem;
+          }
+        }
+      `}</style>
     </div>
   );
 }
+
+export default StudentPortal;
