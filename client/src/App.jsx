@@ -43,10 +43,10 @@ function AppRoutes() {
 
       {/* ── PROTECTED ──────────────────────────────────────────────────── */}
       <Route
-        path="/portals/*"
+        path="/portal/*"
         element={
           <ProtectedRoute role="student">
-            <Portals />
+            <Portals/>
           </ProtectedRoute>
         }
       />
