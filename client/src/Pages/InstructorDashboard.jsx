@@ -35,6 +35,8 @@ import {
 } from "recharts";
 import { useAuth } from "../context/AuthContext";
 import { useInstructorCourses } from "../hooks/useInstructorCourses";
+// ── CHANGE 1 ──────────────────────────────────────────────────────────────────
+import { useCourses } from '../context/CoursesContext';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STATIC CHART DATA (analytics remain illustrative until backend adds tracking)
@@ -1240,6 +1242,8 @@ export default function InstructorDashboard() {
     courses, loading,
     createCourse, updateCourse, deleteCourse, togglePublish,
   } = useInstructorCourses();
+  // ── CHANGE 2 ────────────────────────────────────────────────────────────────
+  const { syncCreated, syncUpdated, syncDeleted } = useCourses();
 
   useEffect(() => {
     function handleResize() {
@@ -1267,11 +1271,58 @@ export default function InstructorDashboard() {
       <TopBar instructor={user} sidebarWidth={sidebarWidth} isMobile={isMobile} onMenuClick={() => setCollapsed(false)}/>
 
       <Layout sidebarWidth={sidebarWidth} isMobile={isMobile}>
+        {/* ── CHANGE 3 ──────────────────────────────────────────────────────── */}
         <Routes>
           <Route index element={<DashboardPage instructor={user} courses={courses} loading={loading}/>}/>
-          <Route path="courses" element={<CoursesPage courses={courses} loading={loading} deleteCourse={deleteCourse} togglePublish={togglePublish} toast={toast}/>}/>
-          <Route path="create" element={<CourseEditorPage courses={courses} createCourse={createCourse} updateCourse={updateCourse} toast={toast}/>}/>
-          <Route path="edit/:id" element={<CourseEditorPage courses={courses} createCourse={createCourse} updateCourse={updateCourse} toast={toast}/>}/>
+
+          <Route path="courses" element={
+            <CoursesPage
+              courses={courses}
+              loading={loading}
+              deleteCourse={async (id) => { await deleteCourse(id); syncDeleted(id); }}
+              togglePublish={async (id, status) => {
+                const updated = await togglePublish(id, status);
+                syncUpdated(updated, courses.findIndex(c => c._id === id));
+                return updated;
+              }}
+              toast={toast}
+            />
+          }/>
+
+          <Route path="create" element={
+            <CourseEditorPage
+              courses={courses}
+              createCourse={async (payload) => {
+                const created = await createCourse(payload);
+                syncCreated(created, courses.length);
+                return created;
+              }}
+              updateCourse={async (id, payload) => {
+                const updated = await updateCourse(id, payload);
+                syncUpdated(updated, courses.findIndex(c => c._id === id));
+                return updated;
+              }}
+              toast={toast}
+            />
+          }/>
+
+          <Route path="edit/:id" element={
+            <CourseEditorPage
+              courses={courses}
+              createCourse={async (payload) => {
+                const created = await createCourse(payload);
+                syncCreated(created, courses.length);
+                return created;
+              }}
+              updateCourse={async (id, payload) => {
+                const updated = await updateCourse(id, payload);
+                syncUpdated(updated, courses.findIndex(c => c._id === id));
+                return updated;
+              }}
+              toast={toast}
+            />
+          }/>
+
           <Route path="analytics" element={<AnalyticsPage courses={courses}/>}/>
           <Route path="profile" element={<ProfilePage toast={toast}/>}/>
           <Route path="*" element={<Navigate to="" replace/>}/>

@@ -1,11 +1,13 @@
+// src/App.jsx
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider, useAuth } from "./context/AuthContext";
-import AuthPage            from "./Pages/AuthPages";
-import Shopify             from "./Pages/Shopify";          // Single course landing page
-import CoursesPage         from "./Pages/CoursesPage";      // All published courses
-import Portals             from "./Pages/Portals";
-import InstructorDashboard from "./Pages/InstructorDashboard";
+import { AuthProvider, useAuth }   from "./context/AuthContext";
+import { CoursesProvider }         from "./context/CoursesContext";   // ← NEW
+import AuthPage                    from "./Pages/AuthPages";
+import Shopify                     from "./Pages/Shopify";
+import CoursesPage                 from "./Pages/CoursesPage";
+import Portals                     from "./Pages/Portals";
+import InstructorDashboard         from "./Pages/InstructorDashboard";
 
 function LoadingScreen() {
   return (
@@ -18,7 +20,7 @@ function LoadingScreen() {
 function ProtectedRoute({ children, role }) {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
-  if (!user) return <Navigate to="/auth/login" replace />;
+  if (!user)   return <Navigate to="/auth/login" replace />;
   if (role && user.role !== role)
     return <Navigate to={user.role === "instructor" ? "/instructor" : "/portal"} replace />;
   return children;
@@ -27,18 +29,10 @@ function ProtectedRoute({ children, role }) {
 function AppRoutes() {
   return (
     <Routes>
-      {/* ── PUBLIC ─────────────────────────────────────────────────────── */}
-      {/* Landing / home */}
+      {/* ── PUBLIC ───────────────────────────────────────────────── */}
       <Route path="/"           element={<Shopify />} />
-
-      {/* All published courses */}
       <Route path="/courses"    element={<CoursesPage />} />
-
-      {/* Single course detail — id can be a slug or numeric id */}
       <Route path="/course/:id" element={<Shopify />} />
-
-      {/* Instructor public profile */}
-      <Route path="/instructor-profile" element={<Shopify />} />
 
       {/* Auth */}
       <Route path="/auth"          element={<Navigate to="/auth/login" replace />} />
@@ -47,7 +41,7 @@ function AppRoutes() {
       <Route path="/login"         element={<Navigate to="/auth/login"    replace />} />
       <Route path="/register"      element={<Navigate to="/auth/register" replace />} />
 
-      {/* ── PROTECTED ──────────────────────────────────────────────────── */}
+      {/* ── PROTECTED ────────────────────────────────────────────── */}
       <Route
         path="/portal/*"
         element={
@@ -65,7 +59,6 @@ function AppRoutes() {
         }
       />
 
-      {/* Catch-all → home */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -75,7 +68,12 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        {/* CoursesProvider sits inside AuthProvider so it can access the
+            auth token if your API requires it, but outside the router
+            so all pages share the same courses cache.                  */}
+        <CoursesProvider>
+          <AppRoutes />
+        </CoursesProvider>
       </AuthProvider>
     </BrowserRouter>
   );
