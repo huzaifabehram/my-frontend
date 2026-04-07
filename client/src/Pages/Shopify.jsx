@@ -9,8 +9,8 @@ export default function CourseLandingPage() {
   const [videoCarouselIndex, setVideoCarouselIndex] = useState(0);
   const [imageCarouselIndex, setImageCarouselIndex] = useState(0);
   const [showFullDescription, setShowFullDescription] = useState(false);
-  const [showFullInstructorBio, setShowFullInstructorBio] = useState(false);
   const [showAllReviews, setShowAllReviews] = useState(false);
+  const [showFullInstructorBio, setShowFullInstructorBio] = useState(false);
 
   const courseData = {
     title: 'Complete Web Development Bootcamp 2024',
@@ -145,6 +145,7 @@ export default function CourseLandingPage() {
       {/* HEADER */}
       <header className="sticky top-0 z-40 bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          {/* CHANGE: removed login/signup from mobile menu bar, hamburger stays */}
           <button 
             className="lg:hidden p-2"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -185,9 +186,10 @@ export default function CourseLandingPage() {
 
           <div className="flex items-center gap-3">
             <Search className="hidden lg:block text-gray-400 cursor-pointer hover:text-gray-600 transition" size={20} />
+            {/* CHANGE: Login button visible on both mobile and desktop, blue background white text */}
             <button
               onClick={() => handleNavigate('/auth/login')}
-              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium border-none cursor-pointer"
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium border-none cursor-pointer text-sm"
             >
               Login
             </button>
@@ -200,7 +202,7 @@ export default function CourseLandingPage() {
           </div>
         </div>
 
-        {/* Mobile menu - half screen with dark background and white text */}
+        {/* CHANGE: Mobile menu - removed Login and Sign Up buttons */}
         {mobileMenuOpen && (
           <>
             {/* Backdrop overlay */}
@@ -264,7 +266,7 @@ export default function CourseLandingPage() {
         <span className="text-gray-900 font-medium">Complete Web Development Bootcamp</span>
       </div>
 
-      {/* COURSE HEADER WITH VIDEO PLAYER BETWEEN TITLE AND SUBTITLE */}
+      {/* CHANGE: COURSE HEADER WITH VIDEO PLAYER BETWEEN TITLE AND SUBTITLE */}
       <section className="w-full bg-black text-white py-8 lg:py-12">
         <div className="max-w-7xl mx-auto px-4">
           <div className="mb-6 lg:mb-8">
@@ -278,11 +280,11 @@ export default function CourseLandingPage() {
             {courseData.title}
           </h1>
 
-          {/* VIDEO PREVIEW PLAYER - Between title and subtitle */}
+          {/* CHANGE: VIDEO PREVIEW PLAYER - Between title and subtitle */}
           <div className="mb-8">
             <div className="relative bg-gray-800 rounded-xl overflow-hidden aspect-video flex items-center justify-center cursor-pointer hover:bg-gray-700 transition group">
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-t from-black/40 to-transparent gap-4">
-                {/* YouTube-style play button - red/maroon with white triangle */}
+                {/* CHANGE: YouTube-style play button - red/maroon with white triangle */}
                 <button 
                   className="relative w-16 h-16 lg:w-20 lg:h-20 rounded-full transition transform group-hover:scale-110 duration-200 shadow-lg border-none cursor-pointer"
                   style={{background: '#FF0000'}}
@@ -397,7 +399,7 @@ export default function CourseLandingPage() {
             </div>
           </div>
 
-          {/* COURSE CONTENT ACCORDION - YouTube-style icons for video and preview */}
+          {/* CHANGE: COURSE CONTENT ACCORDION - YouTube-style icons for video and preview */}
           <div className="space-y-2 mb-16">
             {courseData.sections.map((section, idx) => {
               const isExpanded = expandedSection.includes(idx);
@@ -433,7 +435,7 @@ export default function CourseLandingPage() {
                           className="px-6 py-4 border-b border-gray-200 last:border-b-0 flex items-center justify-between hover:bg-white transition"
                         >
                           <div className="flex items-center gap-4 flex-1">
-                            {/* YouTube-style video icon */}
+                            {/* CHANGE: YouTube-style video icon */}
                             <div className="flex-shrink-0">
                               {lecture.type === 'video' ? (
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -452,7 +454,7 @@ export default function CourseLandingPage() {
                             </div>
                           </div>
                           
-                          {/* Preview Button with YouTube-style play icon */}
+                          {/* CHANGE: Preview Button with YouTube-style play icon */}
                           {lecture.preview && (
                             <button 
                               onClick={() => handlePreviewClick(lecture.title)}
@@ -500,12 +502,12 @@ export default function CourseLandingPage() {
             )}
           </div>
 
-          {/* DESCRIPTION */}
+          {/* DESCRIPTION - CHANGE: blur effect on last 2/3 lines with show more button */}
           <div className="mb-16 py-12 border-t border-gray-200">
             <h2 className="text-3xl font-bold text-gray-900 mb-6">Description</h2>
             
             <div className="relative">
-              <div className={`text-gray-700 leading-relaxed text-base space-y-4 ${!showFullDescription ? 'max-h-32 overflow-hidden' : ''}`}>
+              <div className={`text-gray-700 leading-relaxed text-base space-y-4 ${!showFullDescription ? 'max-h-40 overflow-hidden' : ''}`}>
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-3">What you'll learn</h3>
                   <p className="text-gray-700">
@@ -530,9 +532,10 @@ export default function CourseLandingPage() {
                   </div>
                 )}
               </div>
-              
+
+              {/* CHANGE: blur overlay on description when collapsed */}
               {!showFullDescription && (
-                <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white to-transparent pointer-events-none"></div>
+                <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white via-white/80 to-transparent pointer-events-none" style={{backdropFilter: 'none'}} />
               )}
             </div>
             
@@ -540,15 +543,74 @@ export default function CourseLandingPage() {
               onClick={() => setShowFullDescription(!showFullDescription)}
               className="text-purple-600 hover:text-purple-700 mt-4 text-sm font-semibold transition flex items-center gap-2 bg-transparent border-none cursor-pointer p-0"
             >
-              <span>{showFullDescription ? 'Show less' : 'Show more'}</span>
-              <ChevronDown size={16} className={`transition ${showFullDescription ? 'rotate-180' : ''}`} />
+              <span>{showFullDescription ? '▲ Show less' : '▼ Show more'}</span>
             </button>
           </div>
 
           {/* INSTRUCTOR SECTION */}
           <div className="mb-16 py-12 border-t border-gray-200">
-            {/* Desktop View - Original Layout */}
-            <div className="hidden lg:grid grid-cols-1 lg:grid-cols-4 gap-8">
+            {/* CHANGE: Mobile layout restructured; desktop stays the same */}
+
+            {/* Mobile layout */}
+            <div className="lg:hidden">
+              {/* 1) Instructor Header */}
+              <h2 className="text-2xl font-bold text-gray-900 mb-4">Instructor</h2>
+
+              {/* 2) Instructor Name */}
+              <button
+                onClick={() => handleNavigate('/instructor')}
+                className="text-green-600 hover:text-green-700 font-bold text-lg bg-transparent border-none cursor-pointer p-0 mb-4 block"
+              >
+                {courseData.instructor.name}
+              </button>
+
+              {/* 3 & 4) Picture on left, stats on right */}
+              <div className="flex items-start gap-4 mb-6">
+                {/* 3) Circular picture on left */}
+                <div className="flex-shrink-0 w-20 h-20 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-4xl">
+                  {courseData.instructor.image}
+                </div>
+
+                {/* 4) Stats on right */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center gap-2">
+                    <Star size={16} className="text-yellow-400" fill="currentColor" />
+                    <span className="text-sm font-semibold text-gray-900">{courseData.instructor.rating} Instructor Rating</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <BookOpen size={16} className="text-gray-600" />
+                    <span className="text-sm text-gray-700">{(courseData.instructor.reviews / 1000).toFixed(1)}K Reviews</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Users size={16} className="text-gray-600" />
+                    <span className="text-sm text-gray-700">{(courseData.instructor.students / 1000000).toFixed(1)}M Students</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Play size={16} className="text-gray-600" />
+                    <span className="text-sm text-gray-700">{courseData.instructor.courses} Courses</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Bio with blur + show more — no divider, no border */}
+              <div className="relative">
+                <div className={`text-gray-700 leading-relaxed text-base ${!showFullInstructorBio ? 'max-h-14 overflow-hidden' : ''}`}>
+                  <p>{courseData.instructor.bio}</p>
+                </div>
+                {!showFullInstructorBio && (
+                  <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-white via-white/80 to-transparent pointer-events-none" />
+                )}
+              </div>
+              <button
+                onClick={() => setShowFullInstructorBio(!showFullInstructorBio)}
+                className="text-purple-600 hover:text-purple-700 mt-3 text-sm font-semibold transition flex items-center gap-1 bg-transparent border-none cursor-pointer p-0"
+              >
+                <span>{showFullInstructorBio ? '▲ Show less' : '▼ Show more'}</span>
+              </button>
+            </div>
+
+            {/* Desktop layout — unchanged */}
+            <div className="hidden lg:grid lg:grid-cols-4 gap-8">
               {/* Instructor Image - Left */}
               <div className="lg:col-span-1 flex flex-col items-center lg:items-start">
                 <div className="w-40 h-40 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-6xl mb-6">
@@ -611,93 +673,9 @@ export default function CourseLandingPage() {
                 </div>
               </div>
             </div>
-
-            {/* Mobile View - New Layout */}
-            <div className="lg:hidden">
-              {/* Instructor Header */}
-              <h2 className="text-2xl font-bold text-gray-900 mb-6">Instructor</h2>
-              
-              {/* Instructor Name */}
-              <h3 className="font-bold text-gray-900 text-xl mb-4">
-                <button
-                  onClick={() => handleNavigate('/instructor')}
-                  className="text-green-600 hover:text-green-700 bg-transparent border-none cursor-pointer p-0"
-                >
-                  {courseData.instructor.name}
-                </button>
-              </h3>
-              
-              {/* Picture and Stats Row */}
-              <div className="flex gap-4 mb-6">
-                {/* Instructor Picture - Left */}
-                <div className="flex-shrink-0">
-                  <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-4xl">
-                    {courseData.instructor.image}
-                  </div>
-                </div>
-                
-                {/* Stats - Right */}
-                <div className="flex-1 grid grid-cols-2 gap-3">
-                  {/* Rating */}
-                  <div>
-                    <div className="flex items-center gap-1 mb-1">
-                      <Star size={14} className="text-yellow-400" fill="currentColor" />
-                      <span className="font-bold text-gray-900 text-sm">{courseData.instructor.rating}</span>
-                    </div>
-                    <p className="text-xs text-gray-600">Instructor Rating</p>
-                  </div>
-
-                  {/* Reviews */}
-                  <div>
-                    <div className="flex items-center gap-1 mb-1">
-                      <MessageSquare size={14} className="text-gray-600" />
-                      <span className="font-bold text-gray-900 text-sm">{(courseData.instructor.reviews / 1000).toFixed(1)}K</span>
-                    </div>
-                    <p className="text-xs text-gray-600">Reviews</p>
-                  </div>
-
-                  {/* Students */}
-                  <div>
-                    <div className="flex items-center gap-1 mb-1">
-                      <Users size={14} className="text-gray-600" />
-                      <span className="font-bold text-gray-900 text-sm">{(courseData.instructor.students / 1000000).toFixed(1)}M</span>
-                    </div>
-                    <p className="text-xs text-gray-600">Students</p>
-                  </div>
-
-                  {/* Courses */}
-                  <div>
-                    <div className="flex items-center gap-1 mb-1">
-                      <Play size={14} className="text-gray-600" />
-                      <span className="font-bold text-gray-900 text-sm">{courseData.instructor.courses}</span>
-                    </div>
-                    <p className="text-xs text-gray-600">Courses</p>
-                  </div>
-                </div>
-              </div>
-              
-              {/* Bio Section with Show More */}
-              <div className="relative">
-                <div className={`text-gray-700 leading-relaxed text-base ${!showFullInstructorBio ? 'max-h-20 overflow-hidden' : ''}`}>
-                  <p>{courseData.instructor.bio}</p>
-                </div>
-                
-                {!showFullInstructorBio && (
-                  <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-white to-transparent pointer-events-none"></div>
-                )}
-              </div>
-              
-              <button
-                onClick={() => setShowFullInstructorBio(!showFullInstructorBio)}
-                className="text-purple-600 hover:text-purple-700 mt-4 text-sm font-semibold transition flex items-center gap-2 bg-transparent border-none cursor-pointer p-0"
-              >
-                <span>{showFullInstructorBio ? 'Show less' : 'Show more'}</span>
-                <ChevronDown size={16} className={`transition ${showFullInstructorBio ? 'rotate-180' : ''}`} />
-              </button>
-            </div>
           </div>
 
-          {/* COURSE REVIEWS - Slidable with rating stars and K format */}
+          {/* COURSE REVIEWS - CHANGE: show all reviews when button clicked */}
           <div className="mb-16 py-12 border-t border-gray-200">
             <div className="mb-10">
               <div className="flex items-center gap-4 mb-4">
@@ -713,9 +691,9 @@ export default function CourseLandingPage() {
             </div>
 
             {/* Individual Reviews - Horizontal scroll */}
-            <div className={`${showAllReviews ? 'grid grid-cols-1 lg:grid-cols-2 gap-6' : 'flex gap-6 overflow-x-auto scroll-smooth'} pb-4 -mx-4 px-4 mb-8`} style={{scrollbarWidth: 'thin'}}>
+            <div className="flex gap-6 overflow-x-auto pb-4 -mx-4 px-4 scroll-smooth mb-8" style={{scrollbarWidth: 'thin'}}>
               {courseData.reviews_list.map((review, idx) => (
-                <div key={idx} className={`${!showAllReviews ? 'flex-shrink-0 w-80 lg:w-96' : ''} border border-gray-300 rounded-lg p-6 hover:shadow-md transition`}>
+                <div key={idx} className="flex-shrink-0 w-80 lg:w-96 border border-gray-300 rounded-lg p-6 hover:shadow-md transition">
                   {/* Review Header */}
                   <div className="flex items-center justify-between mb-3">
                     <div>
@@ -771,12 +749,64 @@ export default function CourseLandingPage() {
               ))}
             </div>
 
+            {/* CHANGE: Show All Reviews - expands to show all reviews in a vertical list */}
+            {showAllReviews && (
+              <div className="space-y-6 mb-8">
+                {courseData.reviews_list.map((review, idx) => (
+                  <div key={idx} className="border border-gray-300 rounded-lg p-6 hover:shadow-md transition">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <p className="font-bold text-gray-900 text-lg">{review.author}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <div className="flex gap-0.5">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <Star
+                                key={i}
+                                size={16}
+                                className="text-yellow-400"
+                                fill={i < review.rating ? 'currentColor' : 'none'}
+                              />
+                            ))}
+                          </div>
+                          <span className="text-xs text-gray-600">2 months ago</span>
+                        </div>
+                      </div>
+                      <button
+                        className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition bg-transparent border-none cursor-pointer text-lg"
+                        title="More options"
+                        aria-label="More options"
+                      >
+                        ⋮
+                      </button>
+                    </div>
+                    {review.verified && (
+                      <div className="flex items-center gap-1 bg-green-100 text-green-800 text-xs font-bold px-3 py-1 rounded inline-block mb-4">
+                        <span>✓</span>
+                        <span>Verified Purchase</span>
+                      </div>
+                    )}
+                    <p className="text-gray-700 leading-relaxed mb-4">{review.text}</p>
+                    <div className="flex items-center gap-4 pt-4 border-t border-gray-200">
+                      <button className="flex items-center gap-1 text-gray-600 hover:text-gray-900 text-sm bg-transparent border-none cursor-pointer transition p-0">
+                        <span>👍</span>
+                        <span>Helpful</span>
+                      </button>
+                      <button className="flex items-center gap-1 text-gray-600 hover:text-gray-900 text-sm bg-transparent border-none cursor-pointer transition p-0">
+                        <span>👎</span>
+                        <span>Not helpful</span>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Show All Reviews Button */}
-            <button 
+            <button
               onClick={() => setShowAllReviews(!showAllReviews)}
               className="w-full border-2 border-gray-300 text-gray-900 font-bold py-3 rounded-lg hover:bg-gray-50 transition bg-transparent cursor-pointer"
             >
-              {showAllReviews ? 'Show less reviews' : 'Show all reviews'}
+              {showAllReviews ? 'Hide reviews' : 'Show all reviews'}
             </button>
           </div>
 
