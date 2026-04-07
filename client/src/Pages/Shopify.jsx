@@ -122,7 +122,6 @@ export default function CourseLandingPage() {
   // Handle preview click
   const handlePreviewClick = (lectureTitle) => {
     console.log('Previewing:', lectureTitle);
-    // Add preview logic here if needed
   };
 
   // Format number in K format
@@ -134,7 +133,8 @@ export default function CourseLandingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-white overflow-x-hidden">
+    /* FIX: overflow-x hidden + max-width to prevent horizontal dragging */
+    <div className="min-h-screen bg-white" style={{ overflowX: 'hidden', maxWidth: '100vw' }}>
       {/* ANNOUNCEMENT BAR */}
       <div className="bg-amber-50 text-center py-3 px-4">
         <p className="text-sm font-medium text-gray-800">
@@ -145,7 +145,6 @@ export default function CourseLandingPage() {
       {/* HEADER */}
       <header className="sticky top-0 z-40 bg-white border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
-          {/* CHANGE: removed login/signup from mobile menu bar, hamburger stays */}
           <button 
             className="lg:hidden p-2"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -186,7 +185,6 @@ export default function CourseLandingPage() {
 
           <div className="flex items-center gap-3">
             <Search className="hidden lg:block text-gray-400 cursor-pointer hover:text-gray-600 transition" size={20} />
-            {/* CHANGE: Login button visible on both mobile and desktop, blue background white text */}
             <button
               onClick={() => handleNavigate('/auth/login')}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium border-none cursor-pointer text-sm"
@@ -202,16 +200,12 @@ export default function CourseLandingPage() {
           </div>
         </div>
 
-        {/* CHANGE: Mobile menu - removed Login and Sign Up buttons */}
         {mobileMenuOpen && (
           <>
-            {/* Backdrop overlay */}
             <div 
               className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
               onClick={() => setMobileMenuOpen(false)}
             />
-            
-            {/* Menu sidebar - half screen */}
             <div className="fixed top-0 left-0 h-full w-1/2 bg-gray-900 z-50 lg:hidden shadow-2xl">
               <div className="p-4 space-y-3">
                 <div className="flex justify-end mb-4">
@@ -266,7 +260,7 @@ export default function CourseLandingPage() {
         <span className="text-gray-900 font-medium">Complete Web Development Bootcamp</span>
       </div>
 
-      {/* CHANGE: COURSE HEADER WITH VIDEO PLAYER BETWEEN TITLE AND SUBTITLE */}
+      {/* COURSE HEADER WITH VIDEO PLAYER */}
       <section className="w-full bg-black text-white py-8 lg:py-12">
         <div className="max-w-7xl mx-auto px-4">
           <div className="mb-6 lg:mb-8">
@@ -275,16 +269,13 @@ export default function CourseLandingPage() {
             </span>
           </div>
 
-          {/* Course Title */}
           <h1 className="text-4xl lg:text-5xl font-bold text-white mb-8 leading-tight">
             {courseData.title}
           </h1>
 
-          {/* CHANGE: VIDEO PREVIEW PLAYER - Between title and subtitle */}
           <div className="mb-8">
             <div className="relative bg-gray-800 rounded-xl overflow-hidden aspect-video flex items-center justify-center cursor-pointer hover:bg-gray-700 transition group">
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-t from-black/40 to-transparent gap-4">
-                {/* CHANGE: YouTube-style play button - red/maroon with white triangle */}
                 <button 
                   className="relative w-16 h-16 lg:w-20 lg:h-20 rounded-full transition transform group-hover:scale-110 duration-200 shadow-lg border-none cursor-pointer"
                   style={{background: '#FF0000'}}
@@ -301,7 +292,6 @@ export default function CourseLandingPage() {
             </div>
           </div>
 
-          {/* Course Subtitle */}
           <p className="text-xl text-gray-300 mb-8 leading-relaxed max-w-3xl">
             {courseData.subtitle}
           </p>
@@ -399,7 +389,7 @@ export default function CourseLandingPage() {
             </div>
           </div>
 
-          {/* CHANGE: COURSE CONTENT ACCORDION - YouTube-style icons for video and preview */}
+          {/* COURSE CONTENT ACCORDION */}
           <div className="space-y-2 mb-16">
             {courseData.sections.map((section, idx) => {
               const isExpanded = expandedSection.includes(idx);
@@ -435,7 +425,6 @@ export default function CourseLandingPage() {
                           className="px-6 py-4 border-b border-gray-200 last:border-b-0 flex items-center justify-between hover:bg-white transition"
                         >
                           <div className="flex items-center gap-4 flex-1">
-                            {/* CHANGE: YouTube-style video icon */}
                             <div className="flex-shrink-0">
                               {lecture.type === 'video' ? (
                                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -454,7 +443,6 @@ export default function CourseLandingPage() {
                             </div>
                           </div>
                           
-                          {/* CHANGE: Preview Button with YouTube-style play icon */}
                           {lecture.preview && (
                             <button 
                               onClick={() => handlePreviewClick(lecture.title)}
@@ -502,7 +490,7 @@ export default function CourseLandingPage() {
             )}
           </div>
 
-          {/* DESCRIPTION - CHANGE: blur effect on last 2/3 lines with show more button */}
+          {/* DESCRIPTION — CHANGE: ⌄ / ⌃ icons */}
           <div className="mb-16 py-12 border-t border-gray-200">
             <h2 className="text-3xl font-bold text-gray-900 mb-6">Description</h2>
             
@@ -533,30 +521,27 @@ export default function CourseLandingPage() {
                 )}
               </div>
 
-              {/* CHANGE: blur overlay on description when collapsed */}
               {!showFullDescription && (
-                <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white via-white/80 to-transparent pointer-events-none" style={{backdropFilter: 'none'}} />
+                <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white via-white/80 to-transparent pointer-events-none" />
               )}
             </div>
             
+            {/* CHANGE: ⌄ for show more, ⌃ for show less */}
             <button
               onClick={() => setShowFullDescription(!showFullDescription)}
               className="text-purple-600 hover:text-purple-700 mt-4 text-sm font-semibold transition flex items-center gap-2 bg-transparent border-none cursor-pointer p-0"
             >
-              <span>{showFullDescription ? '▲ Show less' : '▼ Show more'}</span>
+              <span>{showFullDescription ? '⌃ Show less' : '⌄ Show more'}</span>
             </button>
           </div>
 
           {/* INSTRUCTOR SECTION */}
           <div className="mb-16 py-12 border-t border-gray-200">
-            {/* CHANGE: Mobile layout restructured; desktop stays the same */}
 
             {/* Mobile layout */}
             <div className="lg:hidden">
-              {/* 1) Instructor Header */}
               <h2 className="text-2xl font-bold text-gray-900 mb-4">Instructor</h2>
 
-              {/* 2) Instructor Name */}
               <button
                 onClick={() => handleNavigate('/instructor')}
                 className="text-green-600 hover:text-green-700 font-bold text-lg bg-transparent border-none cursor-pointer p-0 mb-4 block"
@@ -564,14 +549,12 @@ export default function CourseLandingPage() {
                 {courseData.instructor.name}
               </button>
 
-              {/* 3 & 4) Picture on left, stats on right */}
               <div className="flex items-start gap-4 mb-6">
-                {/* 3) Circular picture on left */}
-                <div className="flex-shrink-0 w-20 h-20 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-4xl">
+                {/* CHANGE: bigger circle on mobile — was w-20 h-20, now w-36 h-36 */}
+                <div className="flex-shrink-0 w-36 h-36 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-6xl">
                   {courseData.instructor.image}
                 </div>
 
-                {/* 4) Stats on right */}
                 <div className="flex flex-col gap-2">
                   <div className="flex items-center gap-2">
                     <Star size={16} className="text-yellow-400" fill="currentColor" />
@@ -592,7 +575,6 @@ export default function CourseLandingPage() {
                 </div>
               </div>
 
-              {/* Bio with blur + show more — no divider, no border */}
               <div className="relative">
                 <div className={`text-gray-700 leading-relaxed text-base ${!showFullInstructorBio ? 'max-h-14 overflow-hidden' : ''}`}>
                   <p>{courseData.instructor.bio}</p>
@@ -601,19 +583,20 @@ export default function CourseLandingPage() {
                   <div className="absolute bottom-0 left-0 right-0 h-10 bg-gradient-to-t from-white via-white/80 to-transparent pointer-events-none" />
                 )}
               </div>
+              {/* CHANGE: ⌄ for show more, ⌃ for show less */}
               <button
                 onClick={() => setShowFullInstructorBio(!showFullInstructorBio)}
                 className="text-purple-600 hover:text-purple-700 mt-3 text-sm font-semibold transition flex items-center gap-1 bg-transparent border-none cursor-pointer p-0"
               >
-                <span>{showFullInstructorBio ? '▲ Show less' : '▼ Show more'}</span>
+                <span>{showFullInstructorBio ? '⌃ Show less' : '⌄ Show more'}</span>
               </button>
             </div>
 
-            {/* Desktop layout — unchanged */}
+            {/* Desktop layout */}
             <div className="hidden lg:grid lg:grid-cols-4 gap-8">
-              {/* Instructor Image - Left */}
               <div className="lg:col-span-1 flex flex-col items-center lg:items-start">
-                <div className="w-40 h-40 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-6xl mb-6">
+                {/* CHANGE: bigger circle on desktop — was w-40 h-40, now w-56 h-56 */}
+                <div className="w-56 h-56 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-8xl mb-6">
                   {courseData.instructor.image}
                 </div>
                 <h3 className="font-bold text-gray-900 text-xl text-center lg:text-left">
@@ -629,12 +612,9 @@ export default function CourseLandingPage() {
                 </p>
               </div>
 
-              {/* Instructor Stats & Bio - Right */}
               <div className="lg:col-span-3">
-                {/* Stats Section */}
                 <div className="mb-8 pb-8 border-b border-gray-200">
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-                    {/* Rating */}
                     <div>
                       <div className="flex items-center gap-2 mb-2">
                         <Star size={18} className="text-yellow-400" fill="currentColor" />
@@ -642,32 +622,24 @@ export default function CourseLandingPage() {
                       </div>
                       <p className="text-sm text-gray-600">Instructor Rating</p>
                     </div>
-
-                    {/* Reviews */}
                     <div>
                       <p className="font-bold text-gray-900 text-lg mb-2">
                         {(courseData.instructor.reviews / 1000).toFixed(1)}K
                       </p>
                       <p className="text-sm text-gray-600">Reviews</p>
                     </div>
-
-                    {/* Students */}
                     <div>
                       <p className="font-bold text-gray-900 text-lg mb-2">
                         {(courseData.instructor.students / 1000000).toFixed(1)}M
                       </p>
                       <p className="text-sm text-gray-600">Students</p>
                     </div>
-
-                    {/* Courses */}
                     <div>
                       <p className="font-bold text-gray-900 text-lg mb-2">{courseData.instructor.courses}</p>
                       <p className="text-sm text-gray-600">Courses</p>
                     </div>
                   </div>
                 </div>
-
-                {/* Bio Section */}
                 <div>
                   <p className="text-gray-700 leading-relaxed text-base">{courseData.instructor.bio}</p>
                 </div>
@@ -675,7 +647,7 @@ export default function CourseLandingPage() {
             </div>
           </div>
 
-          {/* COURSE REVIEWS - CHANGE: show all reviews when button clicked */}
+          {/* COURSE REVIEWS */}
           <div className="mb-16 py-12 border-t border-gray-200">
             <div className="mb-10">
               <div className="flex items-center gap-4 mb-4">
@@ -690,11 +662,9 @@ export default function CourseLandingPage() {
               </div>
             </div>
 
-            {/* Individual Reviews - Horizontal scroll */}
             <div className="flex gap-6 overflow-x-auto pb-4 -mx-4 px-4 scroll-smooth mb-8" style={{scrollbarWidth: 'thin'}}>
               {courseData.reviews_list.map((review, idx) => (
                 <div key={idx} className="flex-shrink-0 w-80 lg:w-96 border border-gray-300 rounded-lg p-6 hover:shadow-md transition">
-                  {/* Review Header */}
                   <div className="flex items-center justify-between mb-3">
                     <div>
                       <p className="font-bold text-gray-900 text-lg">{review.author}</p>
@@ -712,8 +682,6 @@ export default function CourseLandingPage() {
                         <span className="text-xs text-gray-600">2 months ago</span>
                       </div>
                     </div>
-
-                    {/* Action Buttons */}
                     <button
                       className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition bg-transparent border-none cursor-pointer text-lg"
                       title="More options"
@@ -722,19 +690,13 @@ export default function CourseLandingPage() {
                       ⋮
                     </button>
                   </div>
-
-                  {/* Verified Badge */}
                   {review.verified && (
                     <div className="flex items-center gap-1 bg-green-100 text-green-800 text-xs font-bold px-3 py-1 rounded inline-block mb-4">
                       <span>✓</span>
                       <span>Verified Purchase</span>
                     </div>
                   )}
-
-                  {/* Review Text */}
                   <p className="text-gray-700 leading-relaxed mb-4">{review.text}</p>
-
-                  {/* Helpful Buttons */}
                   <div className="flex items-center gap-4 pt-4 border-t border-gray-200">
                     <button className="flex items-center gap-1 text-gray-600 hover:text-gray-900 text-sm bg-transparent border-none cursor-pointer transition p-0">
                       <span>👍</span>
@@ -749,7 +711,6 @@ export default function CourseLandingPage() {
               ))}
             </div>
 
-            {/* CHANGE: Show All Reviews - expands to show all reviews in a vertical list */}
             {showAllReviews && (
               <div className="space-y-6 mb-8">
                 {courseData.reviews_list.map((review, idx) => (
@@ -801,7 +762,6 @@ export default function CourseLandingPage() {
               </div>
             )}
 
-            {/* Show All Reviews Button */}
             <button
               onClick={() => setShowAllReviews(!showAllReviews)}
               className="w-full border-2 border-gray-300 text-gray-900 font-bold py-3 rounded-lg hover:bg-gray-50 transition bg-transparent cursor-pointer"
@@ -827,13 +787,11 @@ export default function CourseLandingPage() {
                       </span>
                     )}
                     <h3 className="font-bold text-gray-900 text-base mb-3 line-clamp-2">{course.title}</h3>
-                    
                     <div className="flex items-center gap-1 mb-2">
                       <Star size={16} className="text-yellow-400" fill="currentColor" />
                       <span className="font-bold text-sm text-gray-900">{course.rating}</span>
                       <span className="text-xs text-gray-600">({course.students})</span>
                     </div>
-                    
                     <p className="text-sm text-gray-600">{course.duration}</p>
                   </div>
                 </div>
@@ -844,7 +802,6 @@ export default function CourseLandingPage() {
           {/* VIDEO TESTIMONIALS */}
           <div className="mb-16 py-12 border-t border-gray-200">
             <h2 className="text-3xl font-bold text-gray-900 mb-8">Student testimonials</h2>
-            
             <div className="relative">
               <div className="flex gap-6 overflow-x-auto pb-4 -mx-4 px-4 scroll-smooth" style={{scrollbarWidth: 'thin'}}>
                 {videoReviews.map((review, idx) => (
@@ -862,7 +819,6 @@ export default function CourseLandingPage() {
           {/* PROJECT GALLERY */}
           <div className="mb-16 py-12 border-t border-gray-200">
             <h2 className="text-3xl font-bold text-gray-900 mb-8">Project gallery</h2>
-            
             <div className="relative">
               <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 scroll-smooth" style={{scrollbarWidth: 'thin'}}>
                 {imageGallery.map((item, idx) => (
@@ -971,7 +927,6 @@ export default function CourseLandingPage() {
         </div>
       </div>
 
-      {/* Bottom padding to prevent content from being hidden under sticky bar */}
       <div className="h-24 lg:h-28" />
     </div>
   );
