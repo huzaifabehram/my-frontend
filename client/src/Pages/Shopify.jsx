@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search } from 'lucide-react';
+import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search, User } from 'lucide-react';
 
 export default function CourseLandingPage() {
   const navigate = useNavigate();
@@ -9,6 +9,7 @@ export default function CourseLandingPage() {
   const [videoCarouselIndex, setVideoCarouselIndex] = useState(0);
   const [imageCarouselIndex, setImageCarouselIndex] = useState(0);
   const [showFullDescription, setShowFullDescription] = useState(false);
+  const [showAllReviews, setShowAllReviews] = useState(false);
 
   const courseData = {
     title: 'Complete Web Development Bootcamp 2024',
@@ -41,7 +42,7 @@ export default function CourseLandingPage() {
       { icon: Clock, text: '45 hours of on-demand video' },
       { icon: BookOpen, text: '200+ coding exercises' },
       { icon: Zap, text: '5 real-world projects' },
-      { icon: Users, text: 'Lifetime access' }
+      { icon: User, text: 'Lifetime access' }
     ],
     sections: [
       {
@@ -104,32 +105,7 @@ export default function CourseLandingPage() {
     { id: 5, image: '📸' }
   ];
 
-  const studentsBoughtCourses = [
-    { id: 1, title: 'Advanced React Patterns', rating: 4.7, students: '45K', duration: '32h', bestseller: true },
-    { id: 2, title: 'Node.js & Express Mastery', rating: 4.6, students: '38K', duration: '28h', bestseller: false },
-    { id: 3, title: 'Full Stack JavaScript', rating: 4.8, students: '52K', duration: '40h', bestseller: true },
-    { id: 4, title: 'Web Design Fundamentals', rating: 4.5, students: '62K', duration: '24h', bestseller: false }
-  ];
-
-  // Handle button navigation safely
-  const handleNavigate = (path) => {
-    setMobileMenuOpen(false);
-    navigate(path);
-  };
-
-  // Handle preview click
-  const handlePreviewClick = (lectureTitle) => {
-    console.log('Previewing:', lectureTitle);
-    // Add preview logic here if needed
-  };
-
-  // Format number in K format
-  const formatNumber = (num) => {
-    if (num >= 1000) {
-      return (num / 1000).toFixed(1) + 'K';
-    }
-    return num.toString();
-  };
+  const linkStyle = "bg-transparent border-none p-0 cursor-pointer underline";
 
   return (
     <div className="min-h-screen bg-white overflow-x-hidden">
@@ -152,45 +128,48 @@ export default function CourseLandingPage() {
           </button>
 
           <div className="absolute left-1/2 transform -translate-x-1/2 lg:relative lg:left-auto lg:transform-none">
-            <button
-              onClick={() => handleNavigate('/')}
-              className="text-2xl font-bold text-gray-900 cursor-pointer hover:text-purple-600 transition bg-transparent border-none p-0"
+            <h1
+              className="text-2xl font-bold text-gray-900 cursor-pointer hover:text-purple-600 transition"
+              onClick={() => navigate('/')}
             >
               Courseify
-            </button>
+            </h1>
           </div>
 
           <nav className="hidden lg:flex items-center gap-8 flex-1 ml-12">
             <button
-              onClick={() => handleNavigate('/courses')}
-              className="text-gray-700 hover:text-gray-900 transition bg-transparent border-none cursor-pointer p-0 font-medium"
+              onClick={() => navigate('/courses')}
+              className="text-gray-700 hover:text-gray-900 transition bg-transparent border-none cursor-pointer"
             >
               Categories
             </button>
             <button
-              onClick={() => handleNavigate('/instructor')}
-              className="text-gray-700 hover:text-gray-900 transition bg-transparent border-none cursor-pointer p-0 font-medium"
+              onClick={() => navigate('/instructor')}
+              className="text-gray-700 hover:text-gray-900 transition bg-transparent border-none cursor-pointer"
             >
               Instructor
             </button>
             <button
-              onClick={() => handleNavigate('/courses')}
-              className="text-gray-700 hover:text-gray-900 transition bg-transparent border-none cursor-pointer p-0 font-medium"
+              onClick={() => navigate('/courses')}
+              className="text-gray-700 hover:text-gray-900 transition bg-transparent border-none cursor-pointer"
             >
               About
             </button>
           </nav>
 
           <div className="flex items-center gap-3">
-            <Search className="hidden lg:block text-gray-400 cursor-pointer hover:text-gray-600 transition" size={20} />
+            <Search className="hidden lg:block text-gray-400 cursor-pointer" size={20} />
+            
+            {/* Login Button - Mobile and Desktop */}
             <button
-              onClick={() => handleNavigate('/auth/login')}
-              className="hidden lg:block px-4 py-2 text-gray-700 hover:bg-gray-100 rounded-lg transition font-medium bg-transparent border-none cursor-pointer"
+              onClick={() => navigate('/auth/login')}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium border-none cursor-pointer text-sm"
             >
               Login
             </button>
+            
             <button
-              onClick={() => handleNavigate('/auth/register')}
+              onClick={() => navigate('/auth/register')}
               className="hidden lg:block px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition font-medium border-none cursor-pointer"
             >
               Sign Up
@@ -198,118 +177,71 @@ export default function CourseLandingPage() {
           </div>
         </div>
 
-        {/* CHANGE: Mobile menu - half screen with dark background and white text */}
+        {/* MOBILE MENU */}
         {mobileMenuOpen && (
-          <>
-            {/* Backdrop overlay */}
-            <div 
-              className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
-              onClick={() => setMobileMenuOpen(false)}
-            />
-            
-            {/* Menu sidebar - half screen */}
-            <div className="fixed top-0 left-0 h-full w-1/2 bg-gray-900 z-50 lg:hidden shadow-2xl">
-              <div className="p-4 space-y-3">
-                <div className="flex justify-end mb-4">
-                  <button
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="p-2 hover:bg-gray-800 rounded-lg transition bg-transparent border-none cursor-pointer text-white"
-                    aria-label="Close menu"
-                  >
-                    <X size={24} />
-                  </button>
-                </div>
-                <button
-                  onClick={() => handleNavigate('/courses')}
-                  className="block text-white hover:text-gray-300 bg-transparent border-none cursor-pointer w-full text-left p-3 rounded hover:bg-gray-800 font-medium"
-                >
-                  Categories
-                </button>
-                <button
-                  onClick={() => handleNavigate('/instructor')}
-                  className="block text-white hover:text-gray-300 bg-transparent border-none cursor-pointer w-full text-left p-3 rounded hover:bg-gray-800 font-medium"
-                >
-                  Instructor
-                </button>
-                <button
-                  onClick={() => handleNavigate('/courses')}
-                  className="block text-white hover:text-gray-300 bg-transparent border-none cursor-pointer w-full text-left p-3 rounded hover:bg-gray-800 font-medium"
-                >
-                  About
-                </button>
-                <button
-                  onClick={() => handleNavigate('/auth/login')}
-                  className="block text-white hover:text-gray-300 bg-transparent border-none cursor-pointer w-full text-left p-3 rounded hover:bg-gray-800 font-medium"
-                >
-                  Login
-                </button>
-                <button
-                  onClick={() => handleNavigate('/auth/register')}
-                  className="block text-white hover:text-gray-300 bg-transparent border-none cursor-pointer w-full text-left p-3 rounded hover:bg-gray-800 font-medium"
-                >
-                  Sign Up
-                </button>
-              </div>
-            </div>
-          </>
+          <div className="lg:hidden border-t border-gray-200 bg-white p-4 space-y-3">
+            <button
+              onClick={() => { navigate('/courses'); setMobileMenuOpen(false); }}
+              className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left"
+            >
+              Categories
+            </button>
+            <button
+              onClick={() => { navigate('/instructor'); setMobileMenuOpen(false); }}
+              className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left"
+            >
+              Instructor
+            </button>
+            <button
+              onClick={() => { navigate('/courses'); setMobileMenuOpen(false); }}
+              className="block text-gray-700 hover:text-gray-900 bg-transparent border-none cursor-pointer w-full text-left"
+            >
+              About
+            </button>
+          </div>
         )}
       </header>
 
       {/* BREADCRUMB */}
       <div className="max-w-7xl mx-auto px-4 py-3 text-sm text-gray-600">
-        <button 
-          onClick={() => handleNavigate('/')} 
-          className="hover:underline bg-transparent border-none cursor-pointer text-gray-600 p-0"
-        >
-          Development
-        </button>
+        <button onClick={() => navigate('/')} className="hover:underline bg-transparent border-none cursor-pointer text-gray-600">Development</button>
         <span className="mx-2">›</span>
-        <button 
-          onClick={() => handleNavigate('/courses')} 
-          className="hover:underline bg-transparent border-none cursor-pointer text-gray-600 p-0"
-        >
-          Web Development
-        </button>
+        <button onClick={() => navigate('/courses')} className="hover:underline bg-transparent border-none cursor-pointer text-gray-600">Web Development</button>
         <span className="mx-2">›</span>
         <span className="text-gray-900 font-medium">Complete Web Development Bootcamp</span>
       </div>
 
-      {/* CHANGE: COURSE HEADER WITH VIDEO PLAYER BETWEEN TITLE AND SUBTITLE */}
-      <section className="w-full bg-black text-white py-8 lg:py-12">
+      {/* BLACK HERO SECTION - COURSE PREVIEW */}
+      <section className="w-full bg-black text-white py-8 lg:py-16">
         <div className="max-w-7xl mx-auto px-4">
-          <div className="mb-6 lg:mb-8">
+          <div className="grid grid-cols-1 lg:grid-cols-1 gap-6 lg:gap-8">
+            <div className="lg:col-span-1">
+              <div className="relative bg-gray-800 rounded-xl overflow-hidden aspect-video flex items-center justify-center cursor-pointer hover:bg-gray-700 transition group">
+                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-t from-black/40 to-transparent">
+                  <button className="bg-white text-black p-5 rounded-full hover:bg-gray-100 transition transform group-hover:scale-110 duration-200 shadow-lg border-none cursor-pointer">
+                    <Play size={40} fill="currentColor" />
+                  </button>
+                </div>
+              </div>
+              <p className="text-gray-400 text-sm mt-4">Preview this course</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* BLACK SECTION - COURSE INFORMATION */}
+      <section className="w-full bg-black text-white py-12 lg:py-16">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="mb-4">
             <span className="inline-block bg-yellow-400 text-black font-bold px-4 py-2 rounded-full text-sm">
               Bestseller
             </span>
           </div>
 
-          {/* Course Title */}
-          <h1 className="text-4xl lg:text-5xl font-bold text-white mb-8 leading-tight">
+          <h1 className="text-4xl lg:text-5xl font-bold text-white mb-6 leading-tight">
             {courseData.title}
           </h1>
 
-          {/* CHANGE: VIDEO PREVIEW PLAYER - Between title and subtitle */}
-          <div className="mb-8">
-            <div className="relative bg-gray-800 rounded-xl overflow-hidden aspect-video flex items-center justify-center cursor-pointer hover:bg-gray-700 transition group">
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-t from-black/40 to-transparent gap-4">
-                {/* CHANGE: YouTube-style play button - red/maroon with white triangle */}
-                <button 
-                  className="relative w-16 h-16 lg:w-20 lg:h-20 rounded-full transition transform group-hover:scale-110 duration-200 shadow-lg border-none cursor-pointer"
-                  style={{background: '#FF0000'}}
-                  aria-label="Play preview"
-                >
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M8 5v14l11-7L8 5z" fill="white"/>
-                    </svg>
-                  </div>
-                </button>
-                <p className="text-white font-semibold text-base lg:text-lg">Preview this course</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Course Subtitle */}
           <p className="text-xl text-gray-300 mb-8 leading-relaxed max-w-3xl">
             {courseData.subtitle}
           </p>
@@ -334,8 +266,8 @@ export default function CourseLandingPage() {
             <p className="text-gray-400">
               Created by{' '}
               <button
-                onClick={() => handleNavigate('/instructor')}
-                className="text-green-400 hover:text-green-300 font-semibold bg-transparent border-none cursor-pointer p-0"
+                onClick={() => navigate('/instructor')}
+                className={`text-green-400 hover:text-green-300 font-semibold ${linkStyle}`}
               >
                 {courseData.instructor.name}
               </button>
@@ -359,7 +291,7 @@ export default function CourseLandingPage() {
         </div>
       </section>
 
-      {/* WHITE CONTENT SECTION */}
+      {/* WHITE SECTION */}
       <section className="w-full bg-white py-12 lg:py-16">
         <div className="max-w-7xl mx-auto px-4">
           {/* WHAT YOU WILL LEARN */}
@@ -407,7 +339,7 @@ export default function CourseLandingPage() {
             </div>
           </div>
 
-          {/* CHANGE: COURSE CONTENT ACCORDION - YouTube-style icons for video and preview */}
+          {/* COURSE CONTENT ACCORDION */}
           <div className="space-y-2 mb-16">
             {courseData.sections.map((section, idx) => {
               const isExpanded = expandedSection.includes(idx);
@@ -418,10 +350,10 @@ export default function CourseLandingPage() {
                       if (isExpanded) {
                         setExpandedSection(expandedSection.filter(i => i !== idx));
                       } else {
-                        setExpandedSection([...expandedSection, idx]);
+                        setExpandedSection([idx]);
                       }
                     }}
-                    className="w-full px-5 py-4 flex items-center justify-between bg-white hover:bg-gray-50 transition border-none cursor-pointer"
+                    className="w-full px-5 py-3 flex items-center justify-between bg-white hover:bg-gray-50 transition"
                   >
                     <div className="flex items-center gap-3 flex-1 text-left">
                       <ChevronDown
@@ -440,39 +372,24 @@ export default function CourseLandingPage() {
                       {section.lectures_list.map((lecture, lectureIdx) => (
                         <div
                           key={lectureIdx}
-                          className="px-6 py-4 border-b border-gray-200 last:border-b-0 flex items-center justify-between hover:bg-white transition"
+                          className="px-5 py-3 border-b border-gray-200 last:border-b-0 flex items-center justify-between hover:bg-white transition"
                         >
-                          <div className="flex items-center gap-4 flex-1">
-                            {/* CHANGE: YouTube-style video icon */}
-                            <div className="flex-shrink-0">
+                          <div className="flex items-center gap-3">
+                            <span className="text-gray-600">
                               {lecture.type === 'video' ? (
-                                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                  <circle cx="12" cy="12" r="11" fill="#FF0000"/>
-                                  <path d="M10 8.5L15.5 12L10 15.5V8.5Z" fill="white"/>
-                                </svg>
+                                <Play size={16} fill="currentColor" className="text-gray-600" />
                               ) : (
-                                <div className="w-6 h-6 border-2 border-gray-600 rounded-full flex items-center justify-center">
-                                  <span className="text-gray-600 text-sm font-bold">✓</span>
-                                </div>
+                                <span>✓</span>
                               )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-gray-900 text-base font-medium">{lecture.title}</p>
+                            </span>
+                            <div className="flex-1">
+                              <p className="text-gray-900 text-sm font-medium">{lecture.title}</p>
                               <p className="text-xs text-gray-600">{lecture.duration}</p>
                             </div>
                           </div>
-                          
-                          {/* CHANGE: Preview Button with YouTube-style play icon */}
                           {lecture.preview && (
-                            <button 
-                              onClick={() => handlePreviewClick(lecture.title)}
-                              className="flex items-center gap-2 text-purple-600 hover:text-purple-700 font-bold text-sm cursor-pointer bg-transparent border-none whitespace-nowrap ml-4 transition p-0"
-                            >
-                              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                                <circle cx="12" cy="12" r="11" fill="#FF0000"/>
-                                <path d="M10 8.5L15.5 12L10 15.5V8.5Z" fill="white"/>
-                              </svg>
-                              <span>Preview</span>
+                            <button className="text-purple-600 font-bold text-xs cursor-pointer hover:text-purple-700 whitespace-nowrap ml-2 bg-transparent border-none">
+                              Preview
                             </button>
                           )}
                         </div>
@@ -488,7 +405,7 @@ export default function CourseLandingPage() {
           <div className="mb-16">
             <button
               onClick={() => setExpandedSection(expandedSection.includes('requirements') ? expandedSection.filter(i => i !== 'requirements') : [...expandedSection, 'requirements'])}
-              className="w-full flex items-center justify-between py-4 border-b-2 border-gray-300 bg-white hover:bg-gray-50 transition border-none cursor-pointer p-0"
+              className="w-full flex items-center justify-between py-4 border-b-2 border-gray-300 bg-white hover:bg-gray-50 transition"
             >
               <h2 className="text-2xl lg:text-3xl font-bold text-gray-900">Requirements</h2>
               <ChevronDown
@@ -510,266 +427,253 @@ export default function CourseLandingPage() {
             )}
           </div>
 
-          {/* DESCRIPTION */}
-          <div className="mb-16 py-12 border-t border-gray-200">
+          {/* DESCRIPTION - WITH BLUR EFFECT */}
+          <div className="mb-16">
             <h2 className="text-3xl font-bold text-gray-900 mb-6">Description</h2>
-            
-            <div className={`text-gray-700 leading-relaxed text-base space-y-4 ${!showFullDescription ? 'max-h-40 overflow-hidden' : ''}`}>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-3">What you'll learn</h3>
-                <p className="text-gray-700">
-                  {courseData.description}
-                </p>
-              </div>
-              
-              {showFullDescription && (
-                <div className="space-y-4 pt-4">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Who this course is for</h3>
-                    <p className="text-gray-700">
-                      This course is designed for complete beginners who want to become professional web developers. Whether you're career switching or starting your coding journey, this comprehensive program will guide you step by step.
-                    </p>
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-3">Course highlights</h3>
-                    <p className="text-gray-700">
-                      Learn from industry-leading instructors, build real-world projects, and get lifetime access to all course materials. You'll receive personalized feedback and have access to an active learning community.
-                    </p>
-                  </div>
-                </div>
+            <div className={`relative text-gray-700 leading-relaxed text-base ${!showFullDescription ? 'max-h-24 overflow-hidden' : ''}`}>
+              <p>
+                {courseData.description}
+              </p>
+              {!showFullDescription && (
+                <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white to-transparent"></div>
               )}
             </div>
-            
             <button
               onClick={() => setShowFullDescription(!showFullDescription)}
-              className="text-purple-600 hover:text-purple-700 mt-4 text-sm font-semibold transition flex items-center gap-2 bg-transparent border-none cursor-pointer p-0"
+              className="text-gray-700 hover:text-gray-900 mt-3 text-sm transition flex items-center gap-1 bg-transparent border-none cursor-pointer"
             >
-              <span>{showFullDescription ? '▲ Show less' : '▼ Show more'}</span>
+              <span>{showFullDescription ? '▲' : '▼'}</span>
+              <span className="text-xs">{showFullDescription ? 'Show less' : 'Show more'}</span>
             </button>
           </div>
 
-          {/* INSTRUCTOR SECTION */}
-          <div className="mb-16 py-12 border-t border-gray-200">
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
-              {/* Instructor Image - Left */}
-              <div className="lg:col-span-1 flex flex-col items-center lg:items-start">
-                <div className="w-40 h-40 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-6xl mb-6">
+          {/* INSTRUCTOR SECTION - MOBILE LAYOUT */}
+          <div className="mb-16">
+            <h2 className="text-3xl font-bold text-gray-900 mb-8">Instructor</h2>
+            
+            {/* Mobile Layout */}
+            <div className="lg:hidden">
+              <div className="flex gap-4 mb-6">
+                {/* Instructor Picture - Left */}
+                <div className="flex-shrink-0">
+                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-4xl">
+                    {courseData.instructor.image}
+                  </div>
+                </div>
+
+                {/* Stats - Right */}
+                <div className="flex-1">
+                  <h3 className="font-bold text-gray-900 text-lg mb-3">
+                    <button
+                      onClick={() => navigate('/instructor')}
+                      className={`text-green-600 hover:text-green-700 ${linkStyle}`}
+                    >
+                      {courseData.instructor.name}
+                    </button>
+                  </h3>
+
+                  {/* Stats Grid */}
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Star size={14} className="text-yellow-400" fill="currentColor" />
+                      <span className="font-bold text-gray-900 text-sm">{courseData.instructor.rating}</span>
+                      <span className="text-xs text-gray-600">Rating</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">👥</span>
+                      <span className="font-bold text-gray-900 text-sm">{(courseData.instructor.reviews / 1000).toFixed(1)}K</span>
+                      <span className="text-xs text-gray-600">Reviews</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">📚</span>
+                      <span className="font-bold text-gray-900 text-sm">{(courseData.instructor.students / 1000000).toFixed(1)}M</span>
+                      <span className="text-xs text-gray-600">Students</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Play size={14} className="text-gray-600" />
+                      <span className="font-bold text-gray-900 text-sm">{courseData.instructor.courses}</span>
+                      <span className="text-xs text-gray-600">Courses</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Description with Blur Effect */}
+              <div className="relative">
+                <p className="text-gray-700 leading-relaxed text-sm line-clamp-3">
+                  {courseData.instructor.bio}
+                </p>
+                <div className="absolute bottom-0 left-0 right-0 h-8 bg-gradient-to-t from-white to-transparent"></div>
+              </div>
+
+              <button
+                onClick={() => setShowFullDescription(!showFullDescription)}
+                className="text-gray-700 hover:text-gray-900 mt-3 text-sm transition flex items-center gap-1 bg-transparent border-none cursor-pointer"
+              >
+                <span>{showFullDescription ? '▲' : '▼'}</span>
+                <span className="text-xs font-medium">Show more</span>
+              </button>
+            </div>
+
+            {/* Desktop Layout */}
+            <div className="hidden lg:grid lg:grid-cols-4 gap-8">
+              <div className="lg:col-span-1">
+                <div className="w-full lg:w-40 h-40 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-6xl mb-6">
                   {courseData.instructor.image}
                 </div>
-                <h3 className="font-bold text-gray-900 text-xl text-center lg:text-left">
+                <h3 className="font-bold text-gray-900 text-xl mb-2">
                   <button
-                    onClick={() => handleNavigate('/instructor')}
-                    className="text-green-600 hover:text-green-700 bg-transparent border-none cursor-pointer p-0"
+                    onClick={() => navigate('/instructor')}
+                    className={`text-green-600 hover:text-green-700 ${linkStyle}`}
                   >
                     {courseData.instructor.name}
                   </button>
                 </h3>
-                <p className="text-gray-700 font-medium text-sm text-center lg:text-left mt-2">
-                  Lead Instructor at London App Brewery
-                </p>
+                <p className="text-gray-700 font-medium text-sm">Lead Instructor at London App Brewery</p>
               </div>
 
-              {/* Instructor Stats & Bio - Right */}
               <div className="lg:col-span-3">
-                {/* Stats Section */}
-                <div className="mb-8 pb-8 border-b border-gray-200">
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
-                    {/* Rating */}
-                    <div>
-                      <div className="flex items-center gap-2 mb-2">
-                        <Star size={18} className="text-yellow-400" fill="currentColor" />
-                        <span className="font-bold text-gray-900 text-lg">{courseData.instructor.rating}</span>
-                      </div>
-                      <p className="text-sm text-gray-600">Instructor Rating</p>
-                    </div>
-
-                    {/* Reviews */}
-                    <div>
-                      <p className="font-bold text-gray-900 text-lg mb-2">
-                        {(courseData.instructor.reviews / 1000).toFixed(1)}K
-                      </p>
-                      <p className="text-sm text-gray-600">Reviews</p>
-                    </div>
-
-                    {/* Students */}
-                    <div>
-                      <p className="font-bold text-gray-900 text-lg mb-2">
-                        {(courseData.instructor.students / 1000000).toFixed(1)}M
-                      </p>
-                      <p className="text-sm text-gray-600">Students</p>
-                    </div>
-
-                    {/* Courses */}
-                    <div>
-                      <p className="font-bold text-gray-900 text-lg mb-2">{courseData.instructor.courses}</p>
-                      <p className="text-sm text-gray-600">Courses</p>
-                    </div>
+                <div className="flex flex-wrap gap-6 mb-8 pb-8 border-b border-gray-200">
+                  <div className="flex items-center gap-2">
+                    <Star size={18} className="text-yellow-400" fill="currentColor" />
+                    <span className="font-bold text-gray-900">{courseData.instructor.rating}</span>
+                    <span className="text-sm text-gray-600">Instructor Rating</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">👥</span>
+                    <span className="font-bold text-gray-900">{courseData.instructor.reviews.toLocaleString()}</span>
+                    <span className="text-sm text-gray-600">Reviews</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">📚</span>
+                    <span className="font-bold text-gray-900">{courseData.instructor.students.toLocaleString()}</span>
+                    <span className="text-sm text-gray-600">Students</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">🎓</span>
+                    <span className="font-bold text-gray-900">{courseData.instructor.courses}</span>
+                    <span className="text-sm text-gray-600">Courses</span>
                   </div>
                 </div>
-
-                {/* Bio Section */}
-                <div>
-                  <p className="text-gray-700 leading-relaxed text-base">{courseData.instructor.bio}</p>
-                </div>
+                <p className="text-gray-700 leading-relaxed text-base">{courseData.instructor.bio}</p>
               </div>
             </div>
           </div>
 
-          {/* COURSE REVIEWS - Slidable with rating stars and K format */}
-          <div className="mb-16 py-12 border-t border-gray-200">
-            <div className="mb-10">
-              <div className="flex items-center gap-4 mb-4">
-                <div className="flex items-center gap-2">
-                  <Star size={32} className="text-yellow-400" fill="currentColor" />
-                  <span className="text-3xl font-bold text-gray-900">{courseData.rating}</span>
-                </div>
-                <div>
-                  <p className="text-gray-700 font-semibold">Course Rating</p>
-                  <p className="text-sm text-gray-600">{formatNumber(courseData.reviews)} reviews</p>
-                </div>
-              </div>
-            </div>
+          {/* COURSE REVIEWS */}
+          <div className="mb-16">
+            <h2 className="text-3xl font-bold text-gray-900 mb-3">Student reviews</h2>
+            <p className="text-gray-600 mb-8 text-lg">
+              <span className="font-bold text-gray-900">{courseData.reviews.toLocaleString()}</span> reviews
+            </p>
 
-            {/* Individual Reviews - Horizontal scroll */}
-            <div className="flex gap-6 overflow-x-auto pb-4 -mx-4 px-4 scroll-smooth mb-8" style={{scrollbarWidth: 'thin'}}>
-              {courseData.reviews_list.map((review, idx) => (
-                <div key={idx} className="flex-shrink-0 w-80 lg:w-96 border border-gray-300 rounded-lg p-6 hover:shadow-md transition">
-                  {/* Review Header */}
-                  <div className="flex items-center justify-between mb-3">
-                    <div>
-                      <p className="font-bold text-gray-900 text-lg">{review.author}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        <div className="flex gap-0.5">
-                          {Array.from({ length: 5 }).map((_, i) => (
-                            <Star
-                              key={i}
-                              size={16}
-                              className="text-yellow-400"
-                              fill={i < review.rating ? 'currentColor' : 'none'}
-                            />
-                          ))}
-                        </div>
-                        <span className="text-xs text-gray-600">2 months ago</span>
+            {/* Show Reviews in Grid when "Show All" is clicked */}
+            {showAllReviews ? (
+              <div className="space-y-6 mb-8">
+                {courseData.reviews_list.map((review, idx) => (
+                  <div key={idx} className="bg-white rounded-lg p-8 border border-gray-300 hover:shadow-md transition">
+                    <div className="flex gap-1 mb-4">
+                      {Array.from({ length: review.rating }).map((_, i) => (
+                        <Star key={i} size={20} className="text-yellow-400" fill="currentColor" />
+                      ))}
+                    </div>
+                    <p className="font-bold text-gray-900 mb-3 text-lg">{review.author}</p>
+                    {review.verified && (
+                      <div className="flex items-center gap-1 bg-green-100 text-green-800 text-xs font-bold px-3 py-1 rounded inline-block mb-4">
+                        <span>✓</span>
+                        <span>Verified Purchase</span>
                       </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <button
-                      className="p-2 text-gray-600 hover:bg-gray-100 rounded-lg transition bg-transparent border-none cursor-pointer text-lg"
-                      title="More options"
-                      aria-label="More options"
-                    >
-                      ⋮
-                    </button>
+                    )}
+                    <p className="text-gray-700 leading-relaxed text-base">{review.text}</p>
                   </div>
-
-                  {/* Verified Badge */}
-                  {review.verified && (
-                    <div className="flex items-center gap-1 bg-green-100 text-green-800 text-xs font-bold px-3 py-1 rounded inline-block mb-4">
-                      <span>✓</span>
-                      <span>Verified Purchase</span>
-                    </div>
-                  )}
-
-                  {/* Review Text */}
-                  <p className="text-gray-700 leading-relaxed mb-4">{review.text}</p>
-
-                  {/* Helpful Buttons */}
-                  <div className="flex items-center gap-4 pt-4 border-t border-gray-200">
-                    <button className="flex items-center gap-1 text-gray-600 hover:text-gray-900 text-sm bg-transparent border-none cursor-pointer transition p-0">
-                      <span>👍</span>
-                      <span>Helpful</span>
-                    </button>
-                    <button className="flex items-center gap-1 text-gray-600 hover:text-gray-900 text-sm bg-transparent border-none cursor-pointer transition p-0">
-                      <span>👎</span>
-                      <span>Not helpful</span>
-                    </button>
-                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="relative bg-white rounded-lg p-8 border border-gray-300 mb-8">
+                <div className="flex items-center gap-1 mb-4">
+                  {Array.from({ length: courseData.reviews_list[0].rating }).map((_, i) => (
+                    <Star key={i} size={24} className="text-yellow-400" fill="currentColor" />
+                  ))}
                 </div>
-              ))}
-            </div>
+                <p className="font-bold text-gray-900 mb-3 text-xl">{courseData.reviews_list[0].author}</p>
+                {courseData.reviews_list[0].verified && (
+                  <div className="flex items-center gap-1 bg-green-100 text-green-800 text-xs font-bold px-3 py-1 rounded inline-block mb-4">
+                    <span>✓</span>
+                    <span>Verified Purchase</span>
+                  </div>
+                )}
+                <p className="text-gray-700 leading-relaxed text-base">{courseData.reviews_list[0].text}</p>
+              </div>
+            )}
 
-            {/* Show All Reviews Button */}
-            <button className="w-full border-2 border-gray-300 text-gray-900 font-bold py-3 rounded-lg hover:bg-gray-50 transition bg-transparent cursor-pointer">
-              Show all reviews
+            <button
+              onClick={() => setShowAllReviews(!showAllReviews)}
+              className="w-full border-2 border-gray-300 text-gray-900 font-bold py-3 rounded-lg hover:bg-gray-50 transition bg-transparent cursor-pointer"
+            >
+              {showAllReviews ? 'Show less reviews' : 'Show all reviews'}
             </button>
           </div>
 
-          {/* STUDENTS ALSO BOUGHT */}
-          <div className="mb-16 py-12 border-t border-gray-200">
-            <h2 className="text-3xl font-bold text-gray-900 mb-8">Students also bought</h2>
-            
-            <div className="flex gap-6 overflow-x-auto pb-4 -mx-4 px-4 scroll-smooth" style={{scrollbarWidth: 'thin'}}>
-              {studentsBoughtCourses.map(course => (
-                <div key={course.id} className="flex-shrink-0 w-64 bg-white border border-gray-300 rounded-lg overflow-hidden hover:shadow-lg transition cursor-pointer">
-                  <div className="bg-gradient-to-br from-gray-300 to-gray-400 h-40 flex items-center justify-center text-4xl">
-                    📚
-                  </div>
-                  <div className="p-4">
-                    {course.bestseller && (
-                      <span className="inline-block bg-yellow-400 text-black font-bold px-2 py-1 rounded text-xs mb-2">
-                        Bestseller
-                      </span>
-                    )}
-                    <h3 className="font-bold text-gray-900 text-base mb-3 line-clamp-2">{course.title}</h3>
-                    
-                    <div className="flex items-center gap-1 mb-2">
-                      <Star size={16} className="text-yellow-400" fill="currentColor" />
-                      <span className="font-bold text-sm text-gray-900">{course.rating}</span>
-                      <span className="text-xs text-gray-600">({course.students})</span>
-                    </div>
-                    
-                    <p className="text-sm text-gray-600">{course.duration}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* VIDEO TESTIMONIALS */}
-          <div className="mb-16 py-12 border-t border-gray-200">
+          {/* VIDEO REVIEW CAROUSEL */}
+          <div className="mb-16">
             <h2 className="text-3xl font-bold text-gray-900 mb-8">Student testimonials</h2>
-            
-            <div className="relative">
-              <div className="flex gap-6 overflow-x-auto pb-4 -mx-4 px-4 scroll-smooth" style={{scrollbarWidth: 'thin'}}>
+            <div className="flex items-center justify-center gap-6">
+              <button
+                onClick={() => setVideoCarouselIndex((prev) => (prev - 1 + videoReviews.length) % videoReviews.length)}
+                className="p-3 hover:bg-gray-100 rounded-full transition text-gray-600 bg-transparent border-none cursor-pointer"
+              >
+                ←
+              </button>
+              <div className="flex gap-6 overflow-hidden">
                 {videoReviews.map((review, idx) => (
                   <div
                     key={idx}
-                    className="flex-shrink-0 w-96 h-64 bg-gray-300 rounded-lg flex items-center justify-center text-6xl cursor-pointer hover:shadow-lg transition"
+                    className={`flex-shrink-0 w-80 h-56 bg-gray-300 rounded-lg flex items-center justify-center text-6xl transition transform ${
+                      idx === videoCarouselIndex ? 'scale-100 opacity-100' : 'scale-75 opacity-50'
+                    }`}
                   >
                     {review.thumbnail}
                   </div>
                 ))}
               </div>
+              <button
+                onClick={() => setVideoCarouselIndex((prev) => (prev + 1) % videoReviews.length)}
+                className="p-3 hover:bg-gray-100 rounded-full transition text-gray-600 bg-transparent border-none cursor-pointer"
+              >
+                →
+              </button>
             </div>
           </div>
 
-          {/* PROJECT GALLERY */}
-          <div className="mb-16 py-12 border-t border-gray-200">
+          {/* IMAGE REVIEW CAROUSEL */}
+          <div className="mb-16">
             <h2 className="text-3xl font-bold text-gray-900 mb-8">Project gallery</h2>
-            
-            <div className="relative">
-              <div className="flex gap-4 overflow-x-auto pb-4 -mx-4 px-4 scroll-smooth" style={{scrollbarWidth: 'thin'}}>
+            <div className="flex items-center justify-center gap-6">
+              <button
+                onClick={() => setImageCarouselIndex((prev) => (prev - 1 + imageGallery.length) % imageGallery.length)}
+                className="p-3 hover:bg-gray-100 rounded-full transition text-gray-600 bg-transparent border-none cursor-pointer"
+              >
+                ←
+              </button>
+              <div className="flex gap-4 overflow-hidden">
                 {imageGallery.map((item, idx) => (
                   <div
                     key={idx}
-                    onClick={() => setImageCarouselIndex(idx)}
-                    className={`flex-shrink-0 w-64 h-64 bg-gray-300 rounded-lg flex items-center justify-center text-5xl cursor-pointer transition ${
-                      idx === imageCarouselIndex ? 'ring-4 ring-purple-600' : 'hover:shadow-lg'
+                    className={`flex-shrink-0 w-56 h-56 bg-gray-300 rounded-lg flex items-center justify-center text-5xl transition cursor-pointer ${
+                      idx === imageCarouselIndex ? 'ring-4 ring-purple-600' : 'opacity-60'
                     }`}
-                    role="button"
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        setImageCarouselIndex(idx);
-                      }
-                    }}
-                    aria-label={`Select image ${idx + 1}`}
+                    onClick={() => setImageCarouselIndex(idx)}
                   >
                     {item.image}
                   </div>
                 ))}
               </div>
+              <button
+                onClick={() => setImageCarouselIndex((prev) => (prev + 1) % imageGallery.length)}
+                className="p-3 hover:bg-gray-100 rounded-full transition text-gray-600 bg-transparent border-none cursor-pointer"
+              >
+                →
+              </button>
             </div>
           </div>
         </div>
@@ -782,41 +686,41 @@ export default function CourseLandingPage() {
             <div>
               <h3 className="font-bold text-white mb-4">Courseify</h3>
               <ul className="space-y-2 text-sm">
-                <li><button onClick={() => handleNavigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Press</button></li>
-                <li><button onClick={() => handleNavigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Contact</button></li>
+                <li><button onClick={() => navigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Press</button></li>
+                <li><button onClick={() => navigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Contact</button></li>
               </ul>
             </div>
             <div>
               <h3 className="font-bold text-white mb-4">Instructors</h3>
               <ul className="space-y-2 text-sm">
-                <li><button onClick={() => handleNavigate('/instructor')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Teach</button></li>
-                <li><button onClick={() => handleNavigate('/instructor')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Resources</button></li>
-                <li><button onClick={() => handleNavigate('/instructor')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Benefits</button></li>
+                <li><button onClick={() => navigate('/instructor')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Teach</button></li>
+                <li><button onClick={() => navigate('/instructor')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Resources</button></li>
+                <li><button onClick={() => navigate('/instructor')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Benefits</button></li>
               </ul>
             </div>
             <div>
               <h3 className="font-bold text-white mb-4">Learning</h3>
               <ul className="space-y-2 text-sm">
-                <li><button onClick={() => handleNavigate('/courses')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Categories</button></li>
-                <li><button onClick={() => handleNavigate('/courses')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Trending</button></li>
-                <li><button onClick={() => handleNavigate('/courses')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Collections</button></li>
-                <li><button onClick={() => handleNavigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">About</button></li>
+                <li><button onClick={() => navigate('/courses')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Categories</button></li>
+                <li><button onClick={() => navigate('/courses')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Trending</button></li>
+                <li><button onClick={() => navigate('/courses')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Collections</button></li>
+                <li><button onClick={() => navigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">About</button></li>
               </ul>
             </div>
             <div>
               <h3 className="font-bold text-white mb-4">Support</h3>
               <ul className="space-y-2 text-sm">
-                <li><button onClick={() => handleNavigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Help</button></li>
-                <li><button onClick={() => handleNavigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Support</button></li>
-                <li><button onClick={() => handleNavigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">FAQ</button></li>
+                <li><button onClick={() => navigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Help</button></li>
+                <li><button onClick={() => navigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Support</button></li>
+                <li><button onClick={() => navigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">FAQ</button></li>
               </ul>
             </div>
             <div>
               <h3 className="font-bold text-white mb-4">Legal</h3>
               <ul className="space-y-2 text-sm">
-                <li><button onClick={() => handleNavigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Privacy</button></li>
-                <li><button onClick={() => handleNavigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Terms</button></li>
-                <li><button onClick={() => handleNavigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300 p-0">Cookies</button></li>
+                <li><button onClick={() => navigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Privacy</button></li>
+                <li><button onClick={() => navigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Terms</button></li>
+                <li><button onClick={() => navigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-gray-300">Cookies</button></li>
               </ul>
             </div>
           </div>
@@ -826,38 +730,28 @@ export default function CourseLandingPage() {
         </div>
       </footer>
 
-      {/* STICKY BOTTOM BAR - MOBILE */}
-      <div className="fixed bottom-0 left-0 right-0 lg:hidden bg-white border-t border-gray-300 p-4 z-50 flex items-center justify-between gap-4">
-        <div className="flex flex-col">
-          <span className="text-2xl font-bold text-gray-900">${courseData.price}</span>
-          <span className="text-sm text-gray-600 line-through">${courseData.originalPrice}</span>
-        </div>
-        <button
-          onClick={() => handleNavigate('/auth/register')}
-          className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg transition text-base border-none cursor-pointer"
-        >
-          Add to cart
-        </button>
-      </div>
-
-      {/* STICKY BOTTOM BAR - DESKTOP */}
+      {/* STICKY ENROLL BUTTON - DESKTOP */}
       <div className="hidden lg:block fixed bottom-0 left-0 right-0 bg-white border-t border-gray-300 p-6 z-50">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-3xl font-bold text-gray-900">${courseData.price}</span>
-            <span className="text-lg text-gray-600 line-through">${courseData.originalPrice}</span>
-          </div>
+        <div className="max-w-7xl mx-auto">
           <button
-            onClick={() => handleNavigate('/auth/register')}
-            className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-4 px-12 rounded-lg transition text-lg border-none cursor-pointer"
+            onClick={() => navigate('/auth/register')}
+            className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-5 rounded-lg transition text-xl border-none cursor-pointer"
           >
-            Add to cart
+            Enroll Now
           </button>
         </div>
       </div>
 
-      {/* Bottom padding to prevent content from being hidden under sticky bar */}
-      <div className="h-24 lg:h-28" />
+      {/* MOBILE STICKY CTA */}
+      <div className="fixed bottom-0 left-0 right-0 lg:hidden bg-white border-t border-gray-300 p-3 flex gap-3 z-50">
+        <button
+          onClick={() => navigate('/auth/register')}
+          className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-4 rounded-lg transition text-lg border-none cursor-pointer"
+        >
+          Enroll Now
+        </button>
+      </div>
+      <div className="h-20 lg:h-24" />
     </div>
   );
 }
