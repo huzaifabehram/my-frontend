@@ -2,7 +2,8 @@ import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./context/AuthContext";
 import AuthPage            from "./Pages/AuthPages";
-import Shopify             from "./Pages/Shopify";
+import Shopify             from "./Pages/Shopify";          // Single course landing page
+import CoursesPage         from "./Pages/CoursesPage";      // All published courses
 import Portals             from "./Pages/Portals";
 import InstructorDashboard from "./Pages/InstructorDashboard";
 
@@ -27,12 +28,17 @@ function AppRoutes() {
   return (
     <Routes>
       {/* ── PUBLIC ─────────────────────────────────────────────────────── */}
-      {/* Landing page */}
+      {/* Landing / home */}
       <Route path="/"           element={<Shopify />} />
-      {/* Browse all courses */}
-      <Route path="/courses"    element={<Shopify />} />
-      {/* Single course detail */}
+
+      {/* All published courses */}
+      <Route path="/courses"    element={<CoursesPage />} />
+
+      {/* Single course detail — id can be a slug or numeric id */}
       <Route path="/course/:id" element={<Shopify />} />
+
+      {/* Instructor public profile */}
+      <Route path="/instructor-profile" element={<Shopify />} />
 
       {/* Auth */}
       <Route path="/auth"          element={<Navigate to="/auth/login" replace />} />
@@ -46,7 +52,7 @@ function AppRoutes() {
         path="/portal/*"
         element={
           <ProtectedRoute role="student">
-            <Portals/>
+            <Portals />
           </ProtectedRoute>
         }
       />
