@@ -1,14 +1,40 @@
 // src/App.jsx
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider, useAuth }   from "./context/AuthContext";
-import { CoursesProvider }         from "./context/CoursesContext";   // ← NEW
-import AuthPage                    from "./Pages/AuthPages";
-import Shopify                     from "./Pages/Shopify";
-import CoursesPage                 from "./Pages/CoursesPage";
-import Portals                     from "./Pages/Portals";
-import InstructorDashboard         from "./Pages/InstructorDashboard";
+import { AuthProvider, useAuth }  from "./context/AuthContext";
+import { CoursesProvider }        from "./context/CoursesContext";
+import AuthPage                   from "./Pages/AuthPages";
+import Shopify                    from "./Pages/Shopify";
+import CoursesPage                from "./Pages/CoursesPage";
+import Portals                    from "./Pages/Portals";
+import InstructorDashboard        from "./Pages/InstructorDashboard";
 
+// ─── Error boundary: shows a readable message instead of a blank screen ───────
+class ErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(err) { return { error: err }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div style={{ padding: 40, fontFamily: "monospace", color: "#c00" }}>
+          <h2>🚨 App crashed — check the console</h2>
+          <pre style={{ whiteSpace: "pre-wrap", fontSize: 13 }}>
+            {this.state.error?.message}
+            {"\n\n"}
+            {this.state.error?.stack}
+          </pre>
+          <button onClick={() => this.setState({ error: null })}
+            style={{ marginTop: 16, padding: "8px 16px", cursor: "pointer" }}>
+            Retry
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// ─── Screens ──────────────────────────────────────────────────────────────────
 function LoadingScreen() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -26,10 +52,11 @@ function ProtectedRoute({ children, role }) {
   return children;
 }
 
+// ─── Routes ───────────────────────────────────────────────────────────────────
 function AppRoutes() {
   return (
     <Routes>
-      {/* ── PUBLIC ───────────────────────────────────────────────── */}
+      {/* Public */}
       <Route path="/"           element={<Shopify />} />
       <Route path="/courses"    element={<CoursesPage />} />
       <Route path="/course/:id" element={<Shopify />} />
@@ -41,40 +68,30 @@ function AppRoutes() {
       <Route path="/login"         element={<Navigate to="/auth/login"    replace />} />
       <Route path="/register"      element={<Navigate to="/auth/register" replace />} />
 
-      {/* ── PROTECTED ────────────────────────────────────────────── */}
-      <Route
-        path="/portal/*"
-        element={
-          <ProtectedRoute role="student">
-            <Portals />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/instructor/*"
-        element={
-          <ProtectedRoute role="instructor">
-            <InstructorDashboard />
-          </ProtectedRoute>
-        }
-      />
+      {/* Protected */}
+      <Route path="/portal/*" element={
+        <ProtectedRoute role="student"><Portals /></ProtectedRoute>
+      }/>
+      <Route path="/instructor/*" element={
+        <ProtectedRoute role="instructor"><InstructorDashboard /></ProtectedRoute>
+      }/>
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
 
+// ─── Root ─────────────────────────────────────────────────────────────────────
 export default function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        {/* CoursesProvider sits inside AuthProvider so it can access the
-            auth token if your API requires it, but outside the router
-            so all pages share the same courses cache.                  */}
-        <CoursesProvider>
-          <AppRoutes />
-        </CoursesProvider>
-      </AuthProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <CoursesProvider>
+            <AppRoutes />
+          </CoursesProvider>
+        </AuthProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
