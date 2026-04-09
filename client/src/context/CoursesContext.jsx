@@ -2,10 +2,14 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import axios from "axios";
 
-// Uses the same base URL as every other API call in the app
+// ⚠️ USES SAME BASE URL AS AuthContext
+const BASE_URL = process.env.REACT_APP_API_URL || "https://my-course-backend-8u69.onrender.com/api";
+
 const API = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || "http://localhost:5000/api",
+  baseURL: BASE_URL,
 });
+
+// Attach token to every request
 API.interceptors.request.use((req) => {
   const token = localStorage.getItem("token");
   if (token) req.headers.Authorization = `Bearer ${token}`;
@@ -26,7 +30,6 @@ export function normalizeCourse(raw, index) {
   if (!raw || typeof raw !== "object") return null;
   const idx = typeof index === "number" ? index : 0;
 
-  // Your backend uses status: "published" (not isPublished)
   const status = raw.status || "draft";
 
   const rawSections = Array.isArray(raw.sections) ? raw.sections : [];
@@ -56,7 +59,6 @@ export function normalizeCourse(raw, index) {
   const rawDiscount = Number(raw.discountPrice) || rawPrice;
   const students    = Number(raw.studentsEnrolled) || 0;
 
-  // instructor is populated as { name, avatar, title, bio }
   const inst = raw.instructor;
   const instructorName = inst && typeof inst === "object" ? inst.name : (inst || "Instructor");
   const instructorBio  = inst && typeof inst === "object" ? (inst.bio || "") : "";
@@ -124,13 +126,15 @@ export function CoursesProvider({ children }) {
     setLoading(true);
     setError(null);
     try {
-      // GET /api/courses already filters by status:"published" on the backend
+      console.log(`[CoursesContext] 🔍 Fetching from: ${BASE_URL}/courses`);
       const res = await API.get("/courses");
       const raw = Array.isArray(res.data) ? res.data : (res.data?.courses || []);
-      console.log(`[CoursesContext] fetched ${raw.length} published courses`);
+      console.log(`[CoursesContext] ✅ Fetched ${raw.length} published courses`);
+      console.log(`[CoursesContext] Sample course:`, raw[0]);
       setCourses(raw.map((c, i) => normalizeCourse(c, i)).filter(Boolean));
     } catch (err) {
-      console.error("[CoursesContext] fetch failed:", err.message);
+      console.error("[CoursesContext] ❌ Fetch failed:", err.message);
+      console.error("[CoursesContext] Full error:", err.response?.data || err);
       setError(err.message);
       setCourses([]);
     } finally {
@@ -139,6 +143,24 @@ export function CoursesProvider({ children }) {
   }, []);
 
   useEffect(() => { fetchPublishedCourses(); }, [fetchPublishedCourses]);
+
+  // ─── NEW: Fetch a single course by ID with full sections data ─────────────
+  // The list endpoint uses .select("-sections") so sections are stripped.
+  // This hits /api/courses/:id which returns the full document including sections.
+  const fetchCourseById = useCallback(async (id) => {
+    if (!id) return null;
+    try {
+      console.log(`[CoursesContext] 🔍 Fetching full course: ${BASE_URL}/courses/${id}`);
+      const res = await API.get(`/courses/${id}`);
+      const index = courses.findIndex((c) => c._id === id);
+      const course = normalizeCourse(res.data, index >= 0 ? index : 0);
+      console.log(`[CoursesContext] ✅ Full course fetched, sections:`, course?.sections?.length);
+      return course;
+    } catch (err) {
+      console.error("[CoursesContext] ❌ fetchCourseById failed:", err.message);
+      return null;
+    }
+  }, [courses]);
 
   const syncCreated = useCallback((raw, index) => {
     if (!raw || raw.status !== "published") return;
@@ -177,6 +199,7 @@ export function CoursesProvider({ children }) {
     <CoursesContext.Provider value={{
       courses, loading, error,
       fetchPublishedCourses,
+      fetchCourseById,
       syncCreated, syncUpdated, syncDeleted,
       getCourse,
     }}>

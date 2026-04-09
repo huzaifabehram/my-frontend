@@ -4,6 +4,7 @@
 // UPDATED: Only shows published courses in "Students also bought" section
 // UPDATED: Full Bunny.net video support with unified helper functions
 // UPDATED: Full-screen Course Preview Popup with video player and lecture list
+// UPDATED: fetchCourseById used to load full sections from /api/courses/:id
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search } from 'lucide-react';
@@ -41,50 +42,27 @@ function isDirectVideo(url) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BUNNY EMBED URL RESOLVER
-// Converts any Bunny.net URL format into a playable iframe embed URL.
-//
-// Supported input formats:
-//   • https://iframe.mediadelivery.net/embed/{libraryId}/{videoId}   → used as-is
-//   • https://iframe.mediadelivery.net/play/{libraryId}/{videoId}    → /play/ → /embed/
-//   • https://player.mediadelivery.net/play/{libraryId}/{videoId}    → converted to /embed/
-//   • https://video.bunnycdn.com/play/{libraryId}/{videoId}          → converted
-//   • https://vz-{hash}.b-cdn.net/{videoId}/playlist.m3u8            → direct <video> fallback
-//   • Any URL containing a GUID + library ID                          → converted
-//
-// Returns null for direct .mp4 CDN links (use <video> tag for those).
 // ─────────────────────────────────────────────────────────────────────────────
 
 function getBunnyEmbedUrl(url) {
   if (!url) return null;
-
-  // Already a valid embed URL — use as-is
   if (url.includes('iframe.mediadelivery.net/embed/')) return url;
-
-  // iframe.mediadelivery.net/play/ → /embed/
   if (url.includes('iframe.mediadelivery.net/play/')) {
     return url.replace('/play/', '/embed/');
   }
-
-  // player.mediadelivery.net/play/LIBRARY_ID/VIDEO_GUID → iframe.mediadelivery.net/embed/
   const playerMatch = url.match(/player\.mediadelivery\.net\/play\/(\d+)\/([a-zA-Z0-9-]+)/);
   if (playerMatch) {
     return `https://iframe.mediadelivery.net/embed/${playerMatch[1]}/${playerMatch[2]}?autoplay=false&loop=false&muted=false&preload=true`;
   }
-
-  // video.bunnycdn.com/play/LIBRARY_ID/VIDEO_GUID
   const bunnyPlay = url.match(/video\.bunnycdn\.com\/play\/(\d+)\/([a-zA-Z0-9-]+)/);
   if (bunnyPlay) {
     return `https://iframe.mediadelivery.net/embed/${bunnyPlay[1]}/${bunnyPlay[2]}?autoplay=false&loop=false&muted=false&preload=true`;
   }
-
-  // Generic: URL contains both a numeric library ID and a GUID
   const guidMatch = url.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
   const libMatch  = url.match(/\/(\d+)\//);
   if (guidMatch && libMatch) {
     return `https://iframe.mediadelivery.net/embed/${libMatch[1]}/${guidMatch[1]}?autoplay=false&loop=false&muted=false&preload=true`;
   }
-
-  // Direct CDN .mp4 — no embed URL, caller falls back to <video>
   return null;
 }
 
@@ -94,7 +72,6 @@ function getBunnyEmbedUrl(url) {
 
 function BunnyPlayer({ url, className = "" }) {
   const embedUrl = getBunnyEmbedUrl(url);
-
   if (embedUrl) {
     return (
       <div className={`relative w-full aspect-video bg-black ${className}`}>
@@ -110,8 +87,6 @@ function BunnyPlayer({ url, className = "" }) {
       </div>
     );
   }
-
-  // Fallback: direct CDN mp4
   return (
     <video
       src={url}
@@ -124,13 +99,10 @@ function BunnyPlayer({ url, className = "" }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // UNIVERSAL VIDEO PLAYER
-// Auto-detects URL type and renders the right player.
-// Use this everywhere in the app — YouTube, Bunny, or direct video.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function VideoPlayer({ url, className = "" }) {
   if (!url) return null;
-
   const ytId = getYouTubeId(url);
   if (ytId) {
     return (
@@ -147,11 +119,9 @@ function VideoPlayer({ url, className = "" }) {
       </div>
     );
   }
-
   if (isBunnyUrl(url)) {
     return <BunnyPlayer url={url} className={className} />;
   }
-
   if (isDirectVideo(url)) {
     return (
       <video
@@ -162,7 +132,6 @@ function VideoPlayer({ url, className = "" }) {
       />
     );
   }
-
   return null;
 }
 
@@ -172,7 +141,6 @@ function CourseThumbnail({ course }) {
   const ytId = getYouTubeId(course.previewVideoUrl);
   const isBunny = isBunnyUrl(course.previewVideoUrl);
 
-  // Bunny.net video player - use unified VideoPlayer component
   if (isBunny) {
     return (
       <div className="relative w-full h-full bg-black">
@@ -180,8 +148,6 @@ function CourseThumbnail({ course }) {
       </div>
     );
   }
-
-  // YouTube video with preview overlay
   if (ytId) {
     return (
       <div className="relative w-full h-full bg-black flex items-center justify-center group cursor-pointer">
@@ -198,24 +164,18 @@ function CourseThumbnail({ course }) {
       </div>
     );
   }
-
-  // Direct video URL
   if (course.previewVideoUrl && !imgErr) {
     return (
       <video src={course.previewVideoUrl} className="w-full h-full object-cover" controls
         onError={() => setImgErr(true)} />
     );
   }
-
-  // Static thumbnail image
   if (course.thumbnail && !imgErr) {
     return (
       <img src={course.thumbnail} alt={course.title} className="w-full h-full object-cover"
         onError={() => setImgErr(true)} />
     );
   }
-
-  // Emoji fallback
   return (
     <div className={`w-full h-full bg-gradient-to-br ${course.color || 'from-blue-600 to-purple-700'} flex flex-col items-center justify-center gap-4`}>
       <span className="text-8xl">{course.emoji || '📚'}</span>
@@ -234,51 +194,54 @@ function formatNumber(num) {
 export default function CourseLandingPage() {
   const navigate = useNavigate();
   const { id }   = useParams();
-  const { courses, loading, getCourse } = useCourses();
 
-  const [mobileMenuOpen,       setMobileMenuOpen]       = useState(false);
-  const [expandedSection,      setExpandedSection]      = useState([0]);
-  const [imageCarouselIndex,   setImageCarouselIndex]   = useState(0);
-  const [showFullDescription,  setShowFullDescription]  = useState(false);
-  const [showAllReviews,       setShowAllReviews]       = useState(false);
-  const [showFullInstructorBio,setShowFullInstructorBio]= useState(false);
-  
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PREVIEW POPUP STATE
-  // ═══════════════════════════════════════════════════════════════════════════
-  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [currentVideo, setCurrentVideo] = useState('');
+  // ── CHANGE: also pull fetchCourseById from context ────────────────────────
+  const { courses, loading, getCourse, fetchCourseById } = useCourses();
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // CRITICAL: Resolve which course to show
-  // - If we have an :id param (route /course/:id) → find that specific course
-  // - If we're at "/" with no id → show the first PUBLISHED course as demo
-  // ═══════════════════════════════════════════════════════════════════════════
+  const [mobileMenuOpen,        setMobileMenuOpen]        = useState(false);
+  const [expandedSection,       setExpandedSection]       = useState([0]);
+  const [imageCarouselIndex,    setImageCarouselIndex]    = useState(0);
+  const [showFullDescription,   setShowFullDescription]   = useState(false);
+  const [showAllReviews,        setShowAllReviews]        = useState(false);
+  const [showFullInstructorBio, setShowFullInstructorBio] = useState(false);
+  const [isPreviewOpen,         setIsPreviewOpen]         = useState(false);
+  const [currentVideo,          setCurrentVideo]          = useState('');
+
+  // ── CHANGE: fullCourse holds the complete course data including sections ──
+  const [fullCourse, setFullCourse] = useState(null);
+  const [fullCourseLoading, setFullCourseLoading] = useState(false);
+
+  // ── CHANGE: when id is present, fetch the full course with sections ────────
+  useEffect(() => {
+    if (!id) return;
+    setFullCourse(null);
+    setFullCourseLoading(true);
+    fetchCourseById(id).then((course) => {
+      if (course) setFullCourse(course);
+      setFullCourseLoading(false);
+    });
+  }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── CHANGE: courseData prefers fullCourse (has sections) over list version ─
   const courseData = useMemo(() => {
     if (id) {
-      return getCourse(id);
+      // fullCourse is the complete version with sections — use it once loaded
+      // fall back to getCourse (no sections) while loading so page doesn't flash
+      return fullCourse || getCourse(id);
     }
-    // For homepage demo, show first published course
     const publishedCourses = courses.filter(c => c.status === 'published');
     return publishedCourses.length > 0 ? publishedCourses[0] : null;
-  }, [id, courses, getCourse]);
+  }, [id, fullCourse, courses, getCourse]);
 
-  // Sections are already normalised by CoursesContext
+  // Sections from the full course data
   const sections = courseData?.sections || [];
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Students-also-bought: ONLY show other PUBLISHED courses
-  // Filter out the current course and any draft/review courses
-  // ═══════════════════════════════════════════════════════════════════════════
   const studentsBoughtCourses = useMemo(() => {
     return courses
       .filter(c => c._id !== courseData?._id && c.status === 'published')
       .slice(0, 4);
   }, [courses, courseData?._id]);
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PREVIEW LECTURES - Get all lectures where preview === true
-  // ═══════════════════════════════════════════════════════════════════════════
   const previewLectures = useMemo(() => {
     const lectures = [];
     sections.forEach((section, sectionIdx) => {
@@ -299,10 +262,7 @@ export default function CourseLandingPage() {
   }, [sections]);
 
   const handleNavigate = (path) => { setMobileMenuOpen(false); navigate(path); };
-  
-  // ═══════════════════════════════════════════════════════════════════════════
-  // PREVIEW POPUP HANDLERS
-  // ═══════════════════════════════════════════════════════════════════════════
+
   const handlePreviewClick = () => {
     setCurrentVideo(courseData?.previewVideoUrl || '');
     setIsPreviewOpen(true);
@@ -317,30 +277,22 @@ export default function CourseLandingPage() {
     setCurrentVideo(videoUrl);
   };
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // ESC KEY HANDLER - Close preview on ESC
-  // ═══════════════════════════════════════════════════════════════════════════
   useEffect(() => {
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && isPreviewOpen) {
-        handleClosePreview();
-      }
+      if (e.key === 'Escape' && isPreviewOpen) handleClosePreview();
     };
-
     if (isPreviewOpen) {
       window.addEventListener('keydown', handleKeyDown);
-      // Disable body scroll when preview is open
       document.body.style.overflow = 'hidden';
     }
-
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       document.body.style.overflow = 'unset';
     };
   }, [isPreviewOpen]);
 
-  // ── Loading state ────────────────────────────────────────────────────────
-  if (loading) {
+  // ── Loading state — show spinner while either context or full course loads ─
+  if (loading || fullCourseLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
         <div className="w-10 h-10 border-4 border-purple-600 border-t-transparent rounded-full animate-spin" />
@@ -348,7 +300,6 @@ export default function CourseLandingPage() {
     );
   }
 
-  // ── Not found ────────────────────────────────────────────────────────────
   if (!courseData) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-white gap-4">
@@ -362,25 +313,6 @@ export default function CourseLandingPage() {
     );
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // SECURITY CHECK: If someone tries to access a draft/review course via URL,
-  // redirect them to courses page (optional - remove if instructors should preview)
-  // ═══════════════════════════════════════════════════════════════════════════
-  // Uncomment this if you want to prevent public access to unpublished courses:
-  // if (courseData.status !== 'published') {
-  //   return (
-  //     <div className="min-h-screen flex flex-col items-center justify-center bg-white gap-4">
-  //       <p className="text-6xl">🔒</p>
-  //       <h2 className="text-2xl font-bold text-gray-900">This course is not published yet</h2>
-  //       <button onClick={() => navigate('/courses')}
-  //         className="px-6 py-2 bg-purple-600 text-white font-semibold rounded-lg hover:bg-purple-700 transition border-none cursor-pointer">
-  //         Browse published courses
-  //       </button>
-  //     </div>
-  //   );
-  // }
-
-  // ── Instructor shape (normalised by context, with fallbacks) ─────────────
   const instructor = {
     name:     courseData.instructor        || 'Instructor',
     rating:   courseData.instructorRating  || 0,
@@ -396,12 +328,9 @@ export default function CourseLandingPage() {
   return (
     <div className="min-h-screen bg-white overflow-x-hidden w-full">
 
-      {/* ═══════════════════════════════════════════════════════════════════════════
-          FULL-SCREEN COURSE PREVIEW POPUP
-          ═══════════════════════════════════════════════════════════════════════════ */}
+      {/* FULL-SCREEN COURSE PREVIEW POPUP */}
       {isPreviewOpen && (
         <div className="fixed inset-0 z-[9999] bg-black bg-opacity-95 flex flex-col animate-fadeIn">
-          {/* Close Button */}
           <div className="absolute top-4 right-4 z-10">
             <button
               onClick={handleClosePreview}
@@ -411,19 +340,14 @@ export default function CourseLandingPage() {
               <X size={28} className="text-white" />
             </button>
           </div>
-
-          {/* Video Player Section - Sticky Top */}
           <div className="bg-black border-b border-gray-800">
             <div className="max-w-6xl mx-auto">
               <VideoPlayer url={currentVideo} className="w-full" />
             </div>
           </div>
-
-          {/* Lecture List Section - Scrollable */}
           <div className="flex-1 overflow-y-auto bg-gray-900">
             <div className="max-w-6xl mx-auto p-6">
               <h2 className="text-2xl font-bold text-white mb-6">Course Preview</h2>
-              
               {previewLectures.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-gray-400 text-lg">No preview lectures available</p>
@@ -437,17 +361,13 @@ export default function CourseLandingPage() {
                         key={`${lecture.sectionIdx}-${lecture.lectureIdx}`}
                         onClick={() => handleLectureClick(lecture.videoUrl)}
                         className={`p-4 rounded-lg cursor-pointer transition ${
-                          isPlaying
-                            ? 'bg-purple-600 hover:bg-purple-700'
-                            : 'bg-gray-800 hover:bg-gray-750'
+                          isPlaying ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-800 hover:bg-gray-750'
                         }`}
                       >
                         <div className="flex items-center gap-4">
                           <div className="flex-shrink-0">
                             {lecture.type === 'video' ? (
-                              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                                isPlaying ? 'bg-white' : 'bg-purple-600'
-                              }`}>
+                              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${isPlaying ? 'bg-white' : 'bg-purple-600'}`}>
                                 <Play size={20} className={isPlaying ? 'text-purple-600' : 'text-white'} fill="currentColor" />
                               </div>
                             ) : (
@@ -457,20 +377,14 @@ export default function CourseLandingPage() {
                             )}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-medium mb-1 ${
-                              isPlaying ? 'text-white' : 'text-gray-400'
-                            }`}>
+                            <p className={`text-sm font-medium mb-1 ${isPlaying ? 'text-white' : 'text-gray-400'}`}>
                               {lecture.sectionTitle}
                             </p>
-                            <p className={`font-semibold text-lg ${
-                              isPlaying ? 'text-white' : 'text-gray-200'
-                            }`}>
+                            <p className={`font-semibold text-lg ${isPlaying ? 'text-white' : 'text-gray-200'}`}>
                               {lecture.title}
                             </p>
                             {lecture.duration && (
-                              <p className={`text-sm mt-1 ${
-                                isPlaying ? 'text-purple-100' : 'text-gray-500'
-                              }`}>
+                              <p className={`text-sm mt-1 ${isPlaying ? 'text-purple-100' : 'text-gray-500'}`}>
                                 {lecture.duration}
                               </p>
                             )}
@@ -564,7 +478,6 @@ export default function CourseLandingPage() {
 
           <h1 className="text-4xl lg:text-5xl font-bold text-white mb-8 leading-tight">{courseData.title}</h1>
 
-          {/* VIDEO / THUMBNAIL - Using unified VideoPlayer */}
           <div className="mb-8">
             <div className="relative bg-gray-800 rounded-xl overflow-hidden aspect-video">
               <div onClick={handlePreviewClick} className="cursor-pointer">
@@ -635,8 +548,8 @@ export default function CourseLandingPage() {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
               {[
                 { icon: Clock,    text: courseData.duration ? `${courseData.duration} of on-demand video` : 'On-demand video' },
-                { icon: BookOpen, text: `${courseData.lectures || 0} lectures` },
-                { icon: Zap,      text: sections.length + ' sections' },
+                { icon: BookOpen, text: `${totalLectures} lectures` },
+                { icon: Zap,      text: `${sections.length} sections` },
                 { icon: Users,    text: 'Lifetime access' },
               ].map((item, idx) => {
                 const Icon = item.icon;
@@ -668,7 +581,7 @@ export default function CourseLandingPage() {
                   return (
                     <div key={idx} className="border border-gray-300 rounded-lg overflow-hidden">
                       <button
-                        onClick={() => setExpandedSection(isExpanded ? expandedSection.filter(i=>i!==idx) : [...expandedSection, idx])}
+                        onClick={() => setExpandedSection(isExpanded ? expandedSection.filter(i => i !== idx) : [...expandedSection, idx])}
                         className="w-full px-5 py-4 flex items-center justify-between bg-white hover:bg-gray-50 transition border-none cursor-pointer">
                         <div className="flex items-center gap-3 flex-1 text-left">
                           <ChevronDown size={20} className={`text-gray-600 transition flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
@@ -724,7 +637,7 @@ export default function CourseLandingPage() {
           {/* REQUIREMENTS */}
           {courseData.requirements?.length > 0 && (
             <div className="mb-16">
-              <button onClick={() => setExpandedSection(expandedSection.includes('req') ? expandedSection.filter(i=>i!=='req') : [...expandedSection,'req'])}
+              <button onClick={() => setExpandedSection(expandedSection.includes('req') ? expandedSection.filter(i => i !== 'req') : [...expandedSection, 'req'])}
                 className="w-full flex items-center justify-between py-4 border-b-2 border-gray-300 bg-white hover:bg-gray-50 transition border-x-0 border-t-0 cursor-pointer p-0">
                 <h2 className="text-2xl lg:text-3xl font-bold text-gray-900">Requirements</h2>
                 <ChevronDown size={28} className={`text-gray-600 transition ${expandedSection.includes('req') ? 'rotate-180' : ''}`} />
@@ -794,7 +707,7 @@ export default function CourseLandingPage() {
               {instructor.bio && (
                 <button onClick={() => setShowFullInstructorBio(!showFullInstructorBio)}
                   className="text-purple-600 hover:text-purple-700 mt-3 text-base font-semibold transition flex items-center gap-2 bg-transparent border-none cursor-pointer p-0">
-                  <span style={{ fontSize:'24px', lineHeight:'1' }}>{showFullInstructorBio ? '⌃' : '⌄'}</span>
+                  <span style={{ fontSize: '24px', lineHeight: '1' }}>{showFullInstructorBio ? '⌃' : '⌄'}</span>
                   <span>{showFullInstructorBio ? 'Show less' : 'Show more'}</span>
                 </button>
               )}
@@ -863,7 +776,7 @@ export default function CourseLandingPage() {
             </div>
           )}
 
-          {/* STUDENTS ALSO BOUGHT - PUBLISHED COURSES ONLY */}
+          {/* STUDENTS ALSO BOUGHT */}
           {studentsBoughtCourses.length > 0 && (
             <div className="mb-16 py-12 border-t border-gray-200">
               <h2 className="text-3xl font-bold text-gray-900 mb-8">Students also bought</h2>
