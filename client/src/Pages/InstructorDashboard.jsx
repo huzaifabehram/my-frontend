@@ -134,7 +134,6 @@ function getYouTubeId(url) {
 
 function getBunnyVideoId(url) {
   if (!url) return null;
-  // Matches: https://vod-cdn.bunny.net/[id].mp4 or bunny.net/[id] patterns
   const patterns = [
     /bunny\.net\/(.+?)(?:\.mp4)?$/i,
     /vod-cdn\.bunny\.net\/(.+?)(?:\.mp4)?$/i,
@@ -148,7 +147,12 @@ function getBunnyVideoId(url) {
 }
 
 function isBunnyUrl(url) {
-  return url && (url.includes('bunny.net') || url.includes('vod-cdn.bunny.net'));
+  return url && (
+    url.includes('bunny.net') ||
+    url.includes('vod-cdn.bunny.net') ||
+    url.includes('iframe.mediadelivery.net') ||
+    url.includes('video.bunnycdn.com')
+  );
 }
 
 function isYouTubeUrl(url) {
@@ -157,6 +161,124 @@ function isYouTubeUrl(url) {
 
 function isDirectVideo(url) {
   return url && (url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov'));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BUNNY EMBED URL RESOLVER
+// Converts any Bunny.net URL format into a playable iframe embed URL.
+//
+// Supported input formats:
+//   • https://iframe.mediadelivery.net/embed/LIB/GUID   → used as-is
+//   • https://iframe.mediadelivery.net/play/LIB/GUID    → /play/ → /embed/
+//   • https://video.bunnycdn.com/play/LIB/GUID          → converted
+//   • https://vod-cdn.bunny.net/.../*.mp4               → direct <video> fallback
+//   • Any URL containing a GUID + library ID            → converted
+//
+// Returns null for direct .mp4 CDN links (use <video> tag for those).
+// ─────────────────────────────────────────────────────────────────────────────
+
+function getBunnyEmbedUrl(url) {
+  if (!url) return null;
+
+  // Already a valid embed URL — use as-is
+  if (url.includes('iframe.mediadelivery.net/embed/')) return url;
+
+  // /play/ → /embed/
+  if (url.includes('iframe.mediadelivery.net/play/')) {
+    return url.replace('/play/', '/embed/');
+  }
+
+  // video.bunnycdn.com/play/LIBRARY_ID/VIDEO_GUID
+  const bunnyPlay = url.match(/video\.bunnycdn\.com\/play\/(\d+)\/([a-zA-Z0-9-]+)/);
+  if (bunnyPlay) {
+    return `https://iframe.mediadelivery.net/embed/${bunnyPlay[1]}/${bunnyPlay[2]}?autoplay=false&loop=false&muted=false&preload=true`;
+  }
+
+  // Generic: URL contains both a numeric library ID and a GUID
+  const guidMatch = url.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+  const libMatch  = url.match(/\/(\d+)\//);
+  if (guidMatch && libMatch) {
+    return `https://iframe.mediadelivery.net/embed/${libMatch[1]}/${guidMatch[1]}?autoplay=false&loop=false&muted=false&preload=true`;
+  }
+
+  // Direct CDN .mp4 — no embed URL, caller falls back to <video>
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BUNNY PLAYER — iframe embed or <video> fallback
+// ─────────────────────────────────────────────────────────────────────────────
+
+function BunnyPlayer({ url, className = "" }) {
+  const embedUrl = getBunnyEmbedUrl(url);
+
+  if (embedUrl) {
+    return (
+      <div className={`relative w-full aspect-video bg-black rounded-xl overflow-hidden ${className}`}>
+        <iframe
+          src={embedUrl}
+          className="absolute inset-0 w-full h-full"
+          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+          allowFullScreen
+          title="Bunny Stream Video"
+          loading="lazy"
+        />
+      </div>
+    );
+  }
+
+  // Fallback: direct CDN mp4
+  return (
+    <video
+      src={url}
+      className={`w-full aspect-video bg-black rounded-xl ${className}`}
+      controls
+      preload="metadata"
+    />
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UNIVERSAL VIDEO PLAYER
+// Auto-detects URL type and renders the right player.
+// Use this everywhere in the app — YouTube, Bunny, or direct video.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function VideoPlayer({ url, className = "" }) {
+  if (!url) return null;
+
+  const ytId = getYouTubeId(url);
+  if (ytId) {
+    return (
+      <div className={`relative w-full aspect-video bg-black rounded-xl overflow-hidden ${className}`}>
+        <iframe
+          src={`https://www.youtube.com/embed/${ytId}`}
+          className="absolute inset-0 w-full h-full"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          title="YouTube Video"
+          loading="lazy"
+        />
+      </div>
+    );
+  }
+
+  if (isBunnyUrl(url)) {
+    return <BunnyPlayer url={url} className={className} />;
+  }
+
+  if (isDirectVideo(url)) {
+    return (
+      <video
+        src={url}
+        className={`w-full aspect-video bg-black rounded-xl ${className}`}
+        controls
+        preload="metadata"
+      />
+    );
+  }
+
+  return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -722,10 +844,8 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
   const thumbnailRef = useRef();
   const { API: api } = useAuth();
 
-  const ytId = getYouTubeId(previewVideoUrl);
-  const bunnyId = getBunnyVideoId(previewVideoUrl);
+  const ytId    = getYouTubeId(previewVideoUrl);
   const isBunny = isBunnyUrl(previewVideoUrl);
-  const isYT = isYouTubeUrl(previewVideoUrl);
 
   // Handle thumbnail file upload
   const handleThumbnailFile = async (e) => {
@@ -870,46 +990,47 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
         </div>
       </div>
 
-      {/* COURSE PREVIEW VIDEO */}
+      {/* COURSE PREVIEW VIDEO — VideoPlayer handles all formats including Bunny */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
         <h3 className="font-bold text-gray-800 text-base mb-1">Course Preview Video</h3>
-        <p className="text-xs sm:text-sm text-gray-500 mb-4">YouTube link, Bunny.net URL, or direct video URL. This is the free preview shown to non-enrolled visitors.</p>
+        <p className="text-xs sm:text-sm text-gray-500 mb-4">YouTube link, Bunny.net Stream URL, or direct MP4. This is the free preview shown to non-enrolled visitors.</p>
         <div className="grid sm:grid-cols-2 gap-4 items-start">
           <div>
             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Video URL</label>
             <input value={previewVideoUrl} onChange={e=>setPreviewVideoUrl(e.target.value)}
-              placeholder="https://www.youtube.com/watch?v=... or bunny.net/..."
+              placeholder="https://www.youtube.com/watch?v=... or iframe.mediadelivery.net/embed/..."
               className="w-full mt-1.5 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"/>
-            <p className="text-xs text-gray-400 mt-1">YouTube • Bunny.net • MP4 URLs</p>
+            <p className="text-xs text-gray-400 mt-1">YouTube • Bunny Stream • MP4 URLs</p>
           </div>
-          {ytId ? (
+
+          {previewVideoUrl && (
             <div>
               <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Preview</label>
               <div className="mt-1.5 rounded-xl overflow-hidden border border-gray-200">
-                <img src={`https://img.youtube.com/vi/${ytId}/mqdefault.jpg`} alt="YT Preview" className="w-full aspect-video object-cover"/>
-                <div className="bg-red-600 px-3 py-1.5 flex items-center gap-2">
-                  <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
-                  <span className="text-white text-xs font-bold">YouTube detected ✓</span>
+                <VideoPlayer url={previewVideoUrl} />
+                <div className={`px-3 py-1.5 flex items-center gap-2 ${ytId ? "bg-red-600" : isBunny ? "bg-orange-600" : "bg-gray-700"}`}>
+                  {ytId && (
+                    <>
+                      <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
+                      <span className="text-white text-xs font-bold">YouTube detected ✓</span>
+                    </>
+                  )}
+                  {isBunny && !ytId && (
+                    <>
+                      <span className="text-white text-sm">🐰</span>
+                      <span className="text-white text-xs font-bold">Bunny.net video linked ✓</span>
+                    </>
+                  )}
+                  {!ytId && !isBunny && (
+                    <>
+                      <span className="text-white text-sm">🎬</span>
+                      <span className="text-white text-xs font-bold">Direct video ✓</span>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
-          ) : isBunny ? (
-            <div>
-              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Preview</label>
-              <div className="mt-1.5 rounded-xl overflow-hidden border border-gray-200">
-                <video src={previewVideoUrl} className="w-full aspect-video object-cover bg-black" controls/>
-                <div className="bg-orange-600 px-3 py-1.5 flex items-center gap-2">
-                  <svg className="w-4 h-4 text-white" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>
-                  <span className="text-white text-xs font-bold">Bunny.net video linked ✓</span>
-                </div>
-              </div>
-            </div>
-          ) : previewVideoUrl && isDirectVideo(previewVideoUrl) ? (
-            <div>
-              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Preview</label>
-              <video src={previewVideoUrl} className="w-full aspect-video object-cover mt-1.5 rounded-xl border border-gray-200 bg-black" controls/>
-            </div>
-          ) : null}
+          )}
         </div>
       </div>
 
@@ -949,10 +1070,12 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                 {expandedSection === secId && (
                   <div className="divide-y divide-gray-50">
                     {sec.lectures.map((lec) => {
-                      const lecId = lec._id || lec.id;
-                      const ytLecId = getYouTubeId(lec.videoUrl);
-                      const bunnyLecId = getBunnyVideoId(lec.videoUrl);
+                      const lecId      = lec._id || lec.id;
+                      const ytLecId    = getYouTubeId(lec.videoUrl);
                       const isBunnyLec = isBunnyUrl(lec.videoUrl);
+                      const isDirLec   = isDirectVideo(lec.videoUrl);
+                      const hasVideo   = lec.videoUrl && (ytLecId || isBunnyLec || isDirLec);
+
                       return (
                         <div key={lecId} className="px-3 sm:px-4 py-3 sm:py-4 space-y-3">
                           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
@@ -977,29 +1100,41 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                           </div>
 
                           {lec.type === "video" && (
-                            <div className="flex gap-2 sm:gap-3 items-start pl-6 flex-col sm:flex-row">
-                              <div className="flex-1 w-full">
-                                <div className="flex items-center gap-2">
-                                  <svg className="w-4 h-4 text-red-500 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
-                                  <input value={lec.videoUrl||""} onChange={e=>updateLectureVideo(secId, lecId, e.target.value)}
-                                    placeholder="YouTube link, Bunny.net URL, or video URL"
-                                    className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400"/>
-                                </div>
-                                {ytLecId && (
-                                  <div className="flex items-center gap-1.5 mt-1.5">
-                                    <img src={`https://img.youtube.com/vi/${ytLecId}/default.jpg`} className="w-10 sm:w-12 h-6 sm:h-8 object-cover rounded" alt="yt thumb"/>
-                                    <span className="text-xs text-emerald-600 font-semibold">✓ YouTube video</span>
-                                  </div>
-                                )}
-                                {isBunnyLec && (
-                                  <div className="flex items-center gap-1.5 mt-1.5">
-                                    <div className="w-10 sm:w-12 h-6 sm:h-8 object-cover rounded bg-orange-100 flex items-center justify-center">
-                                      <span className="text-xs font-bold text-orange-600">🐰</span>
-                                    </div>
-                                    <span className="text-xs text-orange-600 font-semibold">✓ Bunny.net video</span>
-                                  </div>
-                                )}
+                            <div className="pl-4 sm:pl-6 space-y-2">
+                              {/* URL input */}
+                              <div className="flex items-center gap-2">
+                                <svg className="w-4 h-4 text-red-500 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
+                                <input value={lec.videoUrl||""} onChange={e=>updateLectureVideo(secId, lecId, e.target.value)}
+                                  placeholder="YouTube, Bunny Stream URL, or direct MP4"
+                                  className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400"/>
                               </div>
+
+                              {/* Live inline player — works for YouTube, Bunny, and direct video */}
+                              {hasVideo && (
+                                <div className="rounded-lg overflow-hidden border border-gray-200">
+                                  <VideoPlayer url={lec.videoUrl} />
+                                  <div className={`px-3 py-1 flex items-center gap-1.5 ${ytLecId ? "bg-red-600" : isBunnyLec ? "bg-orange-600" : "bg-gray-700"}`}>
+                                    {ytLecId && (
+                                      <>
+                                        <img src={`https://img.youtube.com/vi/${ytLecId}/default.jpg`} className="w-8 h-5 object-cover rounded" alt=""/>
+                                        <span className="text-white text-xs font-semibold">YouTube ✓</span>
+                                      </>
+                                    )}
+                                    {isBunnyLec && !ytLecId && (
+                                      <>
+                                        <span className="text-white text-xs">🐰</span>
+                                        <span className="text-white text-xs font-semibold">Bunny.net ✓</span>
+                                      </>
+                                    )}
+                                    {isDirLec && !ytLecId && !isBunnyLec && (
+                                      <>
+                                        <span className="text-white text-xs">🎬</span>
+                                        <span className="text-white text-xs font-semibold">Direct video ✓</span>
+                                      </>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
