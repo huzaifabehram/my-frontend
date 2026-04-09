@@ -2,6 +2,7 @@
 // Reads course data from CoursesContext — falls back to a placeholder
 // when no id param is present (used as the home "/" route).
 // UPDATED: Only shows published courses in "Students also bought" section
+// UPDATED: Bunny.net video support added
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search } from 'lucide-react';
@@ -14,11 +15,61 @@ function getYouTubeId(url) {
   return m ? m[1] : null;
 }
 
+// ── Bunny.net video helper ────────────────────────────────────────────────
+function getBunnyNetInfo(url) {
+  if (!url) return null;
+  
+  // Check for iframe embed URL: https://iframe.mediadelivery.net/embed/{libraryId}/{videoId}
+  const embedMatch = url.match(/iframe\.mediadelivery\.net\/embed\/(\d+)\/([a-f0-9-]+)/i);
+  if (embedMatch) {
+    return {
+      libraryId: embedMatch[1],
+      videoId: embedMatch[2],
+      embedUrl: url
+    };
+  }
+  
+  // Check for direct CDN URL: https://vz-{hash}.b-cdn.net/{videoId}/playlist.m3u8
+  const cdnMatch = url.match(/vz-[^.]+\.b-cdn\.net\/([a-f0-9-]+)/i);
+  if (cdnMatch) {
+    return {
+      videoId: cdnMatch[1],
+      isCdn: true
+    };
+  }
+  
+  return null;
+}
+
 // ── Course thumbnail with fallback ────────────────────────────────────────
 function CourseThumbnail({ course }) {
   const [imgErr, setImgErr] = useState(false);
   const ytId = getYouTubeId(course.previewVideoUrl);
+  const bunnyInfo = getBunnyNetInfo(course.previewVideoUrl);
 
+  // Bunny.net video player
+  if (bunnyInfo) {
+    return (
+      <div className="relative w-full h-full bg-black">
+        <iframe
+          src={bunnyInfo.embedUrl || `https://iframe.mediadelivery.net/embed/${bunnyInfo.libraryId}/${bunnyInfo.videoId}?autoplay=false&preload=true`}
+          loading="lazy"
+          style={{
+            border: 'none',
+            width: '100%',
+            height: '100%',
+            position: 'absolute',
+            top: 0,
+            left: 0
+          }}
+          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
+          allowFullScreen={true}
+        />
+      </div>
+    );
+  }
+
+  // YouTube video
   if (ytId) {
     return (
       <div className="relative w-full h-full bg-black flex items-center justify-center group cursor-pointer">
