@@ -3,6 +3,7 @@
 // when no id param is present (used as the home "/" route).
 // UPDATED: Only shows published courses in "Students also bought" section
 // UPDATED: Full Bunny.net video support with unified helper functions
+// UPDATED: Full-screen Course Preview Popup with video player and lecture list
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search } from 'lucide-react';
@@ -241,6 +242,12 @@ export default function CourseLandingPage() {
   const [showFullDescription,  setShowFullDescription]  = useState(false);
   const [showAllReviews,       setShowAllReviews]       = useState(false);
   const [showFullInstructorBio,setShowFullInstructorBio]= useState(false);
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PREVIEW POPUP STATE
+  // ═══════════════════════════════════════════════════════════════════════════
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [currentVideo, setCurrentVideo] = useState('');
 
   // ═══════════════════════════════════════════════════════════════════════════
   // CRITICAL: Resolve which course to show
@@ -269,8 +276,68 @@ export default function CourseLandingPage() {
       .slice(0, 4);
   }, [courses, courseData?._id]);
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PREVIEW LECTURES - Get all lectures where preview === true
+  // ═══════════════════════════════════════════════════════════════════════════
+  const previewLectures = useMemo(() => {
+    const lectures = [];
+    sections.forEach((section, sectionIdx) => {
+      if (section.lectures_list?.length > 0) {
+        section.lectures_list.forEach((lecture, lectureIdx) => {
+          if (lecture.preview && lecture.videoUrl) {
+            lectures.push({
+              ...lecture,
+              sectionTitle: section.title,
+              sectionIdx,
+              lectureIdx
+            });
+          }
+        });
+      }
+    });
+    return lectures;
+  }, [sections]);
+
   const handleNavigate = (path) => { setMobileMenuOpen(false); navigate(path); };
-  const handlePreviewClick = () => {};
+  
+  // ═══════════════════════════════════════════════════════════════════════════
+  // PREVIEW POPUP HANDLERS
+  // ═══════════════════════════════════════════════════════════════════════════
+  const handlePreviewClick = () => {
+    setCurrentVideo(courseData?.previewVideoUrl || '');
+    setIsPreviewOpen(true);
+  };
+
+  const handleClosePreview = () => {
+    setIsPreviewOpen(false);
+    setCurrentVideo('');
+  };
+
+  const handleLectureClick = (videoUrl) => {
+    setCurrentVideo(videoUrl);
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ESC KEY HANDLER - Close preview on ESC
+  // ═══════════════════════════════════════════════════════════════════════════
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && isPreviewOpen) {
+        handleClosePreview();
+      }
+    };
+
+    if (isPreviewOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+      // Disable body scroll when preview is open
+      document.body.style.overflow = 'hidden';
+    }
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = 'unset';
+    };
+  }, [isPreviewOpen]);
 
   // ── Loading state ────────────────────────────────────────────────────────
   if (loading) {
@@ -328,6 +395,103 @@ export default function CourseLandingPage() {
 
   return (
     <div className="min-h-screen bg-white overflow-x-hidden w-full">
+
+      {/* ═══════════════════════════════════════════════════════════════════════════
+          FULL-SCREEN COURSE PREVIEW POPUP
+          ═══════════════════════════════════════════════════════════════════════════ */}
+      {isPreviewOpen && (
+        <div className="fixed inset-0 z-[9999] bg-black bg-opacity-95 flex flex-col animate-fadeIn">
+          {/* Close Button */}
+          <div className="absolute top-4 right-4 z-10">
+            <button
+              onClick={handleClosePreview}
+              className="p-2 bg-gray-800 hover:bg-gray-700 rounded-full transition border-none cursor-pointer"
+              aria-label="Close preview"
+            >
+              <X size={28} className="text-white" />
+            </button>
+          </div>
+
+          {/* Video Player Section - Sticky Top */}
+          <div className="bg-black border-b border-gray-800">
+            <div className="max-w-6xl mx-auto">
+              <VideoPlayer url={currentVideo} className="w-full" />
+            </div>
+          </div>
+
+          {/* Lecture List Section - Scrollable */}
+          <div className="flex-1 overflow-y-auto bg-gray-900">
+            <div className="max-w-6xl mx-auto p-6">
+              <h2 className="text-2xl font-bold text-white mb-6">Course Preview</h2>
+              
+              {previewLectures.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-gray-400 text-lg">No preview lectures available</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {previewLectures.map((lecture, idx) => {
+                    const isPlaying = currentVideo === lecture.videoUrl;
+                    return (
+                      <div
+                        key={`${lecture.sectionIdx}-${lecture.lectureIdx}`}
+                        onClick={() => handleLectureClick(lecture.videoUrl)}
+                        className={`p-4 rounded-lg cursor-pointer transition ${
+                          isPlaying
+                            ? 'bg-purple-600 hover:bg-purple-700'
+                            : 'bg-gray-800 hover:bg-gray-750'
+                        }`}
+                      >
+                        <div className="flex items-center gap-4">
+                          <div className="flex-shrink-0">
+                            {lecture.type === 'video' ? (
+                              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                                isPlaying ? 'bg-white' : 'bg-purple-600'
+                              }`}>
+                                <Play size={20} className={isPlaying ? 'text-purple-600' : 'text-white'} fill="currentColor" />
+                              </div>
+                            ) : (
+                              <div className="w-12 h-12 border-2 border-gray-600 rounded-full flex items-center justify-center">
+                                <span className="text-gray-400 text-xl">📄</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className={`text-sm font-medium mb-1 ${
+                              isPlaying ? 'text-white' : 'text-gray-400'
+                            }`}>
+                              {lecture.sectionTitle}
+                            </p>
+                            <p className={`font-semibold text-lg ${
+                              isPlaying ? 'text-white' : 'text-gray-200'
+                            }`}>
+                              {lecture.title}
+                            </p>
+                            {lecture.duration && (
+                              <p className={`text-sm mt-1 ${
+                                isPlaying ? 'text-purple-100' : 'text-gray-500'
+                              }`}>
+                                {lecture.duration}
+                              </p>
+                            )}
+                          </div>
+                          {isPlaying && (
+                            <div className="flex-shrink-0">
+                              <div className="px-3 py-1 bg-white rounded-full">
+                                <span className="text-purple-600 font-bold text-sm">Playing</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ANNOUNCEMENT BAR */}
       {courseData.discountPrice && courseData.discountPrice < courseData.originalPrice && (
@@ -403,7 +567,9 @@ export default function CourseLandingPage() {
           {/* VIDEO / THUMBNAIL - Using unified VideoPlayer */}
           <div className="mb-8">
             <div className="relative bg-gray-800 rounded-xl overflow-hidden aspect-video">
-              <CourseThumbnail course={courseData} />
+              <div onClick={handlePreviewClick} className="cursor-pointer">
+                <CourseThumbnail course={courseData} />
+              </div>
             </div>
           </div>
 
