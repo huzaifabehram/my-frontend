@@ -1052,7 +1052,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
 
       {/* CURRICULUM */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
-        <SectionHeader title="Course Curriculum" action={<Btn size="sm" onClick={addSection}>+ Add Section</Btn>}/>
+      <SectionHeader title="Course Content" action={<Btn size="sm" onClick={addSection}>+ Add Section</Btn>}/>
         <div className="space-y-3">
           {sections.map((sec) => {
             const secId = sec._id || sec.id;
