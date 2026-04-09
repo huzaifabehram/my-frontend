@@ -2,7 +2,7 @@
 // Reads course data from CoursesContext — falls back to a placeholder
 // when no id param is present (used as the home "/" route).
 // UPDATED: Only shows published courses in "Students also bought" section
-// UPDATED: Bunny.net video support added
+// UPDATED: Full Bunny.net video support with unified helper functions
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search } from 'lucide-react';
@@ -15,29 +15,153 @@ function getYouTubeId(url) {
   return m ? m[1] : null;
 }
 
-// ── Bunny.net video helper ────────────────────────────────────────────────
-function getBunnyNetInfo(url) {
+// ─────────────────────────────────────────────────────────────────────────────
+// BUNNY.NET VIDEO HELPERS — Unified with InstructorDashboard
+// ─────────────────────────────────────────────────────────────────────────────
+
+function isBunnyUrl(url) {
+  return url && (
+    url.includes('bunny.net') ||
+    url.includes('vod-cdn.bunny.net') ||
+    url.includes('iframe.mediadelivery.net') ||
+    url.includes('player.mediadelivery.net') ||
+    url.includes('video.bunnycdn.com') ||
+    url.includes('b-cdn.net')
+  );
+}
+
+function isYouTubeUrl(url) {
+  return url && (url.includes('youtube.com') || url.includes('youtu.be'));
+}
+
+function isDirectVideo(url) {
+  return url && (url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov'));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BUNNY EMBED URL RESOLVER
+// Converts any Bunny.net URL format into a playable iframe embed URL.
+//
+// Supported input formats:
+//   • https://iframe.mediadelivery.net/embed/{libraryId}/{videoId}   → used as-is
+//   • https://iframe.mediadelivery.net/play/{libraryId}/{videoId}    → /play/ → /embed/
+//   • https://player.mediadelivery.net/play/{libraryId}/{videoId}    → converted to /embed/
+//   • https://video.bunnycdn.com/play/{libraryId}/{videoId}          → converted
+//   • https://vz-{hash}.b-cdn.net/{videoId}/playlist.m3u8            → direct <video> fallback
+//   • Any URL containing a GUID + library ID                          → converted
+//
+// Returns null for direct .mp4 CDN links (use <video> tag for those).
+// ─────────────────────────────────────────────────────────────────────────────
+
+function getBunnyEmbedUrl(url) {
   if (!url) return null;
-  
-  // Check for iframe embed URL: https://iframe.mediadelivery.net/embed/{libraryId}/{videoId}
-  const embedMatch = url.match(/iframe\.mediadelivery\.net\/embed\/(\d+)\/([a-f0-9-]+)/i);
-  if (embedMatch) {
-    return {
-      libraryId: embedMatch[1],
-      videoId: embedMatch[2],
-      embedUrl: url
-    };
+
+  // Already a valid embed URL — use as-is
+  if (url.includes('iframe.mediadelivery.net/embed/')) return url;
+
+  // iframe.mediadelivery.net/play/ → /embed/
+  if (url.includes('iframe.mediadelivery.net/play/')) {
+    return url.replace('/play/', '/embed/');
   }
-  
-  // Check for direct CDN URL: https://vz-{hash}.b-cdn.net/{videoId}/playlist.m3u8
-  const cdnMatch = url.match(/vz-[^.]+\.b-cdn\.net\/([a-f0-9-]+)/i);
-  if (cdnMatch) {
-    return {
-      videoId: cdnMatch[1],
-      isCdn: true
-    };
+
+  // player.mediadelivery.net/play/LIBRARY_ID/VIDEO_GUID → iframe.mediadelivery.net/embed/
+  const playerMatch = url.match(/player\.mediadelivery\.net\/play\/(\d+)\/([a-zA-Z0-9-]+)/);
+  if (playerMatch) {
+    return `https://iframe.mediadelivery.net/embed/${playerMatch[1]}/${playerMatch[2]}?autoplay=false&loop=false&muted=false&preload=true`;
   }
-  
+
+  // video.bunnycdn.com/play/LIBRARY_ID/VIDEO_GUID
+  const bunnyPlay = url.match(/video\.bunnycdn\.com\/play\/(\d+)\/([a-zA-Z0-9-]+)/);
+  if (bunnyPlay) {
+    return `https://iframe.mediadelivery.net/embed/${bunnyPlay[1]}/${bunnyPlay[2]}?autoplay=false&loop=false&muted=false&preload=true`;
+  }
+
+  // Generic: URL contains both a numeric library ID and a GUID
+  const guidMatch = url.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+  const libMatch  = url.match(/\/(\d+)\//);
+  if (guidMatch && libMatch) {
+    return `https://iframe.mediadelivery.net/embed/${libMatch[1]}/${guidMatch[1]}?autoplay=false&loop=false&muted=false&preload=true`;
+  }
+
+  // Direct CDN .mp4 — no embed URL, caller falls back to <video>
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BUNNY PLAYER — iframe embed or <video> fallback
+// ─────────────────────────────────────────────────────────────────────────────
+
+function BunnyPlayer({ url, className = "" }) {
+  const embedUrl = getBunnyEmbedUrl(url);
+
+  if (embedUrl) {
+    return (
+      <div className={`relative w-full aspect-video bg-black ${className}`}>
+        <iframe
+          src={embedUrl}
+          className="absolute inset-0 w-full h-full"
+          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
+          allowFullScreen
+          title="Bunny Stream Video"
+          loading="lazy"
+          style={{ border: 'none' }}
+        />
+      </div>
+    );
+  }
+
+  // Fallback: direct CDN mp4
+  return (
+    <video
+      src={url}
+      className={`w-full aspect-video bg-black ${className}`}
+      controls
+      preload="metadata"
+    />
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UNIVERSAL VIDEO PLAYER
+// Auto-detects URL type and renders the right player.
+// Use this everywhere in the app — YouTube, Bunny, or direct video.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function VideoPlayer({ url, className = "" }) {
+  if (!url) return null;
+
+  const ytId = getYouTubeId(url);
+  if (ytId) {
+    return (
+      <div className={`relative w-full aspect-video bg-black ${className}`}>
+        <iframe
+          src={`https://www.youtube.com/embed/${ytId}`}
+          className="absolute inset-0 w-full h-full"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allowFullScreen
+          title="YouTube Video"
+          loading="lazy"
+          style={{ border: 'none' }}
+        />
+      </div>
+    );
+  }
+
+  if (isBunnyUrl(url)) {
+    return <BunnyPlayer url={url} className={className} />;
+  }
+
+  if (isDirectVideo(url)) {
+    return (
+      <video
+        src={url}
+        className={`w-full aspect-video bg-black ${className}`}
+        controls
+        preload="metadata"
+      />
+    );
+  }
+
   return null;
 }
 
@@ -45,31 +169,18 @@ function getBunnyNetInfo(url) {
 function CourseThumbnail({ course }) {
   const [imgErr, setImgErr] = useState(false);
   const ytId = getYouTubeId(course.previewVideoUrl);
-  const bunnyInfo = getBunnyNetInfo(course.previewVideoUrl);
+  const isBunny = isBunnyUrl(course.previewVideoUrl);
 
-  // Bunny.net video player
-  if (bunnyInfo) {
+  // Bunny.net video player - use unified VideoPlayer component
+  if (isBunny) {
     return (
       <div className="relative w-full h-full bg-black">
-        <iframe
-          src={bunnyInfo.embedUrl || `https://iframe.mediadelivery.net/embed/${bunnyInfo.libraryId}/${bunnyInfo.videoId}?autoplay=false&preload=true`}
-          loading="lazy"
-          style={{
-            border: 'none',
-            width: '100%',
-            height: '100%',
-            position: 'absolute',
-            top: 0,
-            left: 0
-          }}
-          allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;"
-          allowFullScreen={true}
-        />
+        <BunnyPlayer url={course.previewVideoUrl} />
       </div>
     );
   }
 
-  // YouTube video
+  // YouTube video with preview overlay
   if (ytId) {
     return (
       <div className="relative w-full h-full bg-black flex items-center justify-center group cursor-pointer">
@@ -87,6 +198,7 @@ function CourseThumbnail({ course }) {
     );
   }
 
+  // Direct video URL
   if (course.previewVideoUrl && !imgErr) {
     return (
       <video src={course.previewVideoUrl} className="w-full h-full object-cover" controls
@@ -94,6 +206,7 @@ function CourseThumbnail({ course }) {
     );
   }
 
+  // Static thumbnail image
   if (course.thumbnail && !imgErr) {
     return (
       <img src={course.thumbnail} alt={course.title} className="w-full h-full object-cover"
@@ -287,7 +400,7 @@ export default function CourseLandingPage() {
 
           <h1 className="text-4xl lg:text-5xl font-bold text-white mb-8 leading-tight">{courseData.title}</h1>
 
-          {/* VIDEO / THUMBNAIL */}
+          {/* VIDEO / THUMBNAIL - Using unified VideoPlayer */}
           <div className="mb-8">
             <div className="relative bg-gray-800 rounded-xl overflow-hidden aspect-video">
               <CourseThumbnail course={courseData} />
