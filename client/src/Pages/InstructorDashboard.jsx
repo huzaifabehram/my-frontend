@@ -165,43 +165,23 @@ function isDirectVideo(url) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // BUNNY EMBED URL RESOLVER
-// Converts any Bunny.net URL format into a playable iframe embed URL.
-//
-// Supported input formats:
-//   • https://iframe.mediadelivery.net/embed/LIB/GUID   → used as-is
-//   • https://iframe.mediadelivery.net/play/LIB/GUID    → /play/ → /embed/
-//   • https://video.bunnycdn.com/play/LIB/GUID          → converted
-//   • https://vod-cdn.bunny.net/.../*.mp4               → direct <video> fallback
-//   • Any URL containing a GUID + library ID            → converted
-//
-// Returns null for direct .mp4 CDN links (use <video> tag for those).
 // ─────────────────────────────────────────────────────────────────────────────
 
 function getBunnyEmbedUrl(url) {
   if (!url) return null;
-
-  // Already a valid embed URL — use as-is
   if (url.includes('iframe.mediadelivery.net/embed/')) return url;
-
-  // /play/ → /embed/
   if (url.includes('iframe.mediadelivery.net/play/')) {
     return url.replace('/play/', '/embed/');
   }
-
-  // video.bunnycdn.com/play/LIBRARY_ID/VIDEO_GUID
   const bunnyPlay = url.match(/video\.bunnycdn\.com\/play\/(\d+)\/([a-zA-Z0-9-]+)/);
   if (bunnyPlay) {
     return `https://iframe.mediadelivery.net/embed/${bunnyPlay[1]}/${bunnyPlay[2]}?autoplay=false&loop=false&muted=false&preload=true`;
   }
-
-  // Generic: URL contains both a numeric library ID and a GUID
   const guidMatch = url.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
   const libMatch  = url.match(/\/(\d+)\//);
   if (guidMatch && libMatch) {
     return `https://iframe.mediadelivery.net/embed/${libMatch[1]}/${guidMatch[1]}?autoplay=false&loop=false&muted=false&preload=true`;
   }
-
-  // Direct CDN .mp4 — no embed URL, caller falls back to <video>
   return null;
 }
 
@@ -211,7 +191,6 @@ function getBunnyEmbedUrl(url) {
 
 function BunnyPlayer({ url, className = "" }) {
   const embedUrl = getBunnyEmbedUrl(url);
-
   if (embedUrl) {
     return (
       <div className={`relative w-full aspect-video bg-black rounded-xl overflow-hidden ${className}`}>
@@ -226,8 +205,6 @@ function BunnyPlayer({ url, className = "" }) {
       </div>
     );
   }
-
-  // Fallback: direct CDN mp4
   return (
     <video
       src={url}
@@ -240,13 +217,10 @@ function BunnyPlayer({ url, className = "" }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // UNIVERSAL VIDEO PLAYER
-// Auto-detects URL type and renders the right player.
-// Use this everywhere in the app — YouTube, Bunny, or direct video.
 // ─────────────────────────────────────────────────────────────────────────────
 
 function VideoPlayer({ url, className = "" }) {
   if (!url) return null;
-
   const ytId = getYouTubeId(url);
   if (ytId) {
     return (
@@ -262,11 +236,9 @@ function VideoPlayer({ url, className = "" }) {
       </div>
     );
   }
-
   if (isBunnyUrl(url)) {
     return <BunnyPlayer url={url} className={className} />;
   }
-
   if (isDirectVideo(url)) {
     return (
       <video
@@ -277,7 +249,6 @@ function VideoPlayer({ url, className = "" }) {
       />
     );
   }
-
   return null;
 }
 
@@ -843,54 +814,42 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
   const [uploadingThumb, setUploadingThumb] = useState(false);
   const thumbnailRef = useRef();
 
+  // ── FIX: use the authenticated api instance from useAuth, same as the rest of the app
+  const { API: api } = useAuth();
+
   const ytId    = getYouTubeId(previewVideoUrl);
   const isBunny = isBunnyUrl(previewVideoUrl);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // CLOUDINARY IMAGE UPLOAD HANDLER
+  // THUMBNAIL UPLOAD — uses the app's authenticated axios instance (api)
+  // Sends to /upload/image, expects { url: "..." } in response.
+  // Cloudinary (or any storage) is handled entirely on the backend.
   // ═══════════════════════════════════════════════════════════════════════════
-  const handleUploadToCloudinary = async (file) => {
-    const formData = new FormData();
-    formData.append("image", file);
-    
-    try {
-      const res = await fetch("/api/upload-thumbnail", {
-        method: "POST",
-        body: formData,
-      });
-      
-      if (!res.ok) {
-        throw new Error("Upload failed");
-      }
-      
-      const data = await res.json();
-      return data.imageUrl;
-    } catch (error) {
-      console.error("Cloudinary upload error:", error);
-      throw error;
-    }
-  };
-
-  // Handle thumbnail file upload with Cloudinary
   const handleThumbnailFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
-    // Show local preview immediately
+
+    // Show instant local preview while uploading
     const reader = new FileReader();
     reader.onload = (ev) => setThumbnailPreview(ev.target.result);
     reader.readAsDataURL(file);
 
     setUploadingThumb(true);
     try {
-      const imageUrl = await handleUploadToCloudinary(file);
+      const formData = new FormData();
+      formData.append("image", file);
+      const res = await api.post("/upload/image", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      // Backend returns { url: "https://res.cloudinary.com/..." }
+      const imageUrl = res.data.url || res.data.imageUrl || res.data.secure_url;
       setThumbnail(imageUrl);
       setThumbnailPreview(imageUrl);
       toast("Thumbnail uploaded successfully!", "success");
-    } catch (error) {
+    } catch (err) {
+      console.error("Thumbnail upload error:", err);
       toast("Upload failed. Please try again or paste an image URL.", "error");
-      setThumbnail("");
-      setThumbnailPreview("");
+      // Keep the local preview visible so the user can see what they picked
     } finally {
       setUploadingThumb(false);
     }
@@ -1078,7 +1037,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
 
       {/* CURRICULUM */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
-      <SectionHeader title="Course Content" action={<Btn size="sm" onClick={addSection}>+ Add Section</Btn>}/>
+        <SectionHeader title="Course Content" action={<Btn size="sm" onClick={addSection}>+ Add Section</Btn>}/>
         <div className="space-y-3">
           {sections.map((sec) => {
             const secId = sec._id || sec.id;
@@ -1127,7 +1086,6 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
 
                           {lec.type === "video" && (
                             <div className="pl-4 sm:pl-6 space-y-2">
-                              {/* URL input */}
                               <div className="flex items-center gap-2">
                                 <svg className="w-4 h-4 text-red-500 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
                                 <input value={lec.videoUrl||""} onChange={e=>updateLectureVideo(secId, lecId, e.target.value)}
@@ -1135,7 +1093,6 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                                   className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400"/>
                               </div>
 
-                              {/* Live inline player — works for YouTube, Bunny, and direct video */}
                               {hasVideo && (
                                 <div className="rounded-lg overflow-hidden border border-gray-200">
                                   <VideoPlayer url={lec.videoUrl} />
@@ -1300,7 +1257,7 @@ function AnalyticsPage({ courses }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ProfilePage({ toast }) {
-  const { user } = useAuth();
+  const { user, API: api } = useAuth();
   const [form, setForm] = useState({
     name:     user?.name     || "",
     email:    user?.email    || "",
@@ -1318,29 +1275,20 @@ function ProfilePage({ toast }) {
 
   function update(field, val) { setForm((f) => ({ ...f, [field]: val })); }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // CLOUDINARY AVATAR UPLOAD HANDLER
-  // ═══════════════════════════════════════════════════════════════════════════
+  // ── FIX: use the same authenticated api instance, same endpoint as thumbnail upload
   const handleAvatarUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     setUploadingAvatar(true);
-    const formData = new FormData();
-    formData.append("image", file);
-
     try {
-      const res = await fetch("/api/upload-thumbnail", {
-        method: "POST",
-        body: formData,
+      const formData = new FormData();
+      formData.append("image", file);
+      const res = await api.post("/upload/image", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
       });
-
-      if (!res.ok) {
-        throw new Error("Upload failed");
-      }
-
-      const data = await res.json();
-      update("avatar", data.imageUrl);
+      const imageUrl = res.data.url || res.data.imageUrl || res.data.secure_url;
+      update("avatar", imageUrl);
       toast("Profile photo uploaded successfully!", "success");
     } catch (error) {
       toast("Upload failed. Please try again.", "error");
@@ -1377,8 +1325,8 @@ function ProfilePage({ toast }) {
             ) : (
               <Avatar name={form.name || "I"} size={96} src={form.avatar} />
             )}
-            <button 
-              onClick={() => fileRef.current.click()} 
+            <button
+              onClick={() => fileRef.current.click()}
               disabled={uploadingAvatar}
               className="absolute -bottom-1 -right-1 w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-white text-sm hover:bg-purple-700 transition shadow-md disabled:opacity-50"
             >
