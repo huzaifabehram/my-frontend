@@ -10,17 +10,13 @@ require("dotenv").config();
 const app = express();
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
-// Allows localhost in dev AND your Vercel frontend in production.
-// After you deploy to Vercel, replace "https://your-app.vercel.app"
-// with your real Vercel URL (e.g. https://learnify-ui.vercel.app)
 const allowedOrigins = [
   "http://localhost:3000",
-  process.env.CLIENT_URL,          // set this in Render env vars
-].filter(Boolean);                 // removes undefined if CLIENT_URL not set yet
+  process.env.CLIENT_URL,
+].filter(Boolean);
 
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error(`CORS blocked: ${origin}`));
@@ -29,7 +25,8 @@ app.use(cors({
 }));
 
 app.use(express.json());
-app.use("/uploads", express.static("uploads"));
+// ⚠️ REMOVE or comment out this line - we're using Cloudinary, not local uploads
+// app.use("/uploads", express.static("uploads"));
 
 // ─── DB CONNECTION ─────────────────────────────────────────────────────────────
 mongoose.connect(process.env.MONGO_URI, {
@@ -590,11 +587,11 @@ app.post("/api/reviews/:courseId", protect, async (req, res) => {
   }
 });
 
-// ─── IMAGE UPLOAD ROUTES ──────────────────────────────────────────────────────
-// Create uploads directory for local fallback
-if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
+// ═════════════════════════════════════════════════════════════════════════════
+// IMAGE UPLOAD ROUTES — CLOUDINARY ONLY
+// ═════════════════════════════════════════════════════════════════════════════
 
-// Configure multer for memory storage (for Cloudinary upload)
+// Configure multer for memory storage (Cloudinary uses streams)
 const storage = multer.memoryStorage();
 
 const upload = multer({
@@ -633,7 +630,7 @@ app.post("/api/upload/image", protect, instructorOnly, upload.single("image"), a
           transformation: [
             { width: 1280, height: 720, crop: "limit" }, // Max dimensions
             { quality: "auto:good" }, // Auto-optimize quality
-            { fetch_format: "auto" }, // Auto-select best format
+            { fetch_format: "auto" }, // Auto-select best format (webp/avif)
           ],
         },
         (error, result) => {
@@ -648,8 +645,11 @@ app.post("/api/upload/image", protect, instructorOnly, upload.single("image"), a
 
     const result = await uploadPromise;
 
+    // ⚠️ CRITICAL FIX: Return the response format that the frontend expects
     res.json({
-      url: result.secure_url,
+      url: result.secure_url,           // ← Primary field frontend looks for
+      secure_url: result.secure_url,    // ← Backup
+      imageUrl: result.secure_url,      // ← Backup
       publicId: result.public_id,
       width: result.width,
       height: result.height,
