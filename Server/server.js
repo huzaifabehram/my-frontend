@@ -1,4 +1,4 @@
-// Server/server.js — Complete MERN Backend
+// Server/server.js — Complete MERN Backend with Cloudinary
 const express  = require("express");
 const mongoose = require("mongoose");
 const cors     = require("cors");
@@ -45,6 +45,17 @@ mongoose.connection.on("reconnected",  () => console.log("✅ MongoDB reconnecte
 // ─── DEPENDENCIES ─────────────────────────────────────────────────────────────
 const bcrypt = require("bcryptjs");
 const jwt    = require("jsonwebtoken");
+
+// ── CLOUDINARY SETUP ──────────────────────────────────────────────────────────
+const cloudinary = require("cloudinary").v2;
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key:    process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+console.log("☁️  Cloudinary configured:", process.env.CLOUDINARY_CLOUD_NAME ? "✓" : "✗");
 
 // ─── MODELS ───────────────────────────────────────────────────────────────────
 
@@ -579,20 +590,16 @@ app.post("/api/reviews/:courseId", protect, async (req, res) => {
   }
 });
 
-// ─── IMAGE UPLOAD ─────────────────────────────────────────────────────────────
+// ─── IMAGE UPLOAD ROUTES ──────────────────────────────────────────────────────
+// Create uploads directory for local fallback
 if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
-  filename:    (req, file, cb) => {
-    const ext  = path.extname(file.originalname);
-    const name = path.basename(file.originalname, ext).replace(/\s+/g, "-");
-    cb(null, `${Date.now()}-${name}${ext}`);
-  },
-});
+// Configure multer for memory storage (for Cloudinary upload)
+const storage = multer.memoryStorage();
+
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
   fileFilter: (req, file, cb) => {
     const allowed = ["image/jpeg","image/jpg","image/png","image/webp","image/gif"];
     if (allowed.includes(file.mimetype)) cb(null, true);
@@ -600,10 +607,86 @@ const upload = multer({
   },
 });
 
-app.post("/api/upload/image", protect, instructorOnly, upload.single("image"), (req, res) => {
-  if (!req.file) return res.status(400).json({ message: "No file uploaded" });
-  const url = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-  res.json({ url, filename: req.file.filename });
+// ═════════════════════════════════════════════════════════════════════════════
+// CLOUDINARY UPLOAD ENDPOINT
+// ═════════════════════════════════════════════════════════════════════════════
+app.post("/api/upload/image", protect, instructorOnly, upload.single("image"), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
+    // Check if Cloudinary is configured
+    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY) {
+      return res.status(500).json({ 
+        message: "Cloudinary not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in your .env file" 
+      });
+    }
+
+    // Upload to Cloudinary using upload_stream
+    const uploadPromise = new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
+          folder: "learnify/course-thumbnails",
+          resource_type: "image",
+          allowed_formats: ["jpg", "jpeg", "png", "webp", "gif"],
+          transformation: [
+            { width: 1280, height: 720, crop: "limit" }, // Max dimensions
+            { quality: "auto:good" }, // Auto-optimize quality
+            { fetch_format: "auto" }, // Auto-select best format
+          ],
+        },
+        (error, result) => {
+          if (error) reject(error);
+          else resolve(result);
+        }
+      );
+      
+      // Write the buffer to the stream
+      uploadStream.end(req.file.buffer);
+    });
+
+    const result = await uploadPromise;
+
+    res.json({
+      url: result.secure_url,
+      publicId: result.public_id,
+      width: result.width,
+      height: result.height,
+      format: result.format,
+      filename: result.original_filename,
+    });
+
+    console.log("✅ Image uploaded to Cloudinary:", result.secure_url);
+
+  } catch (error) {
+    console.error("❌ Cloudinary upload error:", error.message);
+    res.status(500).json({ 
+      message: "Failed to upload image to Cloudinary",
+      error: error.message 
+    });
+  }
+});
+
+// Optional: Delete image from Cloudinary
+app.delete("/api/upload/image/:publicId", protect, instructorOnly, async (req, res) => {
+  try {
+    const publicId = decodeURIComponent(req.params.publicId);
+    
+    const result = await cloudinary.uploader.destroy(publicId);
+    
+    if (result.result === "ok") {
+      res.json({ message: "Image deleted successfully", publicId });
+    } else {
+      res.status(404).json({ message: "Image not found or already deleted" });
+    }
+  } catch (error) {
+    console.error("❌ Cloudinary delete error:", error.message);
+    res.status(500).json({ 
+      message: "Failed to delete image",
+      error: error.message 
+    });
+  }
 });
 
 // ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
@@ -611,6 +694,7 @@ app.get("/api/health", (req, res) => {
   res.json({
     status:   "ok",
     database: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+    cloudinary: process.env.CLOUDINARY_CLOUD_NAME ? "configured" : "not configured",
     time:     new Date().toISOString(),
   });
 });
@@ -632,4 +716,5 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📦 Database: learnify @ cluster0.27tk541.mongodb.net`);
   console.log(`🌍 CORS allowed origins: ${allowedOrigins.join(", ")}`);
+  console.log(`☁️  Cloudinary: ${process.env.CLOUDINARY_CLOUD_NAME ? '✓ Configured' : '✗ Not configured'}`);
 });

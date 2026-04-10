@@ -1,6 +1,6 @@
 // client/src/Pages/InstructorDashboard.jsx
 // ─── Instructor Dashboard — connected to real MERN backend ───────────────────
-// MOBILE OPTIMIZED + BUNNY.NET SUPPORT
+// MOBILE OPTIMIZED + BUNNY.NET SUPPORT + CLOUDINARY IMAGE UPLOAD
 // All dummy data is replaced with real API calls via useInstructorCourses hook.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -816,7 +816,7 @@ function CoursesPage({ courses, loading, deleteCourse, togglePublish, toast }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PAGE: COURSE EDITOR (Create & Edit) — BUNNY.NET SUPPORT
+// PAGE: COURSE EDITOR (Create & Edit) — BUNNY.NET SUPPORT + CLOUDINARY UPLOAD
 // ─────────────────────────────────────────────────────────────────────────────
 
 function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
@@ -842,29 +842,55 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
   const [saving, setSaving]         = useState(false);
   const [uploadingThumb, setUploadingThumb] = useState(false);
   const thumbnailRef = useRef();
-  const { API: api } = useAuth();
 
   const ytId    = getYouTubeId(previewVideoUrl);
   const isBunny = isBunnyUrl(previewVideoUrl);
 
-  // Handle thumbnail file upload
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CLOUDINARY IMAGE UPLOAD HANDLER
+  // ═══════════════════════════════════════════════════════════════════════════
+  const handleUploadToCloudinary = async (file) => {
+    const formData = new FormData();
+    formData.append("image", file);
+    
+    try {
+      const res = await fetch("/api/upload-thumbnail", {
+        method: "POST",
+        body: formData,
+      });
+      
+      if (!res.ok) {
+        throw new Error("Upload failed");
+      }
+      
+      const data = await res.json();
+      return data.imageUrl;
+    } catch (error) {
+      console.error("Cloudinary upload error:", error);
+      throw error;
+    }
+  };
+
+  // Handle thumbnail file upload with Cloudinary
   const handleThumbnailFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    
+    // Show local preview immediately
     const reader = new FileReader();
     reader.onload = (ev) => setThumbnailPreview(ev.target.result);
     reader.readAsDataURL(file);
 
     setUploadingThumb(true);
     try {
-      const formData = new FormData();
-      formData.append("image", file);
-      const res = await api.post("/upload/image", formData, { headers: { "Content-Type": "multipart/form-data" } });
-      setThumbnail(res.data.url);
-      toast("Thumbnail uploaded!", "success");
-    } catch {
-      toast("Upload failed. Paste an image URL instead.", "error");
-      setThumbnail(thumbnailPreview);
+      const imageUrl = await handleUploadToCloudinary(file);
+      setThumbnail(imageUrl);
+      setThumbnailPreview(imageUrl);
+      toast("Thumbnail uploaded successfully!", "success");
+    } catch (error) {
+      toast("Upload failed. Please try again or paste an image URL.", "error");
+      setThumbnail("");
+      setThumbnailPreview("");
     } finally {
       setUploadingThumb(false);
     }
@@ -954,7 +980,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
         </div>
       </div>
 
-      {/* THUMBNAIL UPLOAD */}
+      {/* THUMBNAIL UPLOAD WITH CLOUDINARY */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
         <h3 className="font-bold text-gray-800 text-base mb-4">Course Thumbnail</h3>
         <div className="flex flex-col sm:flex-row gap-6 items-start">
@@ -1270,7 +1296,7 @@ function AnalyticsPage({ courses }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PAGE: PROFILE
+// PAGE: PROFILE — WITH CLOUDINARY IMAGE UPLOAD
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ProfilePage({ toast }) {
@@ -1284,11 +1310,45 @@ function ProfilePage({ toast }) {
     website:  user?.website  || "",
     twitter:  user?.twitter  || "",
     linkedin: user?.linkedin || "",
+    avatar:   user?.avatar   || "",
   });
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileRef = useRef();
 
   function update(field, val) { setForm((f) => ({ ...f, [field]: val })); }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CLOUDINARY AVATAR UPLOAD HANDLER
+  // ═══════════════════════════════════════════════════════════════════════════
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploadingAvatar(true);
+    const formData = new FormData();
+    formData.append("image", file);
+
+    try {
+      const res = await fetch("/api/upload-thumbnail", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        throw new Error("Upload failed");
+      }
+
+      const data = await res.json();
+      update("avatar", data.imageUrl);
+      toast("Profile photo uploaded successfully!", "success");
+    } catch (error) {
+      toast("Upload failed. Please try again.", "error");
+      console.error("Avatar upload error:", error);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   function handleSave() {
     setSaving(true);
@@ -1310,9 +1370,21 @@ function ProfilePage({ toast }) {
         <h3 className="font-bold text-gray-800 mb-5">Profile Photo</h3>
         <div className="flex items-center gap-4 sm:gap-6">
           <div className="relative">
-            <Avatar name={form.name || "I"} size={96}/>
-            <button onClick={() => fileRef.current.click()} className="absolute -bottom-1 -right-1 w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-white text-sm hover:bg-purple-700 transition shadow-md">✎</button>
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={() => toast("Image upload — connect to cloud storage.", "info")}/>
+            {uploadingAvatar ? (
+              <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"/>
+              </div>
+            ) : (
+              <Avatar name={form.name || "I"} size={96} src={form.avatar} />
+            )}
+            <button 
+              onClick={() => fileRef.current.click()} 
+              disabled={uploadingAvatar}
+              className="absolute -bottom-1 -right-1 w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-white text-sm hover:bg-purple-700 transition shadow-md disabled:opacity-50"
+            >
+              ✎
+            </button>
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload}/>
           </div>
           <div>
             <p className="font-semibold text-gray-800">{form.name}</p>
