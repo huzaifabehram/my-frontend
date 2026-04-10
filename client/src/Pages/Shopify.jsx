@@ -5,6 +5,8 @@
 // UPDATED: Full Bunny.net video support with unified helper functions
 // UPDATED: Full-screen Course Preview Popup with video player and lecture list
 // UPDATED: fetchCourseById used to load full sections from /api/courses/:id
+// UPDATED: Edge-to-edge preview player with "Preview This Course" overlay text
+// UPDATED: Full screen popup with white text on dark background
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search } from 'lucide-react';
@@ -159,7 +161,9 @@ function CourseThumbnail({ course }) {
               <path d="M8 5v14l11-7L8 5z" fill="white"/>
             </svg>
           </div>
-          <p className="text-white font-semibold text-base lg:text-lg">Preview this course</p>
+          <div className="bg-gray-800 bg-opacity-80 px-4 py-2 rounded">
+            <p className="text-white font-semibold text-base lg:text-lg">Preview This Course</p>
+          </div>
         </div>
       </div>
     );
@@ -179,7 +183,9 @@ function CourseThumbnail({ course }) {
   return (
     <div className={`w-full h-full bg-gradient-to-br ${course.color || 'from-blue-600 to-purple-700'} flex flex-col items-center justify-center gap-4`}>
       <span className="text-8xl">{course.emoji || '📚'}</span>
-      <p className="text-white font-semibold text-base">Preview this course</p>
+      <div className="bg-gray-800 bg-opacity-80 px-4 py-2 rounded">
+        <p className="text-white font-semibold text-base">Preview This Course</p>
+      </div>
     </div>
   );
 }
@@ -330,7 +336,7 @@ export default function CourseLandingPage() {
 
       {/* FULL-SCREEN COURSE PREVIEW POPUP */}
       {isPreviewOpen && (
-        <div className="fixed inset-0 z-[9999] bg-black bg-opacity-95 flex flex-col animate-fadeIn">
+        <div className="fixed inset-0 z-[9999] bg-black bg-opacity-90 flex flex-col">
           <div className="absolute top-4 right-4 z-10">
             <button
               onClick={handleClosePreview}
@@ -340,14 +346,21 @@ export default function CourseLandingPage() {
               <X size={28} className="text-white" />
             </button>
           </div>
-          <div className="bg-black border-b border-gray-800">
-            <div className="max-w-6xl mx-auto">
-              <VideoPlayer url={currentVideo} className="w-full" />
+          
+          <div className="w-full bg-black border-b border-gray-800 py-6">
+            <div className="max-w-6xl mx-auto px-6">
+              <h2 className="text-2xl lg:text-3xl font-bold text-white mb-2">Course Preview</h2>
+              <p className="text-lg text-gray-300">{courseData.title}</p>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto bg-gray-900">
-            <div className="max-w-6xl mx-auto p-6">
-              <h2 className="text-2xl font-bold text-white mb-6">Course Preview</h2>
+
+          <div className="w-full bg-black border-b border-gray-800">
+            <VideoPlayer url={currentVideo} className="w-full" />
+          </div>
+
+          <div className="flex-1 overflow-y-auto bg-black">
+            <div className="max-w-6xl mx-auto px-6 py-8">
+              <h3 className="text-xl lg:text-2xl font-bold text-white mb-6">Free Lectures of The Course</h3>
               {previewLectures.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-gray-400 text-lg">No preview lectures available</p>
@@ -478,14 +491,6 @@ export default function CourseLandingPage() {
 
           <h1 className="text-4xl lg:text-5xl font-bold text-white mb-8 leading-tight">{courseData.title}</h1>
 
-          <div className="mb-8">
-            <div className="relative bg-gray-800 rounded-xl overflow-hidden aspect-video">
-              <div onClick={handlePreviewClick} className="cursor-pointer">
-                <CourseThumbnail course={courseData} />
-              </div>
-            </div>
-          </div>
-
           <p className="text-xl text-gray-300 mb-8 leading-relaxed max-w-3xl">{courseData.subtitle}</p>
 
           <div className="flex flex-wrap items-center gap-6 mb-8">
@@ -514,10 +519,17 @@ export default function CourseLandingPage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-6 text-gray-400 text-sm border-t border-gray-800 pt-8">
+          <div className="flex flex-wrap gap-6 text-gray-400 text-sm border-t border-gray-800 pt-8 mb-8">
             <div className="flex items-center gap-2"><Clock size={18} /><span>Last updated {courseData.lastUpdated || 'Recently'}</span></div>
             <div className="flex items-center gap-2"><span>🌐</span><span>{courseData.language || 'English'}</span></div>
           </div>
+        </div>
+      </section>
+
+      {/* EDGE-TO-EDGE PREVIEW VIDEO PLAYER */}
+      <section className="w-full bg-black">
+        <div className="relative w-full bg-gray-900 overflow-hidden aspect-video cursor-pointer" onClick={handlePreviewClick}>
+          <CourseThumbnail course={courseData} />
         </div>
       </section>
 
