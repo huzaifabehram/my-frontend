@@ -25,8 +25,7 @@ app.use(cors({
 }));
 
 app.use(express.json());
-// ⚠️ REMOVE or comment out this line - we're using Cloudinary, not local uploads
-// app.use("/uploads", express.static("uploads"));
+app.use(express.urlencoded({ extended: true }));
 
 // ─── DB CONNECTION ─────────────────────────────────────────────────────────────
 mongoose.connect(process.env.MONGO_URI, {
@@ -604,33 +603,31 @@ const upload = multer({
   },
 });
 
-// ═════════════════════════════════════════════════════════════════════════════
-// CLOUDINARY UPLOAD ENDPOINT
-// ═════════════════════════════════════════════════════════════════════════════
+// ── Upload image to Cloudinary ─────────────────────────────────────────────────
+// Registered as BOTH /api/upload/image (new modular path) AND
+// /api/upload/image (already matches) — frontend calls /upload/image via axios base
 app.post("/api/upload/image", protect, instructorOnly, upload.single("image"), async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ message: "No file uploaded" });
     }
 
-    // Check if Cloudinary is configured
     if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY) {
-      return res.status(500).json({ 
-        message: "Cloudinary not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in your .env file" 
+      return res.status(500).json({
+        message: "Cloudinary not configured. Please set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in your .env file",
       });
     }
 
-    // Upload to Cloudinary using upload_stream
     const uploadPromise = new Promise((resolve, reject) => {
       const uploadStream = cloudinary.uploader.upload_stream(
         {
-          folder: "learnify/course-thumbnails",
-          resource_type: "image",
-          allowed_formats: ["jpg", "jpeg", "png", "webp", "gif"],
+          folder:           "learnify/course-thumbnails",
+          resource_type:    "image",
+          allowed_formats:  ["jpg", "jpeg", "png", "webp", "gif"],
           transformation: [
-            { width: 1280, height: 720, crop: "limit" }, // Max dimensions
-            { quality: "auto:good" }, // Auto-optimize quality
-            { fetch_format: "auto" }, // Auto-select best format (webp/avif)
+            { width: 1280, height: 720, crop: "limit" },
+            { quality: "auto:good" },
+            { fetch_format: "auto" },
           ],
         },
         (error, result) => {
@@ -638,43 +635,39 @@ app.post("/api/upload/image", protect, instructorOnly, upload.single("image"), a
           else resolve(result);
         }
       );
-      
-      // Write the buffer to the stream
       uploadStream.end(req.file.buffer);
     });
 
     const result = await uploadPromise;
 
-    // ⚠️ CRITICAL FIX: Return the response format that the frontend expects
     res.json({
-      url: result.secure_url,           // ← Primary field frontend looks for
-      secure_url: result.secure_url,    // ← Backup
-      imageUrl: result.secure_url,      // ← Backup
-      publicId: result.public_id,
-      width: result.width,
-      height: result.height,
-      format: result.format,
-      filename: result.original_filename,
+      url:        result.secure_url,   // ← primary field the frontend reads
+      secure_url: result.secure_url,   // ← backup
+      imageUrl:   result.secure_url,   // ← backup
+      publicId:   result.public_id,
+      width:      result.width,
+      height:     result.height,
+      format:     result.format,
+      filename:   result.original_filename,
     });
 
     console.log("✅ Image uploaded to Cloudinary:", result.secure_url);
 
   } catch (error) {
     console.error("❌ Cloudinary upload error:", error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       message: "Failed to upload image to Cloudinary",
-      error: error.message 
+      error:   error.message,
     });
   }
 });
 
-// Optional: Delete image from Cloudinary
+// ── Delete image from Cloudinary ───────────────────────────────────────────────
 app.delete("/api/upload/image/:publicId", protect, instructorOnly, async (req, res) => {
   try {
     const publicId = decodeURIComponent(req.params.publicId);
-    
-    const result = await cloudinary.uploader.destroy(publicId);
-    
+    const result   = await cloudinary.uploader.destroy(publicId);
+
     if (result.result === "ok") {
       res.json({ message: "Image deleted successfully", publicId });
     } else {
@@ -682,9 +675,9 @@ app.delete("/api/upload/image/:publicId", protect, instructorOnly, async (req, r
     }
   } catch (error) {
     console.error("❌ Cloudinary delete error:", error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       message: "Failed to delete image",
-      error: error.message 
+      error:   error.message,
     });
   }
 });
@@ -692,10 +685,11 @@ app.delete("/api/upload/image/:publicId", protect, instructorOnly, async (req, r
 // ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
 app.get("/api/health", (req, res) => {
   res.json({
-    status:   "ok",
-    database: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+    status:     "ok",
+    message:    "Server is running",
+    database:   mongoose.connection.readyState === 1 ? "connected" : "disconnected",
     cloudinary: process.env.CLOUDINARY_CLOUD_NAME ? "configured" : "not configured",
-    time:     new Date().toISOString(),
+    time:       new Date().toISOString(),
   });
 });
 
@@ -706,8 +700,11 @@ app.use((req, res) => {
 
 // ─── ERROR HANDLER ────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
-  console.error("Unhandled error:", err.message);
-  res.status(500).json({ message: err.message || "Internal server error" });
+  console.error("❌ Server Error:", err.stack || err.message);
+  res.status(500).json({
+    success: false,
+    message: err.message || "Internal Server Error",
+  });
 });
 
 // ─── START SERVER ─────────────────────────────────────────────────────────────
@@ -716,5 +713,5 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📦 Database: learnify @ cluster0.27tk541.mongodb.net`);
   console.log(`🌍 CORS allowed origins: ${allowedOrigins.join(", ")}`);
-  console.log(`☁️  Cloudinary: ${process.env.CLOUDINARY_CLOUD_NAME ? '✓ Configured' : '✗ Not configured'}`);
+  console.log(`☁️  Cloudinary: ${process.env.CLOUDINARY_CLOUD_NAME ? "✓ Configured" : "✗ Not configured"}`);
 });

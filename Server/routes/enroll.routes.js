@@ -3,7 +3,7 @@
 const express = require("express");
 const router  = express.Router();
 const { enrollCourse, getMyCourses } = require("../controllers/enroll.controller");
-const { protect, restrictTo }        = require("../middleware/auth.middleware");
+const { protect, restrictTo }        = require("../middleware/authMiddleware");
 const User = require("../models/User.model");
 
 // ── POST /api/enroll  (original route) ───────────────────────────────────────

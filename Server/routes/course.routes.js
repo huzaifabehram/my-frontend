@@ -10,7 +10,7 @@ const {
   updateCourse,
   deleteCourse,
 } = require("../controllers/course.controller");
-const { protect, restrictTo } = require("../middleware/auth.middleware");
+const { protect, restrictTo } = require("../middleware/authMiddleware");
 
 // GET  /api/courses              → Public: all published courses
 router.get("/", getAllCourses);
