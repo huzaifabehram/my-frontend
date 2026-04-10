@@ -1,4 +1,4 @@
-// Server/server.js — Complete MERN Backend with Cloudinary
+// Server/server.js — Complete MERN Backend
 const express  = require("express");
 const mongoose = require("mongoose");
 const cors     = require("cors");
@@ -10,15 +10,17 @@ require("dotenv").config();
 const app = express();
 
 // ─── CORS ─────────────────────────────────────────────────────────────────────
+// Allows localhost in dev AND your Vercel frontend in production.
+// After you deploy to Vercel, replace "https://your-app.vercel.app"
+// with your real Vercel URL (e.g. https://learnify-ui.vercel.app)
 const allowedOrigins = [
   "http://localhost:3000",
-  "http://localhost:5173", // Vite dev server
-  process.env.CLIENT_URL,
-  process.env.PUBLIC_URL,
-].filter(Boolean);
+  process.env.CLIENT_URL,          // set this in Render env vars
+].filter(Boolean);                 // removes undefined if CLIENT_URL not set yet
 
 app.use(cors({
   origin: (origin, callback) => {
+    // Allow requests with no origin (mobile apps, curl, Postman)
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
     callback(new Error(`CORS blocked: ${origin}`));
@@ -27,7 +29,7 @@ app.use(cors({
 }));
 
 app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use("/uploads", express.static("uploads"));
 
 // ─── DB CONNECTION ─────────────────────────────────────────────────────────────
 mongoose.connect(process.env.MONGO_URI, {
@@ -43,17 +45,6 @@ mongoose.connection.on("reconnected",  () => console.log("✅ MongoDB reconnecte
 // ─── DEPENDENCIES ─────────────────────────────────────────────────────────────
 const bcrypt = require("bcryptjs");
 const jwt    = require("jsonwebtoken");
-
-// ── CLOUDINARY SETUP ──────────────────────────────────────────────────────────
-const cloudinary = require("cloudinary").v2;
-
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key:    process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
-console.log("☁️  Cloudinary configured:", process.env.CLOUDINARY_CLOUD_NAME ? "✓" : "✗");
 
 // ─── MODELS ───────────────────────────────────────────────────────────────────
 
@@ -588,215 +579,40 @@ app.post("/api/reviews/:courseId", protect, async (req, res) => {
   }
 });
 
-// ═════════════════════════════════════════════════════════════════════════════
-// UPLOAD ROUTES — CLOUDINARY (Image + Video)
-// ═════════════════════════════════════════════════════════════════════════════
+// ─── IMAGE UPLOAD ─────────────────────────────────────────────────────────────
+if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
 
-// ── Multer instances (memory storage — Cloudinary uses streams, no disk needed)
-const imageUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, "uploads/"),
+  filename:    (req, file, cb) => {
+    const ext  = path.extname(file.originalname);
+    const name = path.basename(file.originalname, ext).replace(/\s+/g, "-");
+    cb(null, `${Date.now()}-${name}${ext}`);
+  },
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
-    if (allowed.includes(file.mimetype)) return cb(null, true);
-    cb(new Error("Only image files are allowed (JPG, PNG, WebP, GIF)"));
+    const allowed = ["image/jpeg","image/jpg","image/png","image/webp","image/gif"];
+    if (allowed.includes(file.mimetype)) cb(null, true);
+    else cb(new Error("Only image files are allowed (JPG, PNG, WebP, GIF)"), false);
   },
 });
 
-const videoUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 500 * 1024 * 1024 }, // 500 MB
-  fileFilter: (req, file, cb) => {
-    const allowed = ["video/mp4", "video/webm", "video/ogg", "video/quicktime", "video/x-msvideo"];
-    if (allowed.includes(file.mimetype)) return cb(null, true);
-    cb(new Error("Only video files are allowed (MP4, WebM, OGG, MOV, AVI)"));
-  },
-});
-
-// ── Helper: pipe a buffer into Cloudinary via upload_stream ──────────────────
-function streamToCloudinary(buffer, options) {
-  return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(options, (error, result) => {
-      if (error) return reject(error);
-      resolve(result);
-    });
-    stream.end(buffer);
-  });
-}
-
-// ── Guard: reject upload requests when Cloudinary env vars are missing ────────
-function requireCloudinary(req, res, next) {
-  if (
-    !process.env.CLOUDINARY_CLOUD_NAME ||
-    !process.env.CLOUDINARY_API_KEY    ||
-    !process.env.CLOUDINARY_API_SECRET
-  ) {
-    return res.status(500).json({
-      message:
-        "Cloudinary is not configured. Add CLOUDINARY_CLOUD_NAME, " +
-        "CLOUDINARY_API_KEY and CLOUDINARY_API_SECRET to your .env file.",
-    });
-  }
-  next();
-}
-
-// ── POST /api/upload/image ─────────────────────────────────────────────────────
-// • Instructors  → uploads to learnify/course-thumbnails (course thumbnail)
-// • Students     → uploads to learnify/avatars           (profile avatar)
-// Frontend field name must be: "image"
-app.post(
-  "/api/upload/image",
-  protect,
-  requireCloudinary,
-  imageUpload.single("image"),
-  async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ message: "No file uploaded" });
-      }
-
-      const folder =
-        req.user.role === "instructor"
-          ? "learnify/course-thumbnails"
-          : "learnify/avatars";
-
-      const result = await streamToCloudinary(req.file.buffer, {
-        folder,
-        resource_type:   "image",
-        allowed_formats: ["jpg", "jpeg", "png", "webp", "gif"],
-        transformation: [
-          { width: 1280, height: 720, crop: "limit" },
-          { quality: "auto:good" },
-          { fetch_format: "auto" },
-        ],
-      });
-
-      console.log("✅ Image uploaded to Cloudinary:", result.secure_url);
-
-      res.json({
-        url:        result.secure_url,  // ← primary field the frontend reads
-        secure_url: result.secure_url,
-        imageUrl:   result.secure_url,
-        publicId:   result.public_id,
-        width:      result.width,
-        height:     result.height,
-        format:     result.format,
-        filename:   result.original_filename,
-      });
-    } catch (err) {
-      console.error("❌ Cloudinary image upload error:", err.message);
-      res.status(500).json({ message: "Failed to upload image", error: err.message });
-    }
-  }
-);
-
-// ── POST /api/upload/video ─────────────────────────────────────────────────────
-// Instructors upload lecture videos or a course preview video.
-// Frontend field name must be: "video"
-// ⚠️  Large files take time — for production consider Cloudinary's direct
-//     upload widget (client-side signed upload) to bypass your server.
-app.post(
-  "/api/upload/video",
-  protect,
-  instructorOnly,
-  requireCloudinary,
-  videoUpload.single("video"),
-  async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ message: "No video file uploaded" });
-      }
-
-      const result = await streamToCloudinary(req.file.buffer, {
-        folder:        "learnify/lecture-videos",
-        resource_type: "video",
-        // Cloudinary transcodes asynchronously — response is instant
-        eager: [
-          { streaming_profile: "hd", format: "m3u8" },            // HLS stream
-          { width: 1280, height: 720, crop: "limit", format: "mp4" }, // 720p MP4
-        ],
-        eager_async: true,
-      });
-
-      console.log("✅ Video uploaded to Cloudinary:", result.secure_url);
-
-      res.json({
-        url:        result.secure_url,  // ← primary field the frontend reads
-        secure_url: result.secure_url,
-        videoUrl:   result.secure_url,
-        publicId:   result.public_id,
-        duration:   result.duration,    // seconds (returned by Cloudinary)
-        format:     result.format,
-        filename:   result.original_filename,
-        bytes:      result.bytes,
-      });
-    } catch (err) {
-      console.error("❌ Cloudinary video upload error:", err.message);
-      res.status(500).json({ message: "Failed to upload video", error: err.message });
-    }
-  }
-);
-
-// ── DELETE /api/upload/image/:publicId ────────────────────────────────────────
-app.delete("/api/upload/image/:publicId", protect, instructorOnly, async (req, res) => {
-  try {
-    const publicId = decodeURIComponent(req.params.publicId);
-    const result   = await cloudinary.uploader.destroy(publicId, { resource_type: "image" });
-    if (result.result === "ok") {
-      res.json({ message: "Image deleted successfully", publicId });
-    } else {
-      res.status(404).json({ message: "Image not found or already deleted" });
-    }
-  } catch (err) {
-    console.error("❌ Cloudinary delete error:", err.message);
-    res.status(500).json({ message: "Failed to delete image", error: err.message });
-  }
-});
-
-// ── DELETE /api/upload/video/:publicId ────────────────────────────────────────
-app.delete("/api/upload/video/:publicId", protect, instructorOnly, async (req, res) => {
-  try {
-    const publicId = decodeURIComponent(req.params.publicId);
-    const result   = await cloudinary.uploader.destroy(publicId, { resource_type: "video" });
-    if (result.result === "ok") {
-      res.json({ message: "Video deleted successfully", publicId });
-    } else {
-      res.status(404).json({ message: "Video not found or already deleted" });
-    }
-  } catch (err) {
-    console.error("❌ Cloudinary video delete error:", err.message);
-    res.status(500).json({ message: "Failed to delete video", error: err.message });
-  }
+app.post("/api/upload/image", protect, instructorOnly, upload.single("image"), (req, res) => {
+  if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+  const url = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
+  res.json({ url, filename: req.file.filename });
 });
 
 // ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
 app.get("/api/health", (req, res) => {
   res.json({
-    status:     "ok",
-    message:    "Server is running",
-    database:   mongoose.connection.readyState === 1 ? "connected" : "disconnected",
-    cloudinary: process.env.CLOUDINARY_CLOUD_NAME ? "configured" : "not configured",
-    time:       new Date().toISOString(),
+    status:   "ok",
+    database: mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+    time:     new Date().toISOString(),
   });
-});
-
-// ─── MULTER ERROR HANDLER ─────────────────────────────────────────────────────
-// Placed after all routes so file-size and MIME-type rejections return
-// clean JSON instead of crashing Express with an unhandled error.
-app.use((err, req, res, next) => {
-  if (err instanceof multer.MulterError) {
-    if (err.code === "LIMIT_FILE_SIZE") {
-      return res.status(413).json({
-        message: "File too large. Max size: 10 MB for images, 500 MB for videos.",
-      });
-    }
-    return res.status(400).json({ message: `Upload error: ${err.message}` });
-  }
-  // Custom fileFilter rejections
-  if (err?.message?.startsWith("Only")) {
-    return res.status(415).json({ message: err.message });
-  }
-  next(err);
 });
 
 // ─── 404 HANDLER ──────────────────────────────────────────────────────────────
@@ -804,13 +620,10 @@ app.use((req, res) => {
   res.status(404).json({ message: `Route ${req.method} ${req.path} not found` });
 });
 
-// ─── GLOBAL ERROR HANDLER ─────────────────────────────────────────────────────
+// ─── ERROR HANDLER ────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
-  console.error("❌ Server Error:", err.stack || err.message);
-  res.status(500).json({
-    success: false,
-    message: err.message || "Internal Server Error",
-  });
+  console.error("Unhandled error:", err.message);
+  res.status(500).json({ message: err.message || "Internal server error" });
 });
 
 // ─── START SERVER ─────────────────────────────────────────────────────────────
@@ -819,7 +632,4 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📦 Database: learnify @ cluster0.27tk541.mongodb.net`);
   console.log(`🌍 CORS allowed origins: ${allowedOrigins.join(", ")}`);
-  console.log(`☁️  Cloudinary: ${process.env.CLOUDINARY_CLOUD_NAME ? "✓ Configured" : "✗ Not configured"}`);
-});  
- 
- 
+});
