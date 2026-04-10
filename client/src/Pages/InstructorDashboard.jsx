@@ -838,20 +838,32 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
     try {
       const formData = new FormData();
       formData.append("image", file);
+      // When editing, server saves Cloudinary URL on the course document immediately
+      if (isEdit && id) formData.append("courseId", id);
+
       const res = await api.post("/upload/image", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      // Backend returns { url: "https://res.cloudinary.com/..." }
-      const imageUrl = res.data.url || res.data.imageUrl || res.data.secure_url;
+      const imageUrl = res.data.url || res.data.secure_url || res.data.thumbnail;
+      if (!imageUrl) {
+        toast("Upload succeeded but no image URL was returned.", "error");
+        return;
+      }
       setThumbnail(imageUrl);
       setThumbnailPreview(imageUrl);
-      toast("Thumbnail uploaded successfully!", "success");
+      toast(
+        isEdit && id
+          ? "Thumbnail uploaded to Cloudinary and saved on this course."
+          : "Thumbnail uploaded to Cloudinary. Save the course to keep it.",
+        "success"
+      );
     } catch (err) {
       console.error("Thumbnail upload error:", err);
       toast("Upload failed. Please try again or paste an image URL.", "error");
       // Keep the local preview visible so the user can see what they picked
     } finally {
       setUploadingThumb(false);
+      if (e.target) e.target.value = "";
     }
   };
 
