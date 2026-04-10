@@ -1,6 +1,8 @@
+// routes/upload.js
 import express from "express";
 import upload from "../middleware/upload.js";
 import { protect } from "../middleware/auth.js";
+import cloudinary from "../config/cloudinary.js"; // ⚠️ ADD THIS IMPORT
 
 const router = express.Router();
 
@@ -11,6 +13,8 @@ router.post("/image", protect, upload.single("image"), async (req, res) => {
       return res.status(400).json({ message: "No file uploaded" });
     }
 
+    console.log('✅ File uploaded to Cloudinary:', req.file.path);
+
     res.status(200).json({
       success: true,
       url: req.file.path,
@@ -19,7 +23,7 @@ router.post("/image", protect, upload.single("image"), async (req, res) => {
       public_id: req.file.filename
     });
   } catch (error) {
-    console.error("Image upload error:", error);
+    console.error("❌ Image upload error:", error);
     res.status(500).json({ 
       success: false,
       message: "Failed to upload image",
