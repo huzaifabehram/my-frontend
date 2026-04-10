@@ -6,6 +6,7 @@ const multer   = require("multer");
 const path     = require("path");
 const fs       = require("fs");
 require("dotenv").config();
+const { cloudinary } = require("./config/cloudinary");
 
 const app = express();
 
@@ -579,31 +580,78 @@ app.post("/api/reviews/:courseId", protect, async (req, res) => {
   }
 });
 
-// ─── IMAGE UPLOAD ─────────────────────────────────────────────────────────────
-if (!fs.existsSync("uploads")) fs.mkdirSync("uploads");
+// ─── IMAGE UPLOAD: temp disk → Cloudinary uploader.upload() → unlink temp ─────
+const UPLOAD_TMP = path.join(__dirname, "uploads", "tmp");
+if (!fs.existsSync(UPLOAD_TMP)) fs.mkdirSync(UPLOAD_TMP, { recursive: true });
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
-  filename:    (req, file, cb) => {
-    const ext  = path.extname(file.originalname);
-    const name = path.basename(file.originalname, ext).replace(/\s+/g, "-");
-    cb(null, `${Date.now()}-${name}${ext}`);
+const tempImageStorage = multer.diskStorage({
+  destination: (_, __, cb) => cb(null, UPLOAD_TMP),
+  filename: (_, file, cb) => {
+    const ext = path.extname(file.originalname || "") || ".jpg";
+    cb(null, `img-${Date.now()}-${Math.random().toString(36).slice(2, 9)}${ext}`);
   },
 });
-const upload = multer({
-  storage,
+const tempImageUpload = multer({
+  storage: tempImageStorage,
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = ["image/jpeg","image/jpg","image/png","image/webp","image/gif"];
+    const allowed = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
     if (allowed.includes(file.mimetype)) cb(null, true);
     else cb(new Error("Only image files are allowed (JPG, PNG, WebP, GIF)"), false);
   },
 });
 
-app.post("/api/upload/image", protect, instructorOnly, upload.single("image"), (req, res) => {
+app.post("/api/upload/image", protect, instructorOnly, tempImageUpload.single("image"), async (req, res) => {
   if (!req.file) return res.status(400).json({ message: "No file uploaded" });
-  const url = `${req.protocol}://${req.get("host")}/uploads/${req.file.filename}`;
-  res.json({ url, filename: req.file.filename });
+
+  const localPath = req.file.path;
+  const courseId = req.body.courseId;
+
+  const cleanupLocal = () => fs.promises.unlink(localPath).catch(() => {});
+
+  try {
+    if (courseId) {
+      if (!mongoose.Types.ObjectId.isValid(courseId)) {
+        await cleanupLocal();
+        return res.status(400).json({ message: "Invalid course id" });
+      }
+      const allowed = await Course.findOne({ _id: courseId, instructor: req.user._id }).select("_id");
+      if (!allowed) {
+        await cleanupLocal();
+        return res.status(404).json({ message: "Course not found or unauthorized" });
+      }
+    }
+
+    const result = await cloudinary.uploader.upload(localPath, {
+      folder: "udemy-clone",
+      resource_type: "image",
+    });
+    await cleanupLocal();
+
+    if (courseId) {
+      const updated = await Course.findOneAndUpdate(
+        { _id: courseId, instructor: req.user._id },
+        { $set: { thumbnail: result.secure_url } },
+        { new: true }
+      ).select("thumbnail");
+      return res.json({
+        url: result.secure_url,
+        secure_url: result.secure_url,
+        public_id: result.public_id,
+        thumbnail: updated.thumbnail,
+      });
+    }
+
+    res.json({
+      url: result.secure_url,
+      secure_url: result.secure_url,
+      public_id: result.public_id,
+    });
+  } catch (err) {
+    await cleanupLocal();
+    console.error("Image upload error:", err);
+    res.status(500).json({ message: err.message || "Upload failed" });
+  }
 });
 
 // ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
