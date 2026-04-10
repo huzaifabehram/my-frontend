@@ -5,8 +5,8 @@
 // UPDATED: Full Bunny.net video support with unified helper functions
 // UPDATED: Full-screen Course Preview Popup with video player and lecture list
 // UPDATED: fetchCourseById used to load full sections from /api/courses/:id
-// UPDATED: Edge-to-edge preview player with "Preview This Course" overlay text
-// UPDATED: Full screen popup with white text on dark background
+// UPDATED: Preview player positioned above course title with overlay text
+// UPDATED: Clean popup design with light black background and white text
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search } from 'lucide-react';
@@ -141,50 +141,53 @@ function VideoPlayer({ url, className = "" }) {
 function CourseThumbnail({ course }) {
   const [imgErr, setImgErr] = useState(false);
   const ytId = getYouTubeId(course.previewVideoUrl);
-  const isBunny = isBunnyUrl(course.previewVideoUrl);
 
-  if (isBunny) {
-    return (
-      <div className="relative w-full h-full bg-black">
-        <BunnyPlayer url={course.previewVideoUrl} />
-      </div>
-    );
-  }
   if (ytId) {
     return (
-      <div className="relative w-full h-full bg-black flex items-center justify-center group cursor-pointer">
+      <div className="relative w-full h-full bg-black flex items-center justify-center">
         <img src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`}
-          alt={course.title} className="w-full h-full object-cover opacity-80" />
+          alt={course.title} className="w-full h-full object-cover" />
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
-          <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-full bg-red-600 flex items-center justify-center shadow-lg group-hover:scale-110 transition-transform">
+          <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-full bg-red-600 flex items-center justify-center shadow-lg">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
               <path d="M8 5v14l11-7L8 5z" fill="white"/>
             </svg>
           </div>
-          <div className="bg-gray-800 bg-opacity-80 px-4 py-2 rounded">
-            <p className="text-white font-semibold text-base lg:text-lg">Preview This Course</p>
+          <div className="bg-gray-600 bg-opacity-90 px-4 py-2 rounded inline-block">
+            <p className="text-white font-semibold text-sm lg:text-base whitespace-nowrap">Preview This Course</p>
           </div>
         </div>
       </div>
     );
   }
-  if (course.previewVideoUrl && !imgErr) {
-    return (
-      <video src={course.previewVideoUrl} className="w-full h-full object-cover" controls
-        onError={() => setImgErr(true)} />
-    );
-  }
   if (course.thumbnail && !imgErr) {
     return (
-      <img src={course.thumbnail} alt={course.title} className="w-full h-full object-cover"
-        onError={() => setImgErr(true)} />
+      <div className="relative w-full h-full bg-black flex items-center justify-center">
+        <img src={course.thumbnail} alt={course.title} className="w-full h-full object-cover"
+          onError={() => setImgErr(true)} />
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-4">
+          <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-full bg-red-600 flex items-center justify-center shadow-lg">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+              <path d="M8 5v14l11-7L8 5z" fill="white"/>
+            </svg>
+          </div>
+          <div className="bg-gray-600 bg-opacity-90 px-4 py-2 rounded inline-block">
+            <p className="text-white font-semibold text-sm lg:text-base whitespace-nowrap">Preview This Course</p>
+          </div>
+        </div>
+      </div>
     );
   }
   return (
     <div className={`w-full h-full bg-gradient-to-br ${course.color || 'from-blue-600 to-purple-700'} flex flex-col items-center justify-center gap-4`}>
       <span className="text-8xl">{course.emoji || '📚'}</span>
-      <div className="bg-gray-800 bg-opacity-80 px-4 py-2 rounded">
-        <p className="text-white font-semibold text-base">Preview This Course</p>
+      <div className="w-16 h-16 lg:w-20 lg:h-20 rounded-full bg-red-600 flex items-center justify-center shadow-lg">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none">
+          <path d="M8 5v14l11-7L8 5z" fill="white"/>
+        </svg>
+      </div>
+      <div className="bg-gray-600 bg-opacity-90 px-4 py-2 rounded inline-block">
+        <p className="text-white font-semibold text-sm lg:text-base whitespace-nowrap">Preview This Course</p>
       </div>
     </div>
   );
@@ -347,14 +350,14 @@ export default function CourseLandingPage() {
             </button>
           </div>
           
-          <div className="w-full bg-black border-b border-gray-800 py-6">
+          <div className="w-full bg-black border-b border-gray-700 py-6">
             <div className="max-w-6xl mx-auto px-6">
               <h2 className="text-2xl lg:text-3xl font-bold text-white mb-2">Course Preview</h2>
-              <p className="text-lg text-gray-300">{courseData.title}</p>
+              <p className="text-lg text-white">{courseData.title}</p>
             </div>
           </div>
 
-          <div className="w-full bg-black border-b border-gray-800">
+          <div className="w-full bg-black border-b border-gray-700">
             <VideoPlayer url={currentVideo} className="w-full" />
           </div>
 
@@ -366,53 +369,27 @@ export default function CourseLandingPage() {
                   <p className="text-gray-400 text-lg">No preview lectures available</p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {previewLectures.map((lecture, idx) => {
-                    const isPlaying = currentVideo === lecture.videoUrl;
-                    return (
-                      <div
-                        key={`${lecture.sectionIdx}-${lecture.lectureIdx}`}
-                        onClick={() => handleLectureClick(lecture.videoUrl)}
-                        className={`p-4 rounded-lg cursor-pointer transition ${
-                          isPlaying ? 'bg-purple-600 hover:bg-purple-700' : 'bg-gray-800 hover:bg-gray-750'
-                        }`}
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="flex-shrink-0">
-                            {lecture.type === 'video' ? (
-                              <div className={`w-12 h-12 rounded-full flex items-center justify-center ${isPlaying ? 'bg-white' : 'bg-purple-600'}`}>
-                                <Play size={20} className={isPlaying ? 'text-purple-600' : 'text-white'} fill="currentColor" />
-                              </div>
-                            ) : (
-                              <div className="w-12 h-12 border-2 border-gray-600 rounded-full flex items-center justify-center">
-                                <span className="text-gray-400 text-xl">📄</span>
-                              </div>
-                            )}
+                <div className="space-y-0">
+                  {previewLectures.map((lecture, idx) => (
+                    <div
+                      key={`${lecture.sectionIdx}-${lecture.lectureIdx}`}
+                      onClick={() => handleLectureClick(lecture.videoUrl)}
+                      className="border-b border-gray-700 py-4 cursor-pointer hover:bg-gray-900 transition px-4"
+                    >
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-base lg:text-lg text-white">
+                            {lecture.title}
+                          </p>
+                        </div>
+                        <div className="flex-shrink-0">
+                          <div className="w-10 h-10 rounded-full bg-red-700 flex items-center justify-center">
+                            <Play size={16} className="text-white ml-0.5" fill="currentColor" />
                           </div>
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-medium mb-1 ${isPlaying ? 'text-white' : 'text-gray-400'}`}>
-                              {lecture.sectionTitle}
-                            </p>
-                            <p className={`font-semibold text-lg ${isPlaying ? 'text-white' : 'text-gray-200'}`}>
-                              {lecture.title}
-                            </p>
-                            {lecture.duration && (
-                              <p className={`text-sm mt-1 ${isPlaying ? 'text-purple-100' : 'text-gray-500'}`}>
-                                {lecture.duration}
-                              </p>
-                            )}
-                          </div>
-                          {isPlaying && (
-                            <div className="flex-shrink-0">
-                              <div className="px-3 py-1 bg-white rounded-full">
-                                <span className="text-purple-600 font-bold text-sm">Playing</span>
-                              </div>
-                            </div>
-                          )}
                         </div>
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -489,6 +466,13 @@ export default function CourseLandingPage() {
             )}
           </div>
 
+          {/* EDGE-TO-EDGE PREVIEW VIDEO PLAYER - MOVED ABOVE TITLE */}
+          <div className="mb-8 -mx-4">
+            <div className="relative w-full bg-black overflow-hidden aspect-video cursor-pointer" onClick={handlePreviewClick}>
+              <CourseThumbnail course={courseData} />
+            </div>
+          </div>
+
           <h1 className="text-4xl lg:text-5xl font-bold text-white mb-8 leading-tight">{courseData.title}</h1>
 
           <p className="text-xl text-gray-300 mb-8 leading-relaxed max-w-3xl">{courseData.subtitle}</p>
@@ -519,17 +503,10 @@ export default function CourseLandingPage() {
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-6 text-gray-400 text-sm border-t border-gray-800 pt-8 mb-8">
+          <div className="flex flex-wrap gap-6 text-gray-400 text-sm border-t border-gray-800 pt-8">
             <div className="flex items-center gap-2"><Clock size={18} /><span>Last updated {courseData.lastUpdated || 'Recently'}</span></div>
             <div className="flex items-center gap-2"><span>🌐</span><span>{courseData.language || 'English'}</span></div>
           </div>
-        </div>
-      </section>
-
-      {/* EDGE-TO-EDGE PREVIEW VIDEO PLAYER */}
-      <section className="w-full bg-black">
-        <div className="relative w-full bg-gray-900 overflow-hidden aspect-video cursor-pointer" onClick={handlePreviewClick}>
-          <CourseThumbnail course={courseData} />
         </div>
       </section>
 
