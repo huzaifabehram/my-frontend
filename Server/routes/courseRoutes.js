@@ -1,15 +1,41 @@
 import express from "express";
 import upload from "../middleware/upload.js";
+import { protect } from "../middleware/auth.js";
 
 const router = express.Router();
 
-router.post("/upload-thumbnail", upload.single("image"), (req, res) => {
+// Single image upload (for thumbnails, avatars, etc.)
+router.post("/image", protect, upload.single("image"), async (req, res) => {
   try {
+    if (!req.file) {
+      return res.status(400).json({ message: "No file uploaded" });
+    }
+
     res.status(200).json({
-      imageUrl: req.file.path, // Cloudinary URL
+      success: true,
+      url: req.file.path,
+      secure_url: req.file.path,
+      imageUrl: req.file.path,
+      public_id: req.file.filename
     });
   } catch (error) {
-    res.status(500).json({ message: "Upload failed" });
+    console.error("Image upload error:", error);
+    res.status(500).json({ 
+      success: false,
+      message: "Failed to upload image",
+      error: error.message 
+    });
+  }
+});
+
+// Optional: Delete image from Cloudinary
+router.delete("/image/:publicId", protect, async (req, res) => {
+  try {
+    const { publicId } = req.params;
+    await cloudinary.uploader.destroy(publicId);
+    res.status(200).json({ success: true, message: "Image deleted" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to delete image" });
   }
 });
 
