@@ -821,15 +821,15 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
   const isBunny = isBunnyUrl(previewVideoUrl);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // THUMBNAIL UPLOAD — uses the app's authenticated axios instance (api)
-  // Sends to /upload/image, expects { url: "..." } in response.
-  // Cloudinary (or any storage) is handled entirely on the backend.
+  // THUMBNAIL: browser → POST {API}/upload/image (multipart) → your Node server
+  // → Cloudinary (credentials only on server) → JSON { url: "<https://res.cloudinary.com/...>" }
+  // Do not set Content-Type manually; axios must add multipart boundary automatically.
   // ═══════════════════════════════════════════════════════════════════════════
   const handleThumbnailFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Show instant local preview while uploading
+    // Instant local preview only (data URL); file bytes go to the backend.
     const reader = new FileReader();
     reader.onload = (ev) => setThumbnailPreview(ev.target.result);
     reader.readAsDataURL(file);
@@ -838,19 +838,16 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
     try {
       const formData = new FormData();
       formData.append("image", file);
-      // When editing, server saves Cloudinary URL on the course document immediately
       if (isEdit && id) formData.append("courseId", id);
 
-      const res = await api.post("/upload/image", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      const imageUrl = res.data.url || res.data.secure_url || res.data.thumbnail;
-      if (!imageUrl) {
+      const res = await api.post("/upload/image", formData);
+      const cloudinaryUrl = res.data?.url ?? res.data?.secure_url ?? res.data?.thumbnail;
+      if (!cloudinaryUrl) {
         toast("Upload succeeded but no image URL was returned.", "error");
         return;
       }
-      setThumbnail(imageUrl);
-      setThumbnailPreview(imageUrl);
+      setThumbnail(cloudinaryUrl);
+      setThumbnailPreview(cloudinaryUrl);
       toast(
         isEdit && id
           ? "Thumbnail uploaded to Cloudinary and saved on this course."
@@ -1296,17 +1293,20 @@ function ProfilePage({ toast }) {
     try {
       const formData = new FormData();
       formData.append("image", file);
-      const res = await api.post("/upload/image", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      const imageUrl = res.data.url || res.data.imageUrl || res.data.secure_url;
-      update("avatar", imageUrl);
+      const res = await api.post("/upload/image", formData);
+      const cloudinaryUrl = res.data?.url ?? res.data?.secure_url ?? res.data?.imageUrl;
+      if (!cloudinaryUrl) {
+        toast("Upload succeeded but no image URL was returned.", "error");
+        return;
+      }
+      update("avatar", cloudinaryUrl);
       toast("Profile photo uploaded successfully!", "success");
     } catch (error) {
       toast("Upload failed. Please try again.", "error");
       console.error("Avatar upload error:", error);
     } finally {
       setUploadingAvatar(false);
+      if (e.target) e.target.value = "";
     }
   };
 

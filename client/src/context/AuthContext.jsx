@@ -4,7 +4,8 @@ import axios from "axios";
 
 const AuthContext = createContext(null);
 
-const BASE_URL = "https://my-course-backend-8u69.onrender.com/api";
+// Your Node API base (same origin as POST /upload/image). Set REACT_APP_API_URL in .env for local server, e.g. http://localhost:5000/api
+const BASE_URL = (process.env.REACT_APP_API_URL || "https://my-course-backend-8u69.onrender.com/api").replace(/\/$/, "");
 
 // ── Axios instance — shared across the whole app ──────────────────────────────
 // InstructorDashboard and Shopify.jsx import this as:
