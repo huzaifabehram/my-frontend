@@ -6,10 +6,13 @@
 // UPDATED: Full Bunny.net video support with unified helper functions
 // UPDATED: Full-screen Course Preview Popup with video player and lecture list
 // UPDATED: fetchCourseById used to load full sections from /api/courses/:id
+// UPDATED: Real instructor data fetching from backend
+// UPDATED: Real reviews system with text, video, and image testimonials with sliders
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield } from 'lucide-react';
+import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCourses } from '../context/CoursesContext';
+import { useAuth } from '../context/AuthContext';
 
 // ── YouTube embed helper ───────────────────────────────────────────────────
 function getYouTubeId(url) {
@@ -200,6 +203,7 @@ export default function CourseLandingPage() {
   const { id }   = useParams();
 
   const { courses, loading, getCourse, fetchCourseById } = useCourses();
+  const { API: api, user } = useAuth();
 
   const [mobileMenuOpen,        setMobileMenuOpen]        = useState(false);
   const [expandedSection,       setExpandedSection]       = useState([0]);
@@ -212,6 +216,20 @@ export default function CourseLandingPage() {
 
   const [fullCourse, setFullCourse] = useState(null);
   const [fullCourseLoading, setFullCourseLoading] = useState(false);
+  
+  const [instructorData, setInstructorData] = useState(null);
+  const [loadingInstructor, setLoadingInstructor] = useState(false);
+
+  // Review form state
+  const [showReviewForm, setShowReviewForm] = useState(false);
+  const [reviewText, setReviewText] = useState('');
+  const [reviewRating, setReviewRating] = useState(5);
+  const [submittingReview, setSubmittingReview] = useState(false);
+
+  // Image testimonials carousel
+  const [imageTestimonialIndex, setImageTestimonialIndex] = useState(0);
+  // Video testimonials carousel
+  const [videoTestimonialIndex, setVideoTestimonialIndex] = useState(0);
 
   useEffect(() => {
     if (!id) return;
@@ -230,6 +248,22 @@ export default function CourseLandingPage() {
     const publishedCourses = courses.filter(c => c.status === 'published');
     return publishedCourses.length > 0 ? publishedCourses[0] : null;
   }, [id, fullCourse, courses, getCourse]);
+
+  // Fetch real instructor data from backend
+  useEffect(() => {
+    if (!courseData?.instructorId) return;
+    
+    setLoadingInstructor(true);
+    api.get(`/users/${courseData.instructorId}`)
+      .then(res => {
+        setInstructorData(res.data);
+        setLoadingInstructor(false);
+      })
+      .catch(err => {
+        console.error('Failed to fetch instructor:', err);
+        setLoadingInstructor(false);
+      });
+  }, [courseData?.instructorId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sections = courseData?.sections || [];
 
@@ -288,6 +322,40 @@ export default function CourseLandingPage() {
     };
   }, [isPreviewOpen]);
 
+  // Handle review submission
+  const handleReviewSubmit = async (e) => {
+    e.preventDefault();
+    if (!user) {
+      alert('Please log in to submit a review');
+      navigate('/auth/login');
+      return;
+    }
+    if (!reviewText.trim()) {
+      alert('Please write a review');
+      return;
+    }
+
+    setSubmittingReview(true);
+    try {
+      await api.post(`/courses/${courseData._id}/reviews`, {
+        text: reviewText,
+        rating: reviewRating,
+      });
+      alert('Review submitted successfully!');
+      setReviewText('');
+      setReviewRating(5);
+      setShowReviewForm(false);
+      // Refresh course data to show new review
+      const updatedCourse = await fetchCourseById(courseData._id);
+      if (updatedCourse) setFullCourse(updatedCourse);
+    } catch (err) {
+      console.error('Failed to submit review:', err);
+      alert('Failed to submit review. Please try again.');
+    } finally {
+      setSubmittingReview(false);
+    }
+  };
+
   if (loading || fullCourseLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -309,9 +377,16 @@ export default function CourseLandingPage() {
     );
   }
 
-  // Instructor data comes from the course object itself
-  // The API should populate these fields: instructor, instructorRating, instructorReviews, etc.
-  const instructor = {
+  // Use real instructor data or fallback to course-level instructor fields
+  const instructor = instructorData ? {
+    name:     instructorData.name || 'Instructor',
+    rating:   instructorData.instructorRating || 0,
+    reviews:  instructorData.instructorReviews || 0,
+    students: instructorData.instructorStudents || 0,
+    courses:  instructorData.instructorCourses || 0,
+    bio:      instructorData.bio || instructorData.instructorBio || '',
+    image:    instructorData.avatar || instructorData.instructorImage || '👩‍💼',
+  } : {
     name:     courseData.instructor        || 'Instructor',
     rating:   courseData.instructorRating  || 0,
     reviews:  courseData.instructorReviews || 0,
@@ -322,6 +397,11 @@ export default function CourseLandingPage() {
   };
 
   const totalLectures = sections.reduce((a, s) => a + (s.lectures || 0), 0);
+
+  // Get testimonials from course data
+  const textReviews = courseData.reviews_list || [];
+  const imageTestimonials = courseData.imageTestimonials || [];
+  const videoTestimonials = courseData.videoTestimonials || [];
 
   return (
     <div className="min-h-screen bg-gray-50 overflow-x-hidden w-full">
@@ -686,62 +766,72 @@ export default function CourseLandingPage() {
               {/* INSTRUCTOR */}
               <div className="mb-12 pt-8 border-t border-gray-200">
                 <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-6">Instructor</h2>
-                <button onClick={() => handleNavigate('/instructor')}
-                  className="text-purple-600 hover:text-purple-700 font-bold text-xl bg-transparent border-none cursor-pointer p-0 mb-4 block underline">
-                  {instructor.name}
-                </button>
-                <div className="flex items-start gap-6 mb-6">
-                  <div className="flex-shrink-0 w-28 h-28 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-5xl shadow-lg">
-                    {instructor.image}
-                  </div>
-                  <div className="flex-1">
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                      {instructor.rating > 0 && (
-                        <div className="flex items-center gap-2">
-                          <Star size={18} className="text-yellow-400" fill="currentColor" />
-                          <span className="text-sm font-semibold text-gray-900">{instructor.rating} Instructor Rating</span>
+                {loadingInstructor ? (
+                  <p className="text-gray-500">Loading instructor...</p>
+                ) : (
+                  <>
+                    <button onClick={() => handleNavigate('/instructor')}
+                      className="text-purple-600 hover:text-purple-700 font-bold text-xl bg-transparent border-none cursor-pointer p-0 mb-4 block underline">
+                      {instructor.name}
+                    </button>
+                    <div className="flex items-start gap-6 mb-6">
+                      <div className="flex-shrink-0 w-28 h-28 rounded-full bg-gradient-to-br from-purple-400 to-purple-600 flex items-center justify-center text-5xl shadow-lg overflow-hidden">
+                        {instructor.image?.startsWith('http') ? (
+                          <img src={instructor.image} alt={instructor.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <span>{instructor.image}</span>
+                        )}
+                      </div>
+                      <div className="flex-1">
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                          {instructor.rating > 0 && (
+                            <div className="flex items-center gap-2">
+                              <Star size={18} className="text-yellow-400" fill="currentColor" />
+                              <span className="text-sm font-semibold text-gray-900">{instructor.rating} Instructor Rating</span>
+                            </div>
+                          )}
+                          {instructor.reviews > 0 && (
+                            <div className="flex items-center gap-2">
+                              <Award size={18} className="text-gray-600" />
+                              <span className="text-sm text-gray-700">{formatNumber(instructor.reviews)} Reviews</span>
+                            </div>
+                          )}
+                          {instructor.students > 0 && (
+                            <div className="flex items-center gap-2">
+                              <Users size={18} className="text-gray-600" />
+                              <span className="text-sm text-gray-700">{formatNumber(instructor.students)} Students</span>
+                            </div>
+                          )}
+                          {instructor.courses > 0 && (
+                            <div className="flex items-center gap-2">
+                              <Play size={18} className="text-gray-600" />
+                              <span className="text-sm text-gray-700">{instructor.courses} Courses</span>
+                            </div>
+                          )}
                         </div>
-                      )}
-                      {instructor.reviews > 0 && (
-                        <div className="flex items-center gap-2">
-                          <Award size={18} className="text-gray-600" />
-                          <span className="text-sm text-gray-700">{formatNumber(instructor.reviews)} Reviews</span>
-                        </div>
-                      )}
-                      {instructor.students > 0 && (
-                        <div className="flex items-center gap-2">
-                          <Users size={18} className="text-gray-600" />
-                          <span className="text-sm text-gray-700">{formatNumber(instructor.students)} Students</span>
-                        </div>
-                      )}
-                      {instructor.courses > 0 && (
-                        <div className="flex items-center gap-2">
-                          <Play size={18} className="text-gray-600" />
-                          <span className="text-sm text-gray-700">{instructor.courses} Courses</span>
-                        </div>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                </div>
-                {instructor.bio && (
-                  <div className="relative">
-                    <div className={`text-gray-700 leading-relaxed text-sm ${!showFullInstructorBio ? 'max-h-20 overflow-hidden' : ''}`}>
-                      <p>{instructor.bio}</p>
-                    </div>
-                    {!showFullInstructorBio && <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white via-white/90 to-transparent pointer-events-none" />}
-                  </div>
-                )}
-                {instructor.bio && (
-                  <button onClick={() => setShowFullInstructorBio(!showFullInstructorBio)}
-                    className="text-purple-600 hover:text-purple-700 mt-3 text-sm font-bold transition flex items-center gap-1 bg-transparent border-none cursor-pointer p-0">
-                    <span>{showFullInstructorBio ? 'Show less' : 'Show more'}</span>
-                    <ChevronDown size={16} className={`transition-transform ${showFullInstructorBio ? 'rotate-180' : ''}`} />
-                  </button>
+                    {instructor.bio && (
+                      <div className="relative">
+                        <div className={`text-gray-700 leading-relaxed text-sm ${!showFullInstructorBio ? 'max-h-20 overflow-hidden' : ''}`}>
+                          <p>{instructor.bio}</p>
+                        </div>
+                        {!showFullInstructorBio && <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white via-white/90 to-transparent pointer-events-none" />}
+                      </div>
+                    )}
+                    {instructor.bio && (
+                      <button onClick={() => setShowFullInstructorBio(!showFullInstructorBio)}
+                        className="text-purple-600 hover:text-purple-700 mt-3 text-sm font-bold transition flex items-center gap-1 bg-transparent border-none cursor-pointer p-0">
+                        <span>{showFullInstructorBio ? 'Show less' : 'Show more'}</span>
+                        <ChevronDown size={16} className={`transition-transform ${showFullInstructorBio ? 'rotate-180' : ''}`} />
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
 
-              {/* REVIEWS */}
-              {courseData.reviews_list?.length > 0 && (
+              {/* TEXT REVIEWS */}
+              {textReviews.length > 0 && (
                 <div className="mb-12 pt-8 border-t border-gray-200">
                   <div className="mb-8 flex items-center gap-4">
                     <Star size={40} className="text-yellow-400" fill="currentColor" />
@@ -751,7 +841,7 @@ export default function CourseLandingPage() {
                     </div>
                   </div>
                   <div className="space-y-6">
-                    {courseData.reviews_list.slice(0, showAllReviews ? undefined : 3).map((review, idx) => (
+                    {textReviews.slice(0, showAllReviews ? undefined : 3).map((review, idx) => (
                       <div key={idx} className="pb-6 border-b border-gray-200 last:border-b-0">
                         <div className="flex items-start gap-4 mb-3">
                           <div className="w-12 h-12 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-lg flex-shrink-0">
@@ -773,12 +863,149 @@ export default function CourseLandingPage() {
                       </div>
                     ))}
                   </div>
-                  {courseData.reviews_list.length > 3 && (
+                  {textReviews.length > 3 && (
                     <button onClick={() => setShowAllReviews(!showAllReviews)}
                       className="mt-6 text-purple-600 hover:text-purple-700 text-sm font-bold transition bg-transparent border-none cursor-pointer p-0">
-                      {showAllReviews ? 'Show less reviews' : `Show all ${courseData.reviews_list.length} reviews`}
+                      {showAllReviews ? 'Show less reviews' : `Show all ${textReviews.length} reviews`}
                     </button>
                   )}
+                </div>
+              )}
+
+              {/* WRITE A REVIEW BUTTON */}
+              <div className="mb-12 pt-8 border-t border-gray-200">
+                <button
+                  onClick={() => setShowReviewForm(!showReviewForm)}
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg transition text-base border-none cursor-pointer shadow-lg">
+                  {showReviewForm ? 'Cancel Review' : 'Write a Review'}
+                </button>
+
+                {/* REVIEW FORM */}
+                {showReviewForm && (
+                  <form onSubmit={handleReviewSubmit} className="mt-6 bg-gray-50 rounded-lg p-6 border border-gray-200">
+                    <h3 className="text-lg font-bold text-gray-900 mb-4">Share Your Experience</h3>
+                    
+                    <div className="mb-4">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Rating</label>
+                      <div className="flex gap-2">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                            key={star}
+                            type="button"
+                            onClick={() => setReviewRating(star)}
+                            className="bg-transparent border-none cursor-pointer p-0">
+                            <Star
+                              size={32}
+                              className={`${star <= reviewRating ? 'text-yellow-400' : 'text-gray-300'} hover:text-yellow-400 transition`}
+                              fill={star <= reviewRating ? 'currentColor' : 'none'}
+                            />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="mb-4">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Your Review</label>
+                      <textarea
+                        value={reviewText}
+                        onChange={(e) => setReviewText(e.target.value)}
+                        placeholder="Share your thoughts about this course..."
+                        rows={5}
+                        className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={submittingReview}
+                      className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg transition border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed">
+                      {submittingReview ? 'Submitting...' : 'Submit Review'}
+                    </button>
+                  </form>
+                )}
+              </div>
+
+              {/* IMAGE TESTIMONIALS SLIDER */}
+              {imageTestimonials.length > 0 && (
+                <div className="mb-12 pt-8 border-t border-gray-200">
+                  <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-6">Student Testimonials</h2>
+                  <div className="relative">
+                    <div className="overflow-hidden rounded-xl">
+                      <div className="aspect-video bg-gray-100">
+                        <img
+                          src={imageTestimonials[imageTestimonialIndex].imageUrl}
+                          alt={imageTestimonials[imageTestimonialIndex].author}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-4 bg-gray-50 rounded-lg p-4">
+                      <p className="text-gray-700 text-sm leading-relaxed mb-2">{imageTestimonials[imageTestimonialIndex].text}</p>
+                      <p className="text-sm font-semibold text-gray-900">— {imageTestimonials[imageTestimonialIndex].author}</p>
+                    </div>
+                    {imageTestimonials.length > 1 && (
+                      <div className="flex items-center justify-between mt-4">
+                        <button
+                          onClick={() => setImageTestimonialIndex((imageTestimonialIndex - 1 + imageTestimonials.length) % imageTestimonials.length)}
+                          className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+                          <ChevronLeft size={20} className="text-gray-600" />
+                        </button>
+                        <div className="flex gap-2">
+                          {imageTestimonials.map((_, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => setImageTestimonialIndex(idx)}
+                              className={`w-2 h-2 rounded-full transition ${idx === imageTestimonialIndex ? 'bg-purple-600 w-6' : 'bg-gray-300'}`}
+                            />
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => setImageTestimonialIndex((imageTestimonialIndex + 1) % imageTestimonials.length)}
+                          className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+                          <ChevronRight size={20} className="text-gray-600" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* VIDEO TESTIMONIALS SLIDER */}
+              {videoTestimonials.length > 0 && (
+                <div className="mb-12 pt-8 border-t border-gray-200">
+                  <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-6">Video Reviews</h2>
+                  <div className="relative">
+                    <div className="rounded-xl overflow-hidden">
+                      <VideoPlayer url={videoTestimonials[videoTestimonialIndex].videoUrl} />
+                    </div>
+                    <div className="mt-4 bg-gray-50 rounded-lg p-4">
+                      <p className="text-gray-700 text-sm leading-relaxed mb-2">{videoTestimonials[videoTestimonialIndex].text}</p>
+                      <p className="text-sm font-semibold text-gray-900">— {videoTestimonials[videoTestimonialIndex].author}</p>
+                    </div>
+                    {videoTestimonials.length > 1 && (
+                      <div className="flex items-center justify-between mt-4">
+                        <button
+                          onClick={() => setVideoTestimonialIndex((videoTestimonialIndex - 1 + videoTestimonials.length) % videoTestimonials.length)}
+                          className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+                          <ChevronLeft size={20} className="text-gray-600" />
+                        </button>
+                        <div className="flex gap-2">
+                          {videoTestimonials.map((_, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => setVideoTestimonialIndex(idx)}
+                              className={`w-2 h-2 rounded-full transition ${idx === videoTestimonialIndex ? 'bg-purple-600 w-6' : 'bg-gray-300'}`}
+                            />
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => setVideoTestimonialIndex((videoTestimonialIndex + 1) % videoTestimonials.length)}
+                          className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+                          <ChevronRight size={20} className="text-gray-600" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

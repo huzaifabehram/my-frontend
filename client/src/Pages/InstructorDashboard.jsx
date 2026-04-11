@@ -1,6 +1,7 @@
 // client/src/Pages/InstructorDashboard.jsx
 // ─── Instructor Dashboard — connected to real MERN backend ───────────────────
 // MOBILE OPTIMIZED + BUNNY.NET SUPPORT + CLOUDINARY IMAGE UPLOAD
+// UPDATED: Added comprehensive testimonial management (text, image, video)
 // All dummy data is replaced with real API calls via useInstructorCourses hook.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -35,7 +36,6 @@ import {
 } from "recharts";
 import { useAuth } from "../context/AuthContext";
 import { useInstructorCourses } from "../hooks/useInstructorCourses";
-// ── CHANGE 1 ──────────────────────────────────────────────────────────────────
 import { useCourses } from '../context/CoursesContext';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -788,6 +788,7 @@ function CoursesPage({ courses, loading, deleteCourse, togglePublish, toast }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PAGE: COURSE EDITOR (Create & Edit) — BUNNY.NET SUPPORT + CLOUDINARY UPLOAD
+// UPDATED: Added testimonial management (text reviews, image testimonials, video testimonials)
 // ─────────────────────────────────────────────────────────────────────────────
 
 function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
@@ -814,7 +815,20 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
   const [uploadingThumb, setUploadingThumb] = useState(false);
   const thumbnailRef = useRef();
 
-  // ── FIX: use the authenticated api instance from useAuth, same as the rest of the app
+  // ══════════════════════════════════════════════════════════════════════════
+  // TESTIMONIALS STATE
+  // ══════════════════════════════════════════════════════════════════════════
+  
+  // Image testimonials
+  const [imageTestimonials, setImageTestimonials] = useState(existing?.imageTestimonials || []);
+  const [newImageTestimonial, setNewImageTestimonial] = useState({ author: '', text: '', imageUrl: '', imagePreview: '' });
+  const [uploadingImageTestimonial, setUploadingImageTestimonial] = useState(false);
+  const imageTestimonialRef = useRef();
+
+  // Video testimonials
+  const [videoTestimonials, setVideoTestimonials] = useState(existing?.videoTestimonials || []);
+  const [newVideoTestimonial, setNewVideoTestimonial] = useState({ author: '', text: '', videoUrl: '' });
+
   const { API: api } = useAuth();
 
   const ytId    = getYouTubeId(previewVideoUrl);
@@ -829,7 +843,6 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
     const file = e.target.files[0];
     if (!file) return;
 
-    // Instant local preview only (data URL); file bytes go to the backend.
     const reader = new FileReader();
     reader.onload = (ev) => setThumbnailPreview(ev.target.result);
     reader.readAsDataURL(file);
@@ -859,11 +872,89 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
     } catch (err) {
       console.error("Thumbnail upload error:", err);
       toast("Upload failed. Please try again or paste an image URL.", "error");
-      // Keep the local preview visible so the user can see what they picked
     } finally {
       setUploadingThumb(false);
       if (e.target) e.target.value = "";
     }
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // IMAGE TESTIMONIAL UPLOAD
+  // ═══════════════════════════════════════════════════════════════════════════
+  const handleImageTestimonialFile = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => setNewImageTestimonial(prev => ({ ...prev, imagePreview: ev.target.result }));
+    reader.readAsDataURL(file);
+
+    setUploadingImageTestimonial(true);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      if (isEdit && id) formData.append("courseId", id);
+
+      const res = await api.post("/upload/image", formData);
+      const cloudinaryUrl = res.data?.url ?? res.data?.secure_url ?? res.data?.imageUrl;
+      
+      if (!cloudinaryUrl) {
+        toast("Upload succeeded but no image URL was returned.", "error");
+        return;
+      }
+      
+      setNewImageTestimonial(prev => ({ ...prev, imageUrl: cloudinaryUrl, imagePreview: cloudinaryUrl }));
+      toast("Image uploaded successfully!", "success");
+    } catch (err) {
+      console.error("Image testimonial upload error:", err);
+      toast("Upload failed. Please try again.", "error");
+    } finally {
+      setUploadingImageTestimonial(false);
+      if (e.target) e.target.value = "";
+    }
+  };
+
+  const addImageTestimonial = () => {
+    if (!newImageTestimonial.author.trim() || !newImageTestimonial.text.trim() || !newImageTestimonial.imageUrl) {
+      toast("Please fill all fields and upload an image", "error");
+      return;
+    }
+    setImageTestimonials([...imageTestimonials, { 
+      id: uid(), 
+      author: newImageTestimonial.author, 
+      text: newImageTestimonial.text, 
+      imageUrl: newImageTestimonial.imageUrl 
+    }]);
+    setNewImageTestimonial({ author: '', text: '', imageUrl: '', imagePreview: '' });
+    toast("Image testimonial added!", "success");
+  };
+
+  const deleteImageTestimonial = (testimonialId) => {
+    setImageTestimonials(imageTestimonials.filter(t => (t.id || t._id) !== testimonialId));
+    toast("Image testimonial removed", "success");
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // VIDEO TESTIMONIAL MANAGEMENT
+  // ═══════════════════════════════════════════════════════════════════════════
+  const addVideoTestimonial = () => {
+    if (!newVideoTestimonial.author.trim() || !newVideoTestimonial.text.trim() || !newVideoTestimonial.videoUrl.trim()) {
+      toast("Please fill all fields including video URL", "error");
+      return;
+    }
+    setVideoTestimonials([...videoTestimonials, { 
+      id: uid(), 
+      author: newVideoTestimonial.author, 
+      text: newVideoTestimonial.text, 
+      videoUrl: newVideoTestimonial.videoUrl 
+    }]);
+    setNewVideoTestimonial({ author: '', text: '', videoUrl: '' });
+    toast("Video testimonial added!", "success");
+  };
+
+  const deleteVideoTestimonial = (testimonialId) => {
+    setVideoTestimonials(videoTestimonials.filter(t => (t.id || t._id) !== testimonialId));
+    toast("Video testimonial removed", "success");
   };
 
   const updateLectureVideo = (sId, lId, url) => {
@@ -921,6 +1012,8 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
       tags: tags.split(",").map(t=>t.trim()).filter(Boolean),
       whatYouLearn: whatYouLearn.split("\n").map(t=>t.trim()).filter(Boolean),
       requirements: requirements.split("\n").map(t=>t.trim()).filter(Boolean),
+      imageTestimonials,
+      videoTestimonials,
     };
     try {
       if (isEdit) { await updateCourse(id, payload); toast(publish ? "Published!" : "Saved!", "success"); }
@@ -1146,6 +1239,144 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
           })}
         </div>
       </div>
+
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      {/* IMAGE TESTIMONIALS MANAGEMENT */}
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
+        <SectionHeader title="Image Testimonials" />
+        <p className="text-sm text-gray-500 mb-4">Student testimonials with images (displayed as slider on course page)</p>
+        
+        {/* Existing Image Testimonials */}
+        {imageTestimonials.length > 0 && (
+          <div className="mb-6 space-y-3">
+            {imageTestimonials.map((testimonial) => (
+              <div key={testimonial.id || testimonial._id} className="border border-gray-200 rounded-lg p-4 flex gap-4">
+                <img src={testimonial.imageUrl} alt={testimonial.author} className="w-24 h-24 object-cover rounded-lg flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-gray-900 mb-1">{testimonial.author}</p>
+                  <p className="text-sm text-gray-600">{testimonial.text}</p>
+                </div>
+                <button onClick={() => deleteImageTestimonial(testimonial.id || testimonial._id)} className="text-red-500 hover:text-red-700 transition text-sm">✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add New Image Testimonial */}
+        <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+          <h4 className="font-semibold text-gray-800">Add New Image Testimonial</h4>
+          
+          <div className="flex gap-4 items-start">
+            <div className="w-32 h-32 flex-shrink-0">
+              <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-purple-400 transition cursor-pointer relative group" onClick={() => imageTestimonialRef.current?.click()}>
+                {newImageTestimonial.imagePreview ? (
+                  <img src={newImageTestimonial.imagePreview} alt="Preview" className="w-full h-full object-cover"/>
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-2xl mb-1">📷</span>
+                    <p className="text-xs text-gray-400 text-center px-2">Click to upload</p>
+                  </div>
+                )}
+                {uploadingImageTestimonial && (
+                  <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
+                    <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin"/>
+                  </div>
+                )}
+              </div>
+              <input ref={imageTestimonialRef} type="file" accept="image/*" className="hidden" onChange={handleImageTestimonialFile}/>
+            </div>
+            
+            <div className="flex-1 space-y-3">
+              <Input 
+                label="Student Name" 
+                value={newImageTestimonial.author} 
+                onChange={(val) => setNewImageTestimonial(prev => ({ ...prev, author: val }))}
+                placeholder="John Doe"
+              />
+              <Textarea 
+                label="Testimonial Text" 
+                value={newImageTestimonial.text} 
+                onChange={(val) => setNewImageTestimonial(prev => ({ ...prev, text: val }))}
+                placeholder="This course changed my life..."
+                rows={3}
+              />
+              <Btn onClick={addImageTestimonial} size="sm" disabled={uploadingImageTestimonial}>
+                Add Image Testimonial
+              </Btn>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      {/* VIDEO TESTIMONIALS MANAGEMENT */}
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
+        <SectionHeader title="Video Testimonials" />
+        <p className="text-sm text-gray-500 mb-4">Student video reviews (Bunny.net URLs - displayed as slider on course page)</p>
+        
+        {/* Existing Video Testimonials */}
+        {videoTestimonials.length > 0 && (
+          <div className="mb-6 space-y-3">
+            {videoTestimonials.map((testimonial) => (
+              <div key={testimonial.id || testimonial._id} className="border border-gray-200 rounded-lg p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <p className="font-semibold text-gray-900">{testimonial.author}</p>
+                    <p className="text-sm text-gray-600 mt-1">{testimonial.text}</p>
+                  </div>
+                  <button onClick={() => deleteVideoTestimonial(testimonial.id || testimonial._id)} className="text-red-500 hover:text-red-700 transition text-sm ml-2">✕</button>
+                </div>
+                <div className="rounded-lg overflow-hidden">
+                  <VideoPlayer url={testimonial.videoUrl} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Add New Video Testimonial */}
+        <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+          <h4 className="font-semibold text-gray-800">Add New Video Testimonial</h4>
+          
+          <Input 
+            label="Student Name" 
+            value={newVideoTestimonial.author} 
+            onChange={(val) => setNewVideoTestimonial(prev => ({ ...prev, author: val }))}
+            placeholder="Jane Smith"
+          />
+          
+          <Textarea 
+            label="Testimonial Text" 
+            value={newVideoTestimonial.text} 
+            onChange={(val) => setNewVideoTestimonial(prev => ({ ...prev, text: val }))}
+            placeholder="Brief description of the video testimonial..."
+            rows={2}
+          />
+          
+          <div>
+            <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">Bunny.net Video URL</label>
+            <input 
+              value={newVideoTestimonial.videoUrl} 
+              onChange={(e) => setNewVideoTestimonial(prev => ({ ...prev, videoUrl: e.target.value }))}
+              placeholder="https://iframe.mediadelivery.net/embed/..."
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500"
+            />
+            <p className="text-xs text-gray-400 mt-1">Paste Bunny.net embed URL or direct video link</p>
+          </div>
+          
+          {newVideoTestimonial.videoUrl && (
+            <div className="rounded-lg overflow-hidden border border-gray-200">
+              <VideoPlayer url={newVideoTestimonial.videoUrl} />
+            </div>
+          )}
+          
+          <Btn onClick={addVideoTestimonial} size="sm">
+            Add Video Testimonial
+          </Btn>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1286,7 +1517,6 @@ function ProfilePage({ toast }) {
 
   function update(field, val) { setForm((f) => ({ ...f, [field]: val })); }
 
-  // ── FIX: use the same authenticated api instance, same endpoint as thumbnail upload
   const handleAvatarUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -1411,7 +1641,6 @@ export default function InstructorDashboard() {
     courses, loading,
     createCourse, updateCourse, deleteCourse, togglePublish,
   } = useInstructorCourses();
-  // ── CHANGE 2 ────────────────────────────────────────────────────────────────
   const { syncCreated, syncUpdated, syncDeleted } = useCourses();
 
   useEffect(() => {
@@ -1440,7 +1669,6 @@ export default function InstructorDashboard() {
       <TopBar instructor={user} sidebarWidth={sidebarWidth} isMobile={isMobile} onMenuClick={() => setCollapsed(false)}/>
 
       <Layout sidebarWidth={sidebarWidth} isMobile={isMobile}>
-        {/* ── CHANGE 3 ──────────────────────────────────────────────────────── */}
         <Routes>
           <Route index element={<DashboardPage instructor={user} courses={courses} loading={loading}/>}/>
 
