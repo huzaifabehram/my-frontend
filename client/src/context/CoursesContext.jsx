@@ -28,11 +28,12 @@ const COLOR_POOL = [
 
 export function normalizeCourse(raw, index) {
   if (!raw || typeof raw !== "object") return null;
+  const source = raw.course && typeof raw.course === "object" ? raw.course : raw;
   const idx = typeof index === "number" ? index : 0;
 
-  const status = raw.status || "draft";
+  const status = source.status || "draft";
 
-  const rawSections = Array.isArray(raw.sections) ? raw.sections : [];
+  const rawSections = Array.isArray(source.sections) ? source.sections : [];
   const sections = rawSections.map((sec) => {
     const rawLectures = Array.isArray(sec.lectures)
       ? sec.lectures.filter((l) => l && typeof l === "object")
@@ -55,27 +56,58 @@ export function normalizeCourse(raw, index) {
   });
 
   const totalLectures = sections.reduce((a, s) => a + s.lectures, 0);
-  const rawPrice    = Number(raw.price)         || 0;
-  const rawDiscount = Number(raw.discountPrice) || rawPrice;
-  const students    = Number(raw.studentsEnrolled) || 0;
+  const rawPrice    = Number(source.price)         || 0;
+  const rawDiscount = Number(source.discountPrice) || rawPrice;
+  const students    = Number(source.studentsEnrolled) || 0;
 
-  const inst = raw.instructor;
+  const inst = source.instructor;
   const instructorName = inst && typeof inst === "object" ? inst.name : (inst || "Instructor");
   const instructorBio  = inst && typeof inst === "object" ? (inst.bio || "") : "";
   const instructorImg  = inst && typeof inst === "object" ? (inst.avatar || "👩‍💼") : "👩‍💼";
+  const instructorId =
+    inst && typeof inst === "object" && inst._id != null
+      ? String(inst._id)
+      : source.instructor && typeof source.instructor !== "object"
+        ? String(source.instructor)
+        : "";
+
+  const imageTestimonials = Array.isArray(source.imageTestimonials)
+    ? source.imageTestimonials
+        .filter((t) => t && typeof t === "object" && t.imageUrl)
+        .map((t) => ({
+          id: t._id != null ? String(t._id) : t.id,
+          _id: t._id,
+          author: t.author || "",
+          text: t.text || "",
+          imageUrl: t.imageUrl || "",
+        }))
+    : [];
+
+  const videoTestimonials = Array.isArray(source.videoTestimonials)
+    ? source.videoTestimonials
+        .filter((t) => t && typeof t === "object" && t.videoUrl)
+        .map((t) => ({
+          id: t._id != null ? String(t._id) : t.id,
+          _id: t._id,
+          author: t.author || "",
+          text: t.text || "",
+          videoUrl: t.videoUrl || "",
+        }))
+    : [];
 
   return {
-    _id:   raw._id || "",
-    id:    raw._id || "",
+    _id:   source._id || "",
+    id:    source._id || "",
 
-    title:         raw.title       || "Untitled Course",
-    subtitle:      raw.subtitle    || "",
-    description:   raw.description || "",
-    whatYouLearn:  Array.isArray(raw.whatYouLearn) ? raw.whatYouLearn : [],
-    requirements:  Array.isArray(raw.requirements) ? raw.requirements : [],
-    language:      raw.language || "English",
+    title:         source.title       || "Untitled Course",
+    subtitle:      source.subtitle    || "",
+    description:   source.description || "",
+    whatYouLearn:  Array.isArray(source.whatYouLearn) ? source.whatYouLearn : [],
+    requirements:  Array.isArray(source.requirements) ? source.requirements : [],
+    language:      source.language || "English",
 
     instructor:         instructorName,
+    instructorId,
     instructorBio,
     instructorImage:    instructorImg,
     instructorRating:   0,
@@ -83,35 +115,37 @@ export function normalizeCourse(raw, index) {
     instructorStudents: 0,
     instructorCourses:  0,
 
-    rating:           Number(raw.rating)       || 0,
-    reviews:          Number(raw.totalRatings) || 0,
+    rating:           Number(source.rating)       || 0,
+    reviews:          Number(source.totalRatings) || 0,
     studentsEnrolled: students,
     students,
     price:            rawDiscount,
     originalPrice:    rawPrice,
     discountPrice:    rawDiscount,
-    revenue:          Number(raw.revenue) || 0,
+    revenue:          Number(source.revenue) || 0,
 
-    category:   raw.category || "General",
-    level:      raw.level    || "Beginner",
-    tags:       Array.isArray(raw.tags) ? raw.tags : [],
+    category:   source.category || "General",
+    level:      source.level    || "Beginner",
+    tags:       Array.isArray(source.tags) ? source.tags : [],
     status,
     isPublished: status === "published",
-    bestseller:  Boolean(raw.badge === "Bestseller"),
-    updatedAt:   raw.updatedAt || new Date().toISOString(),
-    lastUpdated: raw.updatedAt
-      ? new Date(raw.updatedAt).toLocaleDateString("en-US", { month: "long", year: "numeric" })
+    bestseller:  Boolean(source.badge === "Bestseller"),
+    updatedAt:   source.updatedAt || new Date().toISOString(),
+    lastUpdated: source.updatedAt
+      ? new Date(source.updatedAt).toLocaleDateString("en-US", { month: "long", year: "numeric" })
       : "Recently",
-    duration:  raw.duration || "",
+    duration:  source.duration || "",
     lectures:  totalLectures,
 
-    thumbnail:       raw.thumbnail      || "",
-    previewVideoUrl: raw.previewVideoUrl || "",
+    thumbnail:       source.thumbnail      || "",
+    previewVideoUrl: source.previewVideoUrl || "",
     emoji: EMOJI_POOL[idx % EMOJI_POOL.length],
     color: COLOR_POOL[idx % COLOR_POOL.length],
 
     sections,
     reviews_list: [],
+    imageTestimonials,
+    videoTestimonials,
   };
 }
 
