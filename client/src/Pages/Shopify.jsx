@@ -146,9 +146,12 @@ function CourseThumbnail({ course }) {
       <div className="relative w-full h-full bg-black flex items-center justify-center group">
         <img src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`}
           alt={course.title} className="w-full h-full object-cover" />
-        <div className="absolute inset-0 bg-black bg-opacity-30 group-hover:bg-opacity-40 transition flex items-center justify-center">
-          <div className="w-20 h-20 rounded-full bg-white bg-opacity-90 hover:bg-opacity-100 flex items-center justify-center shadow-2xl transition transform group-hover:scale-110">
-            <Play size={32} className="text-gray-900 ml-1" fill="currentColor" />
+        <div className="absolute inset-0 bg-black bg-opacity-30 group-hover:bg-opacity-40 transition flex flex-col items-center justify-center gap-3">
+          <div className="w-16 h-16 rounded-full bg-red-700 hover:bg-red-800 flex items-center justify-center shadow-2xl transition transform group-hover:scale-110">
+            <Play size={24} className="text-white ml-1" fill="currentColor" />
+          </div>
+          <div className="bg-gray-600 px-4 py-2 rounded inline-block">
+            <p className="text-white font-semibold text-sm whitespace-nowrap">Preview This Course</p>
           </div>
         </div>
       </div>
@@ -159,9 +162,12 @@ function CourseThumbnail({ course }) {
       <div className="relative w-full h-full bg-black flex items-center justify-center group">
         <img src={course.thumbnail} alt={course.title} className="w-full h-full object-cover"
           onError={() => setImgErr(true)} />
-        <div className="absolute inset-0 bg-black bg-opacity-30 group-hover:bg-opacity-40 transition flex items-center justify-center">
-          <div className="w-20 h-20 rounded-full bg-white bg-opacity-90 hover:bg-opacity-100 flex items-center justify-center shadow-2xl transition transform group-hover:scale-110">
-            <Play size={32} className="text-gray-900 ml-1" fill="currentColor" />
+        <div className="absolute inset-0 bg-black bg-opacity-30 group-hover:bg-opacity-40 transition flex flex-col items-center justify-center gap-3">
+          <div className="w-16 h-16 rounded-full bg-red-700 hover:bg-red-800 flex items-center justify-center shadow-2xl transition transform group-hover:scale-110">
+            <Play size={24} className="text-white ml-1" fill="currentColor" />
+          </div>
+          <div className="bg-gray-600 px-4 py-2 rounded inline-block">
+            <p className="text-white font-semibold text-sm whitespace-nowrap">Preview This Course</p>
           </div>
         </div>
       </div>
@@ -170,9 +176,12 @@ function CourseThumbnail({ course }) {
   return (
     <div className={`w-full h-full bg-gradient-to-br ${course.color || 'from-blue-600 to-purple-700'} flex items-center justify-center group`}>
       <span className="text-8xl">{course.emoji || '📚'}</span>
-      <div className="absolute inset-0 bg-black bg-opacity-20 group-hover:bg-opacity-30 transition flex items-center justify-center">
-        <div className="w-20 h-20 rounded-full bg-white bg-opacity-90 hover:bg-opacity-100 flex items-center justify-center shadow-2xl transition transform group-hover:scale-110">
-          <Play size={32} className="text-gray-900 ml-1" fill="currentColor" />
+      <div className="absolute inset-0 bg-black bg-opacity-20 group-hover:bg-opacity-30 transition flex flex-col items-center justify-center gap-3">
+        <div className="w-16 h-16 rounded-full bg-red-700 hover:bg-red-800 flex items-center justify-center shadow-2xl transition transform group-hover:scale-110">
+          <Play size={24} className="text-white ml-1" fill="currentColor" />
+        </div>
+        <div className="bg-gray-600 px-4 py-2 rounded inline-block">
+          <p className="text-white font-semibold text-sm whitespace-nowrap">Preview This Course</p>
         </div>
       </div>
     </div>
@@ -300,6 +309,8 @@ export default function CourseLandingPage() {
     );
   }
 
+  // Instructor data comes from the course object itself
+  // The API should populate these fields: instructor, instructorRating, instructorReviews, etc.
   const instructor = {
     name:     courseData.instructor        || 'Instructor',
     rating:   courseData.instructorRating  || 0,
@@ -357,8 +368,8 @@ export default function CourseLandingPage() {
                       className="bg-white bg-opacity-5 hover:bg-opacity-10 border border-gray-800 rounded-lg p-4 cursor-pointer transition group"
                     >
                       <div className="flex items-center gap-4">
-                        <div className="flex-shrink-0 w-12 h-12 rounded-full bg-purple-600 group-hover:bg-purple-700 flex items-center justify-center transition">
-                          <Play size={20} className="text-white ml-0.5" fill="currentColor" />
+                        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-purple-600 group-hover:bg-purple-700 flex items-center justify-center transition">
+                          <Play size={16} className="text-white ml-0.5" fill="currentColor" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="font-medium text-base text-white group-hover:text-purple-400 transition truncate">
@@ -404,21 +415,20 @@ export default function CourseLandingPage() {
           </nav>
           <div className="flex items-center gap-3">
             <Search className="hidden lg:block text-gray-400 cursor-pointer hover:text-gray-600 transition" size={22} />
-            <button onClick={() => handleNavigate('/auth/login')} className="px-5 py-2.5 text-gray-700 font-semibold hover:text-purple-600 transition border-none cursor-pointer text-sm bg-transparent">Log In</button>
-            <button onClick={() => handleNavigate('/auth/register')} className="px-5 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-semibold border-none cursor-pointer text-sm shadow-sm">Sign Up</button>
+            <button onClick={() => handleNavigate('/auth/login')} className="px-5 py-2.5 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition font-semibold border-none cursor-pointer text-sm shadow-sm">Log In</button>
           </div>
         </div>
         {mobileMenuOpen && (
           <>
             <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setMobileMenuOpen(false)} />
-            <div className="fixed top-0 left-0 h-full w-64 bg-white z-50 lg:hidden shadow-2xl">
+            <div className="fixed top-0 left-0 h-full w-64 bg-gray-900 z-50 lg:hidden shadow-2xl">
               <div className="p-6 space-y-4">
                 <div className="flex justify-between items-center mb-6">
-                  <span className="text-xl font-bold text-purple-600">Menu</span>
-                  <button onClick={() => setMobileMenuOpen(false)} className="p-2 hover:bg-gray-100 rounded-lg transition bg-transparent border-none cursor-pointer"><X size={24} /></button>
+                  <span className="text-xl font-bold text-white">Menu</span>
+                  <button onClick={() => setMobileMenuOpen(false)} className="p-2 hover:bg-gray-800 rounded-lg transition bg-transparent border-none cursor-pointer text-white"><X size={24} /></button>
                 </div>
-                <button onClick={() => handleNavigate('/courses')} className="block w-full text-left text-gray-700 hover:text-purple-600 bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-gray-50 font-medium transition">Categories</button>
-                <button onClick={() => handleNavigate('/instructor')} className="block w-full text-left text-gray-700 hover:text-purple-600 bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-gray-50 font-medium transition">Instructor</button>
+                <button onClick={() => handleNavigate('/courses')} className="block w-full text-left text-white hover:text-purple-400 bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-gray-800 font-medium transition">Categories</button>
+                <button onClick={() => handleNavigate('/instructor')} className="block w-full text-left text-white hover:text-purple-400 bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-gray-800 font-medium transition">Instructor</button>
               </div>
             </div>
           </>
@@ -457,6 +467,13 @@ export default function CourseLandingPage() {
               <h1 className="text-3xl lg:text-4xl xl:text-5xl font-bold text-white mb-4 leading-tight">{courseData.title}</h1>
 
               <p className="text-lg lg:text-xl text-gray-300 mb-6 leading-relaxed">{courseData.subtitle}</p>
+
+              {/* EDGE-TO-EDGE PREVIEW VIDEO PLAYER - MOVED ABOVE "CREATED BY" */}
+              <div className="-mx-4 lg:-mx-6 mb-6">
+                <div className="relative w-full bg-black aspect-video cursor-pointer" onClick={handlePreviewClick}>
+                  <CourseThumbnail course={courseData} />
+                </div>
+              </div>
 
               <div className="flex flex-wrap items-center gap-4 mb-6">
                 {courseData.rating > 0 && (
@@ -503,17 +520,14 @@ export default function CourseLandingPage() {
                   </div>
                   <div className="p-6">
                     <div className="flex items-baseline gap-3 mb-4">
-                      <span className="text-3xl font-bold text-gray-900">${courseData.price}</span>
+                      <span className="text-3xl font-bold text-gray-900">PKR {(courseData.price * 280).toLocaleString()}</span>
                       {courseData.originalPrice > courseData.price && (
-                        <>
-                          <span className="text-lg text-gray-500 line-through">${courseData.originalPrice}</span>
-                          <span className="text-sm font-semibold text-purple-600">{Math.round((1-courseData.price/courseData.originalPrice)*100)}% off</span>
-                        </>
+                        <span className="text-sm font-semibold text-purple-600">{Math.round((1-courseData.price/courseData.originalPrice)*100)}% off</span>
                       )}
                     </div>
                     <button onClick={() => handleNavigate('/auth/register')}
                       className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg transition text-base border-none cursor-pointer shadow-lg mb-3">
-                      Add to cart
+                      Enroll Now in PKR {(courseData.price * 280).toLocaleString()}
                     </button>
                     <button onClick={() => handleNavigate('/auth/register')}
                       className="w-full bg-white hover:bg-gray-50 text-gray-900 font-semibold py-3 rounded-lg transition text-base border-2 border-gray-300 cursor-pointer">
@@ -523,13 +537,6 @@ export default function CourseLandingPage() {
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-
-          {/* Mobile Preview Video */}
-          <div className="lg:hidden mt-8">
-            <div className="relative aspect-video cursor-pointer rounded-lg overflow-hidden shadow-xl" onClick={handlePreviewClick}>
-              <CourseThumbnail course={courseData} />
             </div>
           </div>
         </div>
@@ -563,7 +570,7 @@ export default function CourseLandingPage() {
               {sections.length > 0 && (
                 <>
                   <div className="mb-6">
-                    <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-3">Course content</h2>
+                    <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-3">Course Content</h2>
                     <div className="flex flex-wrap gap-2 text-gray-600 text-sm">
                       <span className="font-semibold">{sections.length} sections</span>
                       <span>•</span>
@@ -594,12 +601,12 @@ export default function CourseLandingPage() {
                                   <div className="flex items-center gap-3 flex-1">
                                     <div className="flex-shrink-0">
                                       {lecture.type === 'video' ? (
-                                        <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-                                          <Play size={14} className="text-gray-700 ml-0.5" />
+                                        <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center">
+                                          <Play size={12} className="text-gray-700 ml-0.5" />
                                         </div>
                                       ) : (
-                                        <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center">
-                                          <BookOpen size={14} className="text-gray-700" />
+                                        <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center">
+                                          <BookOpen size={12} className="text-gray-700" />
                                         </div>
                                       )}
                                     </div>
@@ -609,10 +616,17 @@ export default function CourseLandingPage() {
                                   </div>
                                   <div className="flex items-center gap-3">
                                     {lecture.duration && <span className="text-xs text-gray-500">{lecture.duration}</span>}
-                                    {lecture.preview && (
-                                      <button onClick={handlePreviewClick}
-                                        className="text-purple-600 hover:text-purple-700 font-semibold text-xs cursor-pointer bg-transparent border-none whitespace-nowrap transition p-0">
-                                        Preview
+                                    {lecture.preview && lecture.videoUrl && (
+                                      <button 
+                                        onClick={() => {
+                                          setCurrentVideo(lecture.videoUrl);
+                                          setIsPreviewOpen(true);
+                                        }}
+                                        className="flex items-center gap-1.5 text-purple-600 hover:text-purple-700 font-semibold text-xs cursor-pointer bg-transparent border-none whitespace-nowrap transition p-0">
+                                        <div className="w-4 h-4 rounded-full bg-red-700 flex items-center justify-center">
+                                          <Play size={8} className="text-white ml-0.5" fill="currentColor" />
+                                        </div>
+                                        <span>Preview</span>
                                       </button>
                                     )}
                                   </div>
@@ -626,6 +640,14 @@ export default function CourseLandingPage() {
                   </div>
                 </>
               )}
+
+              {/* ENROLL NOW BUTTON BELOW COURSE CONTENT */}
+              <div className="mb-12">
+                <button onClick={() => handleNavigate('/auth/register')}
+                  className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-4 rounded-lg transition text-lg border-none cursor-pointer shadow-lg">
+                  Enroll Now in PKR {(courseData.price * 280).toLocaleString()}
+                </button>
+              </div>
 
               {/* REQUIREMENTS */}
               {courseData.requirements?.length > 0 && (
@@ -866,10 +888,7 @@ export default function CourseLandingPage() {
       <div className="fixed bottom-0 left-0 right-0 lg:hidden bg-white border-t-2 border-gray-200 p-4 z-50 flex items-center justify-between gap-4 w-full shadow-2xl">
         <div className="flex flex-col">
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-gray-900">${courseData.price}</span>
-            {courseData.originalPrice > courseData.price && (
-              <span className="text-sm text-gray-500 line-through">${courseData.originalPrice}</span>
-            )}
+            <span className="text-2xl font-bold text-gray-900">PKR {(courseData.price * 280).toLocaleString()}</span>
           </div>
           {courseData.originalPrice > courseData.price && (
             <span className="text-xs text-purple-600 font-semibold">{Math.round((1-courseData.price/courseData.originalPrice)*100)}% off</span>
@@ -877,7 +896,7 @@ export default function CourseLandingPage() {
         </div>
         <button onClick={() => handleNavigate('/auth/register')}
           className="flex-1 bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 rounded-lg transition text-base border-none cursor-pointer shadow-lg">
-          Add to cart
+          Enroll Now in PKR {(courseData.price * 280).toLocaleString()}
         </button>
       </div>
 
