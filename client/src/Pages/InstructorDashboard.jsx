@@ -841,6 +841,8 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
       if (isEdit && id) formData.append("courseId", id);
 
       const res = await api.post("/upload/image", formData);
+      console.log(res);
+      
       const cloudinaryUrl = res.data?.url ?? res.data?.secure_url ?? res.data?.thumbnail;
       if (!cloudinaryUrl) {
         toast("Upload succeeded but no image URL was returned.", "error");
