@@ -95,6 +95,21 @@ export function normalizeCourse(raw, index) {
         }))
     : [];
 
+  const projectGallery = Array.isArray(source.projectGallery)
+    ? source.projectGallery
+        .filter((g) => g && typeof g === "object" && g.imageUrl)
+        .map((g) => ({
+          id: g._id != null ? String(g._id) : g.id,
+          _id: g._id,
+          imageUrl: g.imageUrl || "",
+          caption: g.caption || "",
+        }))
+    : [];
+
+  const alsoBoughtCourseIds = Array.isArray(source.alsoBoughtCourseIds)
+    ? source.alsoBoughtCourseIds.map((id) => String(id))
+    : [];
+
   return {
     _id:   source._id || "",
     id:    source._id || "",
@@ -146,6 +161,8 @@ export function normalizeCourse(raw, index) {
     reviews_list: [],
     imageTestimonials,
     videoTestimonials,
+    projectGallery,
+    alsoBoughtCourseIds,
   };
 }
 
@@ -189,6 +206,10 @@ export function CoursesProvider({ children }) {
       const index = courses.findIndex((c) => c._id === id);
       const course = normalizeCourse(res.data, index >= 0 ? index : 0);
       console.log(`[CoursesContext] ✅ Full course fetched, sections:`, course?.sections?.length);
+      console.log(`[CoursesContext] ✅ Image testimonials:`, course?.imageTestimonials?.length);
+      console.log(`[CoursesContext] ✅ Video testimonials:`, course?.videoTestimonials?.length);
+      console.log(`[CoursesContext] ✅ Project gallery:`, course?.projectGallery?.length);
+      console.log(`[CoursesContext] ✅ Also bought IDs:`, course?.alsoBoughtCourseIds?.length);
       return course;
     } catch (err) {
       console.error("[CoursesContext] ❌ fetchCourseById failed:", err.message);
