@@ -41,7 +41,13 @@ function isYouTubeUrl(url) {
 }
 
 function isDirectVideo(url) {
-  return url && (url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov'));
+  if (!url) return false;
+  const path = url.split("?")[0].split("#")[0].toLowerCase();
+  return path.endsWith(".mp4") || path.endsWith(".webm") || path.endsWith(".mov");
+}
+
+function isCloudinaryVideo(url) {
+  return url && /res\.cloudinary\.com\/.+\/(video|raw)\//i.test(url);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -126,7 +132,7 @@ function VideoPlayer({ url, className = "" }) {
   if (isBunnyUrl(url)) {
     return <BunnyPlayer url={url} className={className} />;
   }
-  if (isDirectVideo(url)) {
+  if (isDirectVideo(url) || isCloudinaryVideo(url)) {
     return (
       <video
         src={url}
@@ -268,10 +274,19 @@ export default function CourseLandingPage() {
   const sections = courseData?.sections || [];
 
   const studentsBoughtCourses = useMemo(() => {
+    if (!courseData?._id) return [];
+    const picked = courseData.alsoBoughtCourseIds;
+    if (Array.isArray(picked) && picked.length > 0) {
+      const byId = new Map(courses.map((c) => [String(c._id), c]));
+      return picked
+        .map((cid) => byId.get(String(cid)))
+        .filter(Boolean)
+        .filter((c) => c.status === "published" && String(c._id) !== String(courseData._id));
+    }
     return courses
-      .filter(c => c._id !== courseData?._id && c.status === 'published')
+      .filter((c) => c._id !== courseData._id && c.status === "published")
       .slice(0, 4);
-  }, [courses, courseData?._id]);
+  }, [courses, courseData?._id, courseData?.alsoBoughtCourseIds]);
 
   const previewLectures = useMemo(() => {
     const lectures = [];
@@ -402,6 +417,7 @@ export default function CourseLandingPage() {
   const textReviews = courseData.reviews_list || [];
   const imageTestimonials = courseData.imageTestimonials || [];
   const videoTestimonials = courseData.videoTestimonials || [];
+  const projectGallery = courseData.projectGallery || [];
 
   return (
     <div className="min-h-screen bg-gray-50 overflow-x-hidden w-full">
@@ -1005,6 +1021,35 @@ export default function CourseLandingPage() {
                         </button>
                       </div>
                     )}
+                  </div>
+                </div>
+              )}
+
+              {/* PROJECT GALLERY (from instructor dashboard) */}
+              {projectGallery.length > 0 && (
+                <div className="mb-12 pt-8 border-t border-gray-200">
+                  <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-2">Project gallery</h2>
+                  <p className="text-sm text-gray-500 mb-6">Student work and course outcomes</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {projectGallery.map((item) => (
+                      <figure
+                        key={item.id || item._id || item.imageUrl}
+                        className="group rounded-xl overflow-hidden border border-gray-200 bg-white shadow-sm hover:shadow-md transition"
+                      >
+                        <div className="aspect-video bg-gray-100 overflow-hidden">
+                          <img
+                            src={item.imageUrl}
+                            alt={item.caption || "Project"}
+                            className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+                          />
+                        </div>
+                        {item.caption ? (
+                          <figcaption className="px-3 py-2.5 text-sm text-gray-700 border-t border-gray-100">
+                            {item.caption}
+                          </figcaption>
+                        ) : null}
+                      </figure>
+                    ))}
                   </div>
                 </div>
               )}
