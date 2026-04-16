@@ -8,9 +8,10 @@
 // UPDATED: fetchCourseById used to load full sections from /api/courses/:id
 // UPDATED: Real instructor data fetching from backend
 // UPDATED: Real reviews system with text, video, and image testimonials with sliders
+// UPDATED: Facebook-style card UI for video reviews and image testimonials
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, Heart, MessageCircle } from 'lucide-react';
 import { useCourses } from '../context/CoursesContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -41,7 +42,13 @@ function isYouTubeUrl(url) {
 }
 
 function isDirectVideo(url) {
-  return url && (url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov'));
+  if (!url) return false;
+  const path = url.split("?")[0].split("#")[0].toLowerCase();
+  return path.endsWith(".mp4") || path.endsWith(".webm") || path.endsWith(".mov");
+}
+
+function isCloudinaryVideo(url) {
+  return url && /res\.cloudinary\.com\/.+\/(video|raw)\//i.test(url);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -126,7 +133,7 @@ function VideoPlayer({ url, className = "" }) {
   if (isBunnyUrl(url)) {
     return <BunnyPlayer url={url} className={className} />;
   }
-  if (isDirectVideo(url)) {
+  if (isDirectVideo(url) || isCloudinaryVideo(url)) {
     return (
       <video
         src={url}
@@ -137,6 +144,173 @@ function VideoPlayer({ url, className = "" }) {
     );
   }
   return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FACEBOOK-STYLE CARD COMPONENTS
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Video Thumbnail Card with Play Overlay
+function VideoThumbnailCard({ videoUrl, onClick }) {
+  const ytId = getYouTubeId(videoUrl);
+  const thumbnailUrl = ytId ? `https://img.youtube.com/vi/${ytId}/maxresdefault.jpg` : null;
+
+  return (
+    <div 
+      className="relative aspect-video bg-gray-900 rounded-lg overflow-hidden cursor-pointer group"
+      onClick={onClick}
+    >
+      {thumbnailUrl ? (
+        <img 
+          src={thumbnailUrl} 
+          alt="Video thumbnail" 
+          className="w-full h-full object-cover"
+        />
+      ) : (
+        <div className="w-full h-full bg-gradient-to-br from-purple-900 to-gray-900" />
+      )}
+      <div className="absolute inset-0 bg-black bg-opacity-30 group-hover:bg-opacity-40 transition-all duration-300 flex items-center justify-center">
+        <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-white bg-opacity-90 group-hover:bg-opacity-100 flex items-center justify-center shadow-2xl transition-all duration-300 transform group-hover:scale-110">
+          <Play size={28} className="text-purple-600 ml-1" fill="currentColor" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Image Card
+function ImageCard({ imageUrl, alt, onClick }) {
+  return (
+    <div 
+      className="relative aspect-video bg-gray-100 rounded-lg overflow-hidden cursor-pointer group"
+      onClick={onClick}
+    >
+      <img 
+        src={imageUrl} 
+        alt={alt} 
+        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+      />
+    </div>
+  );
+}
+
+// Social Actions Component
+function SocialActions({ likes = 0, comments = 0, onLike, onComment, isLiked = false }) {
+  return (
+    <div className="border-t border-gray-200 pt-3">
+      <div className="flex items-center justify-between text-sm text-gray-500 mb-3">
+        <span className="flex items-center gap-1">
+          {likes > 0 && (
+            <>
+              <Heart size={16} className="text-red-500" fill="currentColor" />
+              <span>{likes}</span>
+            </>
+          )}
+        </span>
+        <span>{comments > 0 ? `${comments} comments` : ''}</span>
+      </div>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={onLike}
+          className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg transition-all duration-200 ${
+            isLiked 
+              ? 'text-red-500 bg-red-50 hover:bg-red-100' 
+              : 'text-gray-600 hover:bg-gray-100'
+          }`}
+        >
+          <Heart size={18} fill={isLiked ? 'currentColor' : 'none'} />
+          <span className="font-semibold text-sm">Like</span>
+        </button>
+        <button
+          onClick={onComment}
+          className="flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-gray-600 hover:bg-gray-100 transition-all duration-200"
+        >
+          <MessageCircle size={18} />
+          <span className="font-semibold text-sm">Comment</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Facebook-Style Post Card
+function TestimonialCard({ children, author, text, likes, comments, onLike, onComment, isLiked }) {
+  return (
+    <div className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100 transform hover:-translate-y-1">
+      {/* Card Header */}
+      <div className="p-4 pb-3">
+        <div className="flex items-center gap-3 mb-3">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-white font-bold flex-shrink-0">
+            {author?.charAt(0) || '?'}
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-gray-900 text-sm truncate">{author || 'Student'}</p>
+            <p className="text-xs text-gray-500">Course Student</p>
+          </div>
+        </div>
+        {text && (
+          <p className="text-gray-700 text-sm leading-relaxed mb-3">{text}</p>
+        )}
+      </div>
+
+      {/* Media Content */}
+      <div className="px-0">
+        {children}
+      </div>
+
+      {/* Social Actions */}
+      <div className="px-4 pb-4 pt-3">
+        <SocialActions 
+          likes={likes} 
+          comments={comments} 
+          onLike={onLike} 
+          onComment={onComment}
+          isLiked={isLiked}
+        />
+      </div>
+    </div>
+  );
+}
+
+// Modal Component
+function MediaModal({ isOpen, onClose, children, title }) {
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div 
+      className="fixed inset-0 z-[9999] bg-black bg-opacity-90 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      <div 
+        className="relative w-full max-w-6xl max-h-[90vh] overflow-auto bg-white rounded-2xl shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
+          <h3 className="text-lg font-bold text-gray-900">{title}</h3>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          >
+            <X size={24} className="text-gray-600" />
+          </button>
+        </div>
+        <div className="p-6">
+          {children}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // ── Course thumbnail with fallback ────────────────────────────────────────
@@ -226,10 +400,13 @@ export default function CourseLandingPage() {
   const [reviewRating, setReviewRating] = useState(5);
   const [submittingReview, setSubmittingReview] = useState(false);
 
-  // Image testimonials carousel
-  const [imageTestimonialIndex, setImageTestimonialIndex] = useState(0);
-  // Video testimonials carousel
-  const [videoTestimonialIndex, setVideoTestimonialIndex] = useState(0);
+  // Modal states
+  const [videoModalOpen, setVideoModalOpen] = useState(false);
+  const [imageModalOpen, setImageModalOpen] = useState(false);
+  const [modalContent, setModalContent] = useState(null);
+
+  // Like states for testimonials
+  const [likedTestimonials, setLikedTestimonials] = useState({});
 
   useEffect(() => {
     if (!id) return;
@@ -268,10 +445,19 @@ export default function CourseLandingPage() {
   const sections = courseData?.sections || [];
 
   const studentsBoughtCourses = useMemo(() => {
+    if (!courseData?._id) return [];
+    const picked = courseData.alsoBoughtCourseIds;
+    if (Array.isArray(picked) && picked.length > 0) {
+      const byId = new Map(courses.map((c) => [String(c._id), c]));
+      return picked
+        .map((cid) => byId.get(String(cid)))
+        .filter(Boolean)
+        .filter((c) => c.status === "published" && String(c._id) !== String(courseData._id));
+    }
     return courses
-      .filter(c => c._id !== courseData?._id && c.status === 'published')
+      .filter((c) => c._id !== courseData._id && c.status === "published")
       .slice(0, 4);
-  }, [courses, courseData?._id]);
+  }, [courses, courseData?._id, courseData?.alsoBoughtCourseIds]);
 
   const previewLectures = useMemo(() => {
     const lectures = [];
@@ -356,6 +542,27 @@ export default function CourseLandingPage() {
     }
   };
 
+  // Handle video modal
+  const openVideoModal = (testimonial) => {
+    setModalContent(testimonial);
+    setVideoModalOpen(true);
+  };
+
+  // Handle image modal
+  const openImageModal = (testimonial) => {
+    setModalContent(testimonial);
+    setImageModalOpen(true);
+  };
+
+  // Handle like toggle
+  const handleLike = (testimonialId, type) => {
+    const key = `${type}-${testimonialId}`;
+    setLikedTestimonials(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
+  };
+
   if (loading || fullCourseLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
@@ -402,6 +609,7 @@ export default function CourseLandingPage() {
   const textReviews = courseData.reviews_list || [];
   const imageTestimonials = courseData.imageTestimonials || [];
   const videoTestimonials = courseData.videoTestimonials || [];
+  const projectGallery = courseData.projectGallery || [];
 
   return (
     <div className="min-h-screen bg-gray-50 overflow-x-hidden w-full">
@@ -466,6 +674,44 @@ export default function CourseLandingPage() {
           </div>
         </div>
       )}
+
+      {/* VIDEO MODAL */}
+      <MediaModal
+        isOpen={videoModalOpen}
+        onClose={() => setVideoModalOpen(false)}
+        title="Video Review"
+      >
+        {modalContent && (
+          <div className="space-y-4">
+            <VideoPlayer url={modalContent.videoUrl} />
+            <div className="bg-gray-50 rounded-lg p-4">
+              <p className="text-gray-700 text-sm leading-relaxed mb-2">{modalContent.text}</p>
+              <p className="text-sm font-semibold text-gray-900">— {modalContent.author}</p>
+            </div>
+          </div>
+        )}
+      </MediaModal>
+
+      {/* IMAGE MODAL */}
+      <MediaModal
+        isOpen={imageModalOpen}
+        onClose={() => setImageModalOpen(false)}
+        title="Student Testimonial"
+      >
+        {modalContent && (
+          <div className="space-y-4">
+            <img
+              src={modalContent.imageUrl}
+              alt={modalContent.author}
+              className="w-full rounded-lg"
+            />
+            <div className="bg-gray-50 rounded-lg p-4">
+              <p className="text-gray-700 text-sm leading-relaxed mb-2">{modalContent.text}</p>
+              <p className="text-sm font-semibold text-gray-900">— {modalContent.author}</p>
+            </div>
+          </div>
+        )}
+      </MediaModal>
 
       {/* ANNOUNCEMENT BAR */}
       {courseData.discountPrice && courseData.discountPrice < courseData.originalPrice && (
@@ -925,86 +1171,110 @@ export default function CourseLandingPage() {
                 )}
               </div>
 
-              {/* IMAGE TESTIMONIALS SLIDER */}
+              {/* IMAGE TESTIMONIALS SLIDER - FACEBOOK STYLE */}
               {imageTestimonials.length > 0 && (
                 <div className="mb-12 pt-8 border-t border-gray-200">
-                  <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-6">Student Testimonials</h2>
+                  <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-3">Student Testimonials</h2>
+                  <p className="text-gray-600 text-sm mb-6">See what our students have to say about their learning journey</p>
+                  
+                  {/* Horizontal Scrollable Container */}
                   <div className="relative">
-                    <div className="overflow-hidden rounded-xl">
-                      <div className="aspect-video bg-gray-100">
-                        <img
-                          src={imageTestimonials[imageTestimonialIndex].imageUrl}
-                          alt={imageTestimonials[imageTestimonialIndex].author}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
+                    <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide"
+                         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                      {imageTestimonials.map((testimonial, idx) => {
+                        const testimonialKey = `image-${idx}`;
+                        const isLiked = likedTestimonials[testimonialKey];
+                        const likeCount = (testimonial.likes || 12) + (isLiked ? 1 : 0);
+                        
+                        return (
+                          <div key={idx} className="flex-shrink-0 w-full sm:w-[calc(50%-8px)] lg:w-[calc(33.333%-11px)] snap-start">
+                            <TestimonialCard
+                              author={testimonial.author}
+                              text={testimonial.text}
+                              likes={likeCount}
+                              comments={testimonial.comments || 5}
+                              onLike={() => handleLike(idx, 'image')}
+                              onComment={() => openImageModal(testimonial)}
+                              isLiked={isLiked}
+                            >
+                              <ImageCard
+                                imageUrl={testimonial.imageUrl}
+                                alt={testimonial.author}
+                                onClick={() => openImageModal(testimonial)}
+                              />
+                            </TestimonialCard>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div className="mt-4 bg-gray-50 rounded-lg p-4">
-                      <p className="text-gray-700 text-sm leading-relaxed mb-2">{imageTestimonials[imageTestimonialIndex].text}</p>
-                      <p className="text-sm font-semibold text-gray-900">— {imageTestimonials[imageTestimonialIndex].author}</p>
-                    </div>
-                    {imageTestimonials.length > 1 && (
-                      <div className="flex items-center justify-between mt-4">
-                        <button
-                          onClick={() => setImageTestimonialIndex((imageTestimonialIndex - 1 + imageTestimonials.length) % imageTestimonials.length)}
-                          className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">
-                          <ChevronLeft size={20} className="text-gray-600" />
-                        </button>
-                        <div className="flex gap-2">
-                          {imageTestimonials.map((_, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => setImageTestimonialIndex(idx)}
-                              className={`w-2 h-2 rounded-full transition ${idx === imageTestimonialIndex ? 'bg-purple-600 w-6' : 'bg-gray-300'}`}
-                            />
-                          ))}
-                        </div>
-                        <button
-                          onClick={() => setImageTestimonialIndex((imageTestimonialIndex + 1) % imageTestimonials.length)}
-                          className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">
-                          <ChevronRight size={20} className="text-gray-600" />
-                        </button>
-                      </div>
-                    )}
                   </div>
                 </div>
               )}
 
-              {/* VIDEO TESTIMONIALS SLIDER */}
+              {/* VIDEO TESTIMONIALS SLIDER - FACEBOOK STYLE */}
               {videoTestimonials.length > 0 && (
                 <div className="mb-12 pt-8 border-t border-gray-200">
-                  <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-6">Video Reviews</h2>
+                  <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-3">Video Reviews</h2>
+                  <p className="text-gray-600 text-sm mb-6">Watch authentic video testimonials from our course graduates</p>
+                  
+                  {/* Horizontal Scrollable Container */}
                   <div className="relative">
-                    <div className="rounded-xl overflow-hidden">
-                      <VideoPlayer url={videoTestimonials[videoTestimonialIndex].videoUrl} />
+                    <div className="flex gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide"
+                         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                      {videoTestimonials.map((testimonial, idx) => {
+                        const testimonialKey = `video-${idx}`;
+                        const isLiked = likedTestimonials[testimonialKey];
+                        const likeCount = (testimonial.likes || 28) + (isLiked ? 1 : 0);
+                        
+                        return (
+                          <div key={idx} className="flex-shrink-0 w-full sm:w-[calc(50%-8px)] lg:w-[calc(33.333%-11px)] snap-start">
+                            <TestimonialCard
+                              author={testimonial.author}
+                              text={testimonial.text}
+                              likes={likeCount}
+                              comments={testimonial.comments || 8}
+                              onLike={() => handleLike(idx, 'video')}
+                              onComment={() => openVideoModal(testimonial)}
+                              isLiked={isLiked}
+                            >
+                              <VideoThumbnailCard
+                                videoUrl={testimonial.videoUrl}
+                                onClick={() => openVideoModal(testimonial)}
+                              />
+                            </TestimonialCard>
+                          </div>
+                        );
+                      })}
                     </div>
-                    <div className="mt-4 bg-gray-50 rounded-lg p-4">
-                      <p className="text-gray-700 text-sm leading-relaxed mb-2">{videoTestimonials[videoTestimonialIndex].text}</p>
-                      <p className="text-sm font-semibold text-gray-900">— {videoTestimonials[videoTestimonialIndex].author}</p>
-                    </div>
-                    {videoTestimonials.length > 1 && (
-                      <div className="flex items-center justify-between mt-4">
-                        <button
-                          onClick={() => setVideoTestimonialIndex((videoTestimonialIndex - 1 + videoTestimonials.length) % videoTestimonials.length)}
-                          className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">
-                          <ChevronLeft size={20} className="text-gray-600" />
-                        </button>
-                        <div className="flex gap-2">
-                          {videoTestimonials.map((_, idx) => (
-                            <button
-                              key={idx}
-                              onClick={() => setVideoTestimonialIndex(idx)}
-                              className={`w-2 h-2 rounded-full transition ${idx === videoTestimonialIndex ? 'bg-purple-600 w-6' : 'bg-gray-300'}`}
-                            />
-                          ))}
+                  </div>
+                </div>
+              )}
+
+              {/* PROJECT GALLERY (from instructor dashboard) */}
+              {projectGallery.length > 0 && (
+                <div className="mb-12 pt-8 border-t border-gray-200">
+                  <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-2">Project gallery</h2>
+                  <p className="text-sm text-gray-500 mb-6">Student work and course outcomes</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {projectGallery.map((item) => (
+                      <figure
+                        key={item.id || item._id || item.imageUrl}
+                        className="group rounded-xl overflow-hidden border border-gray-200 bg-white shadow-sm hover:shadow-md transition"
+                      >
+                        <div className="aspect-video bg-gray-100 overflow-hidden">
+                          <img
+                            src={item.imageUrl}
+                            alt={item.caption || "Project"}
+                            className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
+                          />
                         </div>
-                        <button
-                          onClick={() => setVideoTestimonialIndex((videoTestimonialIndex + 1) % videoTestimonials.length)}
-                          className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">
-                          <ChevronRight size={20} className="text-gray-600" />
-                        </button>
-                      </div>
-                    )}
+                        {item.caption ? (
+                          <figcaption className="px-3 py-2.5 text-sm text-gray-700 border-t border-gray-100">
+                            {item.caption}
+                          </figcaption>
+                        ) : null}
+                      </figure>
+                    ))}
                   </div>
                 </div>
               )}
@@ -1128,6 +1398,17 @@ export default function CourseLandingPage() {
       </div>
 
       <div className="h-20 lg:h-0" />
+
+      {/* Hide scrollbar globally for smooth scrolling */}
+      <style jsx>{`
+        .scrollbar-hide::-webkit-scrollbar {
+          display: none;
+        }
+        .scrollbar-hide {
+          -ms-overflow-style: none;
+          scrollbar-width: none;
+        }
+      `}</style>
     </div>
   );
 }
