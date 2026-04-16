@@ -8,10 +8,9 @@
 // UPDATED: fetchCourseById used to load full sections from /api/courses/:id
 // UPDATED: Real instructor data fetching from backend
 // UPDATED: Real reviews system with text, video, and image testimonials with sliders
-// UPDATED: Facebook-style cards for Video Reviews and Student Testimonials
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, Heart, MessageCircle } from 'lucide-react';
+import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCourses } from '../context/CoursesContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -42,13 +41,7 @@ function isYouTubeUrl(url) {
 }
 
 function isDirectVideo(url) {
-  if (!url) return false;
-  const path = url.split("?")[0].split("#")[0].toLowerCase();
-  return path.endsWith(".mp4") || path.endsWith(".webm") || path.endsWith(".mov");
-}
-
-function isCloudinaryVideo(url) {
-  return url && /res\.cloudinary\.com\/.+\/(video|raw)\//i.test(url);
+  return url && (url.endsWith('.mp4') || url.endsWith('.webm') || url.endsWith('.mov'));
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -133,7 +126,7 @@ function VideoPlayer({ url, className = "" }) {
   if (isBunnyUrl(url)) {
     return <BunnyPlayer url={url} className={className} />;
   }
-  if (isDirectVideo(url) || isCloudinaryVideo(url)) {
+  if (isDirectVideo(url)) {
     return (
       <video
         src={url}
@@ -205,297 +198,6 @@ function formatNumber(num) {
   return String(num);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FACEBOOK-STYLE VIDEO CARD COMPONENT
-// ─────────────────────────────────────────────────────────────────────────────
-function VideoReviewCard({ testimonial, onPlay }) {
-  const [liked, setLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(testimonial.likes || 0);
-
-  const handleLike = (e) => {
-    e.stopPropagation();
-    if (liked) {
-      setLiked(false);
-      setLikeCount(prev => prev - 1);
-    } else {
-      setLiked(true);
-      setLikeCount(prev => prev + 1);
-    }
-  };
-
-  const handleComment = (e) => {
-    e.stopPropagation();
-    // Placeholder for comment functionality
-    alert('Comment functionality coming soon!');
-  };
-
-  // Get video thumbnail
-  const ytId = getYouTubeId(testimonial.videoUrl);
-  const thumbnailUrl = ytId 
-    ? `https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`
-    : testimonial.thumbnail || null;
-
-  return (
-    <div className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden cursor-pointer transform hover:scale-[1.02] border border-gray-100">
-      {/* Video Thumbnail with Play Overlay */}
-      <div 
-        className="relative aspect-video bg-gray-900 overflow-hidden group"
-        onClick={() => onPlay(testimonial.videoUrl)}
-      >
-        {thumbnailUrl ? (
-          <img 
-            src={thumbnailUrl} 
-            alt="Video thumbnail" 
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-          />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-purple-600 to-purple-800 flex items-center justify-center">
-            <Film size={64} className="text-white opacity-50" />
-          </div>
-        )}
-        
-        {/* Play Button Overlay */}
-        <div className="absolute inset-0 bg-black bg-opacity-30 group-hover:bg-opacity-40 transition-all duration-300 flex items-center justify-center">
-          <div className="w-20 h-20 rounded-full bg-white bg-opacity-90 group-hover:bg-opacity-100 flex items-center justify-center shadow-2xl transition-all duration-300 transform group-hover:scale-110">
-            <Play size={32} className="text-purple-600 ml-1" fill="currentColor" />
-          </div>
-        </div>
-      </div>
-
-      {/* Card Content */}
-      <div className="p-5">
-        {/* Testimonial Text */}
-        <p className="text-gray-700 text-sm leading-relaxed mb-3 line-clamp-3">
-          {testimonial.text}
-        </p>
-        
-        {/* Author */}
-        <p className="text-sm font-semibold text-gray-900 mb-4">
-          — {testimonial.author}
-        </p>
-
-        {/* Divider */}
-        <div className="border-t border-gray-200 mb-4"></div>
-
-        {/* Social Actions */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            {/* Like Button */}
-            <button
-              onClick={handleLike}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 group bg-transparent border-none cursor-pointer"
-            >
-              <Heart 
-                size={20} 
-                className={`transition-all duration-200 ${
-                  liked 
-                    ? 'text-red-500 fill-red-500' 
-                    : 'text-gray-600 group-hover:text-red-500'
-                }`}
-              />
-              <span className={`text-sm font-medium ${
-                liked ? 'text-red-500' : 'text-gray-600'
-              }`}>
-                {likeCount}
-              </span>
-            </button>
-
-            {/* Comment Button */}
-            <button
-              onClick={handleComment}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 group bg-transparent border-none cursor-pointer"
-            >
-              <MessageCircle 
-                size={20} 
-                className="text-gray-600 group-hover:text-purple-600 transition-colors duration-200"
-              />
-              <span className="text-sm font-medium text-gray-600">
-                {testimonial.comments || 0}
-              </span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// FACEBOOK-STYLE IMAGE CARD COMPONENT
-// ─────────────────────────────────────────────────────────────────────────────
-function ImageTestimonialCard({ testimonial, onImageClick }) {
-  const [liked, setLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(testimonial.likes || 0);
-
-  const handleLike = (e) => {
-    e.stopPropagation();
-    if (liked) {
-      setLiked(false);
-      setLikeCount(prev => prev - 1);
-    } else {
-      setLiked(true);
-      setLikeCount(prev => prev + 1);
-    }
-  };
-
-  const handleComment = (e) => {
-    e.stopPropagation();
-    // Placeholder for comment functionality
-    alert('Comment functionality coming soon!');
-  };
-
-  return (
-    <div className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden transform hover:scale-[1.02] border border-gray-100">
-      {/* Image */}
-      <div 
-        className="relative aspect-video bg-gray-100 overflow-hidden cursor-pointer group"
-        onClick={() => onImageClick(testimonial.imageUrl)}
-      >
-        <img
-          src={testimonial.imageUrl}
-          alt={testimonial.author}
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-        />
-        
-        {/* Hover Overlay */}
-        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all duration-300"></div>
-      </div>
-
-      {/* Card Content */}
-      <div className="p-5">
-        {/* Testimonial Text */}
-        <p className="text-gray-700 text-sm leading-relaxed mb-3 line-clamp-3">
-          {testimonial.text}
-        </p>
-        
-        {/* Author */}
-        <p className="text-sm font-semibold text-gray-900 mb-4">
-          — {testimonial.author}
-        </p>
-
-        {/* Divider */}
-        <div className="border-t border-gray-200 mb-4"></div>
-
-        {/* Social Actions */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            {/* Like Button */}
-            <button
-              onClick={handleLike}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 group bg-transparent border-none cursor-pointer"
-            >
-              <Heart 
-                size={20} 
-                className={`transition-all duration-200 ${
-                  liked 
-                    ? 'text-red-500 fill-red-500' 
-                    : 'text-gray-600 group-hover:text-red-500'
-                }`}
-              />
-              <span className={`text-sm font-medium ${
-                liked ? 'text-red-500' : 'text-gray-600'
-              }`}>
-                {likeCount}
-              </span>
-            </button>
-
-            {/* Comment Button */}
-            <button
-              onClick={handleComment}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-gray-100 transition-colors duration-200 group bg-transparent border-none cursor-pointer"
-            >
-              <MessageCircle 
-                size={20} 
-                className="text-gray-600 group-hover:text-purple-600 transition-colors duration-200"
-              />
-              <span className="text-sm font-medium text-gray-600">
-                {testimonial.comments || 0}
-              </span>
-            </button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// IMAGE MODAL COMPONENT
-// ─────────────────────────────────────────────────────────────────────────────
-function ImageModal({ imageUrl, onClose }) {
-  useEffect(() => {
-    const handleEscape = (e) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleEscape);
-    document.body.style.overflow = 'hidden';
-    
-    return () => {
-      window.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'unset';
-    };
-  }, [onClose]);
-
-  return (
-    <div 
-      className="fixed inset-0 z-[9999] bg-black bg-opacity-90 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <button
-        onClick={onClose}
-        className="absolute top-4 right-4 p-3 bg-white bg-opacity-10 hover:bg-opacity-20 rounded-full transition border-none cursor-pointer backdrop-blur-sm z-10"
-        aria-label="Close image"
-      >
-        <X size={24} className="text-white" />
-      </button>
-      
-      <img
-        src={imageUrl}
-        alt="Full size"
-        className="max-w-full max-h-full object-contain rounded-lg"
-        onClick={(e) => e.stopPropagation()}
-      />
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// VIDEO MODAL COMPONENT
-// ─────────────────────────────────────────────────────────────────────────────
-function VideoModal({ videoUrl, onClose }) {
-  useEffect(() => {
-    const handleEscape = (e) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleEscape);
-    document.body.style.overflow = 'hidden';
-    
-    return () => {
-      window.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = 'unset';
-    };
-  }, [onClose]);
-
-  return (
-    <div 
-      className="fixed inset-0 z-[9999] bg-black bg-opacity-95 flex items-center justify-center p-4"
-      onClick={onClose}
-    >
-      <button
-        onClick={onClose}
-        className="absolute top-4 right-4 p-3 bg-white bg-opacity-10 hover:bg-opacity-20 rounded-full transition border-none cursor-pointer backdrop-blur-sm z-10"
-        aria-label="Close video"
-      >
-        <X size={24} className="text-white" />
-      </button>
-      
-      <div className="w-full max-w-5xl" onClick={(e) => e.stopPropagation()}>
-        <VideoPlayer url={videoUrl} />
-      </div>
-    </div>
-  );
-}
-
 export default function CourseLandingPage() {
   const navigate = useNavigate();
   const { id }   = useParams();
@@ -528,10 +230,6 @@ export default function CourseLandingPage() {
   const [imageTestimonialIndex, setImageTestimonialIndex] = useState(0);
   // Video testimonials carousel
   const [videoTestimonialIndex, setVideoTestimonialIndex] = useState(0);
-
-  // Modal states
-  const [selectedImage, setSelectedImage] = useState(null);
-  const [selectedVideoUrl, setSelectedVideoUrl] = useState(null);
 
   useEffect(() => {
     if (!id) return;
@@ -570,19 +268,10 @@ export default function CourseLandingPage() {
   const sections = courseData?.sections || [];
 
   const studentsBoughtCourses = useMemo(() => {
-    if (!courseData?._id) return [];
-    const picked = courseData.alsoBoughtCourseIds;
-    if (Array.isArray(picked) && picked.length > 0) {
-      const byId = new Map(courses.map((c) => [String(c._id), c]));
-      return picked
-        .map((cid) => byId.get(String(cid)))
-        .filter(Boolean)
-        .filter((c) => c.status === "published" && String(c._id) !== String(courseData._id));
-    }
     return courses
-      .filter((c) => c._id !== courseData._id && c.status === "published")
+      .filter(c => c._id !== courseData?._id && c.status === 'published')
       .slice(0, 4);
-  }, [courses, courseData?._id, courseData?.alsoBoughtCourseIds]);
+  }, [courses, courseData?._id]);
 
   const previewLectures = useMemo(() => {
     const lectures = [];
@@ -713,25 +402,9 @@ export default function CourseLandingPage() {
   const textReviews = courseData.reviews_list || [];
   const imageTestimonials = courseData.imageTestimonials || [];
   const videoTestimonials = courseData.videoTestimonials || [];
-  const projectGallery = courseData.projectGallery || [];
 
   return (
     <div className="min-h-screen bg-gray-50 overflow-x-hidden w-full">
-
-      {/* MODALS */}
-      {selectedImage && (
-        <ImageModal 
-          imageUrl={selectedImage} 
-          onClose={() => setSelectedImage(null)} 
-        />
-      )}
-
-      {selectedVideoUrl && (
-        <VideoModal 
-          videoUrl={selectedVideoUrl} 
-          onClose={() => setSelectedVideoUrl(null)} 
-        />
-      )}
 
       {/* FULL-SCREEN COURSE PREVIEW POPUP */}
       {isPreviewOpen && (
@@ -1252,131 +925,86 @@ export default function CourseLandingPage() {
                 )}
               </div>
 
-              {/* ════════════════════════════════════════════════════════════ */}
-              {/* STUDENT TESTIMONIALS (IMAGE) - FACEBOOK STYLE CARDS         */}
-              {/* ════════════════════════════════════════════════════════════ */}
+              {/* IMAGE TESTIMONIALS SLIDER */}
               {imageTestimonials.length > 0 && (
                 <div className="mb-12 pt-8 border-t border-gray-200">
-                  <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-3">Student Testimonials</h2>
-                  
-                  {/* Dynamic Description from Backend */}
-                  {courseData.imageTestimonialsDescription && (
-                    <p className="text-gray-600 text-sm mb-8 leading-relaxed">
-                      {courseData.imageTestimonialsDescription}
-                    </p>
-                  )}
-
-                  {/* Slider Container */}
+                  <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-6">Student Testimonials</h2>
                   <div className="relative">
-                    {/* Horizontal Scroll Container */}
-                    <div className="overflow-x-auto pb-4 scrollbar-hide">
-                      <div className="flex gap-6 min-w-min">
-                        {imageTestimonials.map((testimonial, idx) => (
-                          <div key={idx} className="flex-shrink-0 w-full sm:w-[calc(50%-12px)] lg:w-[calc(33.333%-16px)]">
-                            <ImageTestimonialCard
-                              testimonial={testimonial}
-                              onImageClick={setSelectedImage}
-                            />
-                          </div>
-                        ))}
+                    <div className="overflow-hidden rounded-xl">
+                      <div className="aspect-video bg-gray-100">
+                        <img
+                          src={imageTestimonials[imageTestimonialIndex].imageUrl}
+                          alt={imageTestimonials[imageTestimonialIndex].author}
+                          className="w-full h-full object-cover"
+                        />
                       </div>
                     </div>
-
-                    {/* Navigation Dots */}
+                    <div className="mt-4 bg-gray-50 rounded-lg p-4">
+                      <p className="text-gray-700 text-sm leading-relaxed mb-2">{imageTestimonials[imageTestimonialIndex].text}</p>
+                      <p className="text-sm font-semibold text-gray-900">— {imageTestimonials[imageTestimonialIndex].author}</p>
+                    </div>
                     {imageTestimonials.length > 1 && (
-                      <div className="flex items-center justify-center gap-2 mt-6">
-                        {imageTestimonials.map((_, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => {
-                              const container = document.querySelector('.overflow-x-auto');
-                              const cardWidth = container.querySelector('.flex-shrink-0').offsetWidth;
-                              container.scrollTo({ left: idx * (cardWidth + 24), behavior: 'smooth' });
-                            }}
-                            className="w-2 h-2 rounded-full transition-all bg-gray-300 hover:bg-purple-600 border-none cursor-pointer"
-                          />
-                        ))}
+                      <div className="flex items-center justify-between mt-4">
+                        <button
+                          onClick={() => setImageTestimonialIndex((imageTestimonialIndex - 1 + imageTestimonials.length) % imageTestimonials.length)}
+                          className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+                          <ChevronLeft size={20} className="text-gray-600" />
+                        </button>
+                        <div className="flex gap-2">
+                          {imageTestimonials.map((_, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => setImageTestimonialIndex(idx)}
+                              className={`w-2 h-2 rounded-full transition ${idx === imageTestimonialIndex ? 'bg-purple-600 w-6' : 'bg-gray-300'}`}
+                            />
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => setImageTestimonialIndex((imageTestimonialIndex + 1) % imageTestimonials.length)}
+                          className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+                          <ChevronRight size={20} className="text-gray-600" />
+                        </button>
                       </div>
                     )}
                   </div>
                 </div>
               )}
 
-              {/* ════════════════════════════════════════════════════════════ */}
-              {/* VIDEO REVIEWS - FACEBOOK STYLE CARDS                        */}
-              {/* ════════════════════════════════════════════════════════════ */}
+              {/* VIDEO TESTIMONIALS SLIDER */}
               {videoTestimonials.length > 0 && (
                 <div className="mb-12 pt-8 border-t border-gray-200">
-                  <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-3">Video Reviews</h2>
-                  
-                  {/* Dynamic Description from Backend */}
-                  {courseData.videoTestimonialsDescription && (
-                    <p className="text-gray-600 text-sm mb-8 leading-relaxed">
-                      {courseData.videoTestimonialsDescription}
-                    </p>
-                  )}
-
-                  {/* Slider Container */}
+                  <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-6">Video Reviews</h2>
                   <div className="relative">
-                    {/* Horizontal Scroll Container */}
-                    <div className="overflow-x-auto pb-4 scrollbar-hide">
-                      <div className="flex gap-6 min-w-min">
-                        {videoTestimonials.map((testimonial, idx) => (
-                          <div key={idx} className="flex-shrink-0 w-full sm:w-[calc(50%-12px)] lg:w-[calc(33.333%-16px)]">
-                            <VideoReviewCard
-                              testimonial={testimonial}
-                              onPlay={setSelectedVideoUrl}
-                            />
-                          </div>
-                        ))}
-                      </div>
+                    <div className="rounded-xl overflow-hidden">
+                      <VideoPlayer url={videoTestimonials[videoTestimonialIndex].videoUrl} />
                     </div>
-
-                    {/* Navigation Dots */}
+                    <div className="mt-4 bg-gray-50 rounded-lg p-4">
+                      <p className="text-gray-700 text-sm leading-relaxed mb-2">{videoTestimonials[videoTestimonialIndex].text}</p>
+                      <p className="text-sm font-semibold text-gray-900">— {videoTestimonials[videoTestimonialIndex].author}</p>
+                    </div>
                     {videoTestimonials.length > 1 && (
-                      <div className="flex items-center justify-center gap-2 mt-6">
-                        {videoTestimonials.map((_, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => {
-                              const container = document.querySelectorAll('.overflow-x-auto')[1];
-                              const cardWidth = container.querySelector('.flex-shrink-0').offsetWidth;
-                              container.scrollTo({ left: idx * (cardWidth + 24), behavior: 'smooth' });
-                            }}
-                            className="w-2 h-2 rounded-full transition-all bg-gray-300 hover:bg-purple-600 border-none cursor-pointer"
-                          />
-                        ))}
+                      <div className="flex items-center justify-between mt-4">
+                        <button
+                          onClick={() => setVideoTestimonialIndex((videoTestimonialIndex - 1 + videoTestimonials.length) % videoTestimonials.length)}
+                          className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+                          <ChevronLeft size={20} className="text-gray-600" />
+                        </button>
+                        <div className="flex gap-2">
+                          {videoTestimonials.map((_, idx) => (
+                            <button
+                              key={idx}
+                              onClick={() => setVideoTestimonialIndex(idx)}
+                              className={`w-2 h-2 rounded-full transition ${idx === videoTestimonialIndex ? 'bg-purple-600 w-6' : 'bg-gray-300'}`}
+                            />
+                          ))}
+                        </div>
+                        <button
+                          onClick={() => setVideoTestimonialIndex((videoTestimonialIndex + 1) % videoTestimonials.length)}
+                          className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition">
+                          <ChevronRight size={20} className="text-gray-600" />
+                        </button>
                       </div>
                     )}
-                  </div>
-                </div>
-              )}
-
-              {/* PROJECT GALLERY (from instructor dashboard) */}
-              {projectGallery.length > 0 && (
-                <div className="mb-12 pt-8 border-t border-gray-200">
-                  <h2 className="text-2xl lg:text-3xl font-bold text-gray-900 mb-2">Project gallery</h2>
-                  <p className="text-sm text-gray-500 mb-6">Student work and course outcomes</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {projectGallery.map((item) => (
-                      <figure
-                        key={item.id || item._id || item.imageUrl}
-                        className="group rounded-xl overflow-hidden border border-gray-200 bg-white shadow-sm hover:shadow-md transition"
-                      >
-                        <div className="aspect-video bg-gray-100 overflow-hidden">
-                          <img
-                            src={item.imageUrl}
-                            alt={item.caption || "Project"}
-                            className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300"
-                          />
-                        </div>
-                        {item.caption ? (
-                          <figcaption className="px-3 py-2.5 text-sm text-gray-700 border-t border-gray-100">
-                            {item.caption}
-                          </figcaption>
-                        ) : null}
-                      </figure>
-                    ))}
                   </div>
                 </div>
               )}
@@ -1500,17 +1128,6 @@ export default function CourseLandingPage() {
       </div>
 
       <div className="h-20 lg:h-0" />
-
-      {/* Custom CSS for hiding scrollbar */}
-      <style jsx>{`
-        .scrollbar-hide::-webkit-scrollbar {
-          display: none;
-        }
-        .scrollbar-hide {
-          -ms-overflow-style: none;
-          scrollbar-width: none;
-        }
-      `}</style>
     </div>
   );
 }
