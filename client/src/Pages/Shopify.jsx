@@ -16,10 +16,13 @@
 // NEW: Rich text HTML support for description
 // NEW: Reviews now display in horizontal carousel (fixed display issue)
 // NEW: Multiple reviews allowed from same user
-// NEW: Facebook Reels-style UI - cards show only image/video, full info in modal overlay
-import React, { useState, useEffect, useMemo } from 'react';
+// NEW: Facebook Reels-style UI - EXACT 170x300px cards, vertical video scroll, horizontal image slider
+// NEW: Auto-play videos in slider (muted), full sound in reels view
+// NEW: IntersectionObserver for video auto-play
+// NEW: Full screen reels overlays with Like/Comment/Share icons
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, Heart, MessageCircle } from 'lucide-react';
+import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, Heart, MessageCircle, Share2, Bookmark, ThumbsUp } from 'lucide-react';
 import { useCourses } from '../context/CoursesContext';
 import { useAuth } from '../context/AuthContext';
 
@@ -120,17 +123,17 @@ function BunnyPlayer({ url, className = "" }) {
 // UNIVERSAL VIDEO PLAYER
 // ─────────────────────────────────────────────────────────────────────────────
 
-function VideoPlayer({ url, className = "", isReelsStyle = false }) {
+function VideoPlayer({ url, className = "", isReelsStyle = false, autoPlay = false, muted = false, loop = false, controls = true, videoRef = null }) {
   if (!url) return null;
   const ytId = getYouTubeId(url);
   
-  const aspectClass = isReelsStyle ? "aspect-[9/16]" : "aspect-video";
+  const aspectClass = isReelsStyle ? "h-full w-full" : "aspect-video";
   
   if (ytId) {
     return (
       <div className={`relative w-full ${aspectClass} bg-black ${className}`}>
         <iframe
-          src={`https://www.youtube.com/embed/${ytId}`}
+          src={`https://www.youtube.com/embed/${ytId}${autoPlay ? '?autoplay=1&mute=1' : ''}`}
           className="absolute inset-0 w-full h-full object-cover"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
@@ -147,9 +150,14 @@ function VideoPlayer({ url, className = "", isReelsStyle = false }) {
   if (isDirectVideo(url) || isCloudinaryVideo(url)) {
     return (
       <video
+        ref={videoRef}
         src={url}
         className={`w-full ${aspectClass} bg-black object-cover ${className}`}
-        controls
+        controls={controls}
+        autoPlay={autoPlay}
+        muted={muted}
+        loop={loop}
+        playsInline
         preload="metadata"
       />
     );
@@ -158,14 +166,85 @@ function VideoPlayer({ url, className = "", isReelsStyle = false }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// REELS-STYLE COMPONENTS (NEW - Facebook/Instagram Reels UI)
+// REELS-STYLE COMPONENTS - EXACT FACEBOOK REELS UI
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Simple Card - Only shows image/video thumbnail (NO text/likes on card)
+// Video Card - EXACT SIZE 170x300px with auto-play on visible
+function ReelsVideoCard({ videoUrl, onClick, index }) {
+  const videoRef = useRef(null);
+  const containerRef = useRef(null);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (videoRef.current) {
+            if (entry.isIntersecting) {
+              videoRef.current.play().catch(() => {});
+            } else {
+              videoRef.current.pause();
+            }
+          }
+        });
+      },
+      { threshold: 0.5 }
+    );
+
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+
+    return () => {
+      if (containerRef.current) {
+        observer.unobserve(containerRef.current);
+      }
+    };
+  }, []);
+
+  const ytId = getYouTubeId(videoUrl);
+  const thumbnailUrl = ytId ? `https://img.youtube.com/vi/${ytId}/maxresdefault.jpg` : null;
+
+  return (
+    <div 
+      ref={containerRef}
+      className="w-[170px] h-[300px] rounded-xl overflow-hidden flex-shrink-0 relative bg-gray-900 cursor-pointer group shadow-lg hover:shadow-2xl transition-all duration-300"
+      onClick={onClick}
+    >
+      {ytId ? (
+        // YouTube thumbnail with play button
+        <>
+          <img 
+            src={thumbnailUrl} 
+            alt="Video thumbnail" 
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-black bg-opacity-20 group-hover:bg-opacity-30 transition-all duration-300 flex items-center justify-center">
+            <div className="w-16 h-16 rounded-full bg-white bg-opacity-90 group-hover:bg-opacity-100 flex items-center justify-center shadow-2xl transition-all duration-300 transform group-hover:scale-110">
+              <Play size={24} className="text-purple-600 ml-1" fill="currentColor" />
+            </div>
+          </div>
+        </>
+      ) : (
+        // Direct video with auto-play
+        <video
+          ref={videoRef}
+          src={videoUrl}
+          className="w-full h-full object-cover"
+          muted
+          loop
+          playsInline
+          preload="metadata"
+        />
+      )}
+    </div>
+  );
+}
+
+// Image Card - EXACT SIZE 170x300px
 function ReelsImageCard({ imageUrl, alt, onClick }) {
   return (
     <div 
-      className="relative aspect-[9/16] bg-gray-900 rounded-xl overflow-hidden cursor-pointer group shadow-lg hover:shadow-2xl transition-all duration-300"
+      className="w-[170px] h-[300px] rounded-xl overflow-hidden flex-shrink-0 relative cursor-pointer group shadow-lg hover:shadow-2xl transition-all duration-300"
       onClick={onClick}
     >
       <img 
@@ -173,116 +252,244 @@ function ReelsImageCard({ imageUrl, alt, onClick }) {
         alt={alt} 
         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
       />
-      {/* Subtle hover effect - no text on card */}
       <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all duration-300" />
     </div>
   );
 }
 
-// Simple Video Card - Only shows thumbnail with play button (NO text/likes on card)
-function ReelsVideoCard({ videoUrl, onClick }) {
-  const ytId = getYouTubeId(videoUrl);
-  const thumbnailUrl = ytId ? `https://img.youtube.com/vi/${ytId}/maxresdefault.jpg` : null;
+// Full Screen Video Reels View - VERTICAL SCROLL
+function VideoReelsView({ isOpen, onClose, videos, startIndex = 0 }) {
+  const [currentIndex, setCurrentIndex] = useState(startIndex);
+  const videoRefs = useRef([]);
+  const containerRef = useRef(null);
 
-  return (
-    <div 
-      className="relative aspect-[9/16] bg-gray-900 rounded-xl overflow-hidden cursor-pointer group shadow-lg hover:shadow-2xl transition-all duration-300"
-      onClick={onClick}
-    >
-      {thumbnailUrl ? (
-        <img 
-          src={thumbnailUrl} 
-          alt="Video thumbnail" 
-          className="w-full h-full object-cover"
-        />
-      ) : (
-        <div className="w-full h-full bg-gradient-to-br from-purple-900 to-gray-900" />
-      )}
-      <div className="absolute inset-0 bg-black bg-opacity-20 group-hover:bg-opacity-30 transition-all duration-300 flex items-center justify-center">
-        <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-white bg-opacity-90 group-hover:bg-opacity-100 flex items-center justify-center shadow-2xl transition-all duration-300 transform group-hover:scale-110">
-          <Play size={36} className="text-purple-600 ml-1" fill="currentColor" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// Full Screen Reels Modal with Bottom Overlay Info
-function ReelsModal({ isOpen, onClose, children, author, text, likes, comments, isVideo = false }) {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
+      setCurrentIndex(startIndex);
     } else {
       document.body.style.overflow = 'unset';
     }
     return () => {
       document.body.style.overflow = 'unset';
     };
-  }, [isOpen]);
+  }, [isOpen, startIndex]);
+
+  useEffect(() => {
+    // Manage video playback - unmute and play active video
+    videoRefs.current.forEach((video, idx) => {
+      if (video) {
+        if (idx === currentIndex) {
+          video.muted = false;
+          video.play().catch(() => {});
+        } else {
+          video.pause();
+          video.muted = true;
+        }
+      }
+    });
+  }, [currentIndex]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
+  const currentVideo = videos[currentIndex];
+
   return (
-    <div 
-      className="fixed inset-0 z-[9999] bg-black bg-opacity-98 flex items-center justify-center p-0"
-      onClick={onClose}
-    >
-      <div 
-        className="relative w-full h-full flex items-center justify-center"
-        onClick={(e) => e.stopPropagation()}
+    <div className="fixed inset-0 bg-black z-50 overflow-y-scroll snap-y snap-mandatory" ref={containerRef}>
+      {/* Close Button */}
+      <button
+        onClick={onClose}
+        className="fixed top-4 right-4 text-white text-2xl z-50 w-10 h-10 flex items-center justify-center bg-black bg-opacity-50 rounded-full hover:bg-opacity-70 transition"
       >
-        {/* Close Button */}
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 z-[10000] p-3 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-full transition-colors backdrop-blur-sm"
-        >
-          <X size={28} className="text-white" />
-        </button>
-        
-        {/* Content Container */}
-        <div className="relative w-full h-full flex items-center justify-center p-4">
-          <div className="relative w-full max-w-md mx-auto h-full flex items-center justify-center">
-            {/* Media Content */}
-            <div className="relative w-full">
-              {children}
-              
-              {/* Bottom Overlay - Facebook Reels Style */}
-              <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black via-black/80 to-transparent">
-                <div className="space-y-3">
-                  {/* Author Name */}
-                  <div className="flex items-center gap-2">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
-                      {author?.charAt(0) || '?'}
-                    </div>
-                    <p className="font-semibold text-white text-base">{author || 'Student'}</p>
-                  </div>
-                  
-                  {/* Caption/Text */}
-                  {text && (
-                    <p className="text-white text-sm leading-relaxed line-clamp-3">{text}</p>
-                  )}
-                  
-                  {/* Likes and Comments */}
-                  <div className="flex items-center gap-4 text-white text-sm">
-                    {likes > 0 && (
-                      <div className="flex items-center gap-1.5">
-                        <Heart size={18} className="text-red-400" fill="currentColor" />
-                        <span>{likes}</span>
-                      </div>
-                    )}
-                    {comments > 0 && (
-                      <div className="flex items-center gap-1.5">
-                        <MessageCircle size={18} />
-                        <span>{comments}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
+        <X size={24} />
+      </button>
+
+      {videos.map((video, index) => (
+        <div key={index} className="h-screen w-full snap-start flex items-center justify-center relative">
+          <VideoPlayer 
+            url={video.videoUrl} 
+            isReelsStyle={true}
+            autoPlay={index === currentIndex}
+            muted={index !== currentIndex}
+            loop={true}
+            controls={false}
+            videoRef={(el) => (videoRefs.current[index] = el)}
+            className="h-full w-full object-cover"
+          />
+
+          {/* Gradient Overlay at Bottom */}
+          <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-black/80 to-transparent pointer-events-none"></div>
+
+          {/* Bottom Left Content */}
+          <div className="absolute bottom-6 left-4 text-white z-10 max-w-[70%]">
+            <p className="font-bold text-base mb-2">{video.author || 'Student'}</p>
+            {video.text && (
+              <p className="text-sm leading-relaxed line-clamp-3">{video.text}</p>
+            )}
+          </div>
+
+          {/* Right Side Icons */}
+          <div className="absolute right-3 bottom-24 flex flex-col items-center gap-6 text-white z-10">
+            <button className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer">
+              <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition">
+                <ThumbsUp size={24} />
               </div>
-            </div>
+              <span className="text-xs">{video.likes || 0}</span>
+            </button>
+
+            <button className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer">
+              <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition">
+                <MessageCircle size={24} />
+              </div>
+              <span className="text-xs">{video.comments || 0}</span>
+            </button>
+
+            <button className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer">
+              <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition">
+                <Share2 size={24} />
+              </div>
+              <span className="text-xs">Share</span>
+            </button>
+
+            <button className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer">
+              <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition">
+                <Bookmark size={24} />
+              </div>
+              <span className="text-xs">Save</span>
+            </button>
           </div>
         </div>
-      </div>
+      ))}
+    </div>
+  );
+}
+
+// Full Screen Image Slider View - HORIZONTAL SCROLL
+function ImageSliderView({ isOpen, onClose, images, startIndex = 0 }) {
+  const [currentIndex, setCurrentIndex] = useState(startIndex);
+
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      setCurrentIndex(startIndex);
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+    };
+  }, [isOpen, startIndex]);
+
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowLeft' && currentIndex > 0) setCurrentIndex(currentIndex - 1);
+      if (e.key === 'ArrowRight' && currentIndex < images.length - 1) setCurrentIndex(currentIndex + 1);
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose, currentIndex, images.length]);
+
+  if (!isOpen) return null;
+
+  const currentImage = images[currentIndex];
+
+  return (
+    <div className="fixed inset-0 bg-black z-50 flex overflow-x-auto snap-x snap-mandatory">
+      {/* Close Button */}
+      <button
+        onClick={onClose}
+        className="fixed top-4 right-4 text-white text-2xl z-50 w-10 h-10 flex items-center justify-center bg-black bg-opacity-50 rounded-full hover:bg-opacity-70 transition"
+      >
+        <X size={24} />
+      </button>
+
+      {images.map((image, index) => (
+        <div key={index} className="min-w-full h-full snap-center flex items-center justify-center relative">
+          <img 
+            src={image.imageUrl} 
+            alt={image.author} 
+            className="w-full h-full object-contain"
+          />
+
+          {/* Gradient Overlay at Bottom */}
+          <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-black/80 to-transparent pointer-events-none"></div>
+
+          {/* Bottom Left Content */}
+          <div className="absolute bottom-6 left-4 text-white z-10 max-w-[70%]">
+            <p className="font-bold text-base mb-2">{image.author || 'Student'}</p>
+            {image.text && (
+              <p className="text-sm leading-relaxed line-clamp-3">{image.text}</p>
+            )}
+          </div>
+
+          {/* Right Side Icons */}
+          <div className="absolute right-3 bottom-24 flex flex-col items-center gap-6 text-white z-10">
+            <button className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer">
+              <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition">
+                <ThumbsUp size={24} />
+              </div>
+              <span className="text-xs">{image.likes || 0}</span>
+            </button>
+
+            <button className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer">
+              <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition">
+                <MessageCircle size={24} />
+              </div>
+              <span className="text-xs">{image.comments || 0}</span>
+            </button>
+
+            <button className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer">
+              <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition">
+                <Share2 size={24} />
+              </div>
+              <span className="text-xs">Share</span>
+            </button>
+
+            <button className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer">
+              <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition">
+                <Bookmark size={24} />
+              </div>
+              <span className="text-xs">Save</span>
+            </button>
+          </div>
+
+          {/* Navigation Arrows */}
+          {index > 0 && (
+            <button
+              onClick={() => setCurrentIndex(index - 1)}
+              className="absolute left-4 top-1/2 transform -translate-y-1/2 w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition text-white z-10"
+            >
+              <ChevronLeft size={28} />
+            </button>
+          )}
+          {index < images.length - 1 && (
+            <button
+              onClick={() => setCurrentIndex(index + 1)}
+              className="absolute right-4 top-1/2 transform -translate-y-1/2 w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition text-white z-10"
+            >
+              <ChevronRight size={28} />
+            </button>
+          )}
+
+          {/* Counter */}
+          <div className="absolute top-4 left-1/2 transform -translate-x-1/2 text-white text-sm bg-black bg-opacity-50 px-3 py-1 rounded-full">
+            {index + 1} / {images.length}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -374,9 +581,11 @@ export default function CourseLandingPage() {
   const [reviewRating, setReviewRating] = useState(5);
   const [submittingReview, setSubmittingReview] = useState(false);
 
-  // Modal states for Reels-style views
-  const [reelsModalOpen, setReelsModalOpen] = useState(false);
-  const [reelsModalContent, setReelsModalContent] = useState(null);
+  // Reels view states
+  const [videoReelsOpen, setVideoReelsOpen] = useState(false);
+  const [videoReelsStartIndex, setVideoReelsStartIndex] = useState(0);
+  const [imageSliderOpen, setImageSliderOpen] = useState(false);
+  const [imageSliderStartIndex, setImageSliderStartIndex] = useState(0);
 
   useEffect(() => {
     if (!id) return;
@@ -478,7 +687,7 @@ export default function CourseLandingPage() {
     };
   }, [isPreviewOpen]);
 
-  // Handle review submission - REMOVED multiple review restriction
+  // Handle review submission
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
     if (!reviewText.trim()) {
@@ -505,12 +714,6 @@ export default function CourseLandingPage() {
     } finally {
       setSubmittingReview(false);
     }
-  };
-
-  // Handle Reels modal for testimonials and videos
-  const openReelsModal = (content) => {
-    setReelsModalContent(content);
-    setReelsModalOpen(true);
   };
 
   if (loading || fullCourseLoading) {
@@ -625,28 +828,21 @@ export default function CourseLandingPage() {
         </div>
       )}
 
-      {/* REELS MODAL - Full Screen with Bottom Overlay */}
-      <ReelsModal
-        isOpen={reelsModalOpen}
-        onClose={() => setReelsModalOpen(false)}
-        author={reelsModalContent?.author}
-        text={reelsModalContent?.text}
-        likes={reelsModalContent?.likes || 0}
-        comments={reelsModalContent?.comments || 0}
-        isVideo={reelsModalContent?.type === 'video'}
-      >
-        {reelsModalContent?.type === 'video' ? (
-          <VideoPlayer url={reelsModalContent.videoUrl} isReelsStyle={true} />
-        ) : (
-          <div className="w-full aspect-[9/16] bg-black rounded-lg overflow-hidden">
-            <img
-              src={reelsModalContent?.imageUrl}
-              alt={reelsModalContent?.author}
-              className="w-full h-full object-cover"
-            />
-          </div>
-        )}
-      </ReelsModal>
+      {/* VIDEO REELS VIEW - VERTICAL SCROLL */}
+      <VideoReelsView
+        isOpen={videoReelsOpen}
+        onClose={() => setVideoReelsOpen(false)}
+        videos={videoTestimonials}
+        startIndex={videoReelsStartIndex}
+      />
+
+      {/* IMAGE SLIDER VIEW - HORIZONTAL SCROLL */}
+      <ImageSliderView
+        isOpen={imageSliderOpen}
+        onClose={() => setImageSliderOpen(false)}
+        images={imageTestimonials}
+        startIndex={imageSliderStartIndex}
+      />
 
       {/* ANNOUNCEMENT BAR */}
       {courseData.discountPrice && courseData.discountPrice < courseData.originalPrice && (
@@ -1111,63 +1307,48 @@ export default function CourseLandingPage() {
                 )}
               </div>
 
-              {/* IMAGE TESTIMONIALS SLIDER - REELS STYLE (ONLY IMAGE, NO TEXT) */}
+              {/* IMAGE TESTIMONIALS SLIDER - FACEBOOK REELS STYLE (170x300px) */}
               {imageTestimonials.length > 0 && (
                 <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-gray-200 w-full">
                   <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 mb-2 md:mb-3">Student Testimonials</h2>
                   <p className="text-gray-600 text-sm md:text-base mb-4 md:mb-6">See what our students have to say</p>
                   
-                  {/* Horizontal Scrollable Container */}
-                  <div className="relative -mx-4 px-4 md:mx-0 md:px-0">
-                    <div className="flex gap-3 md:gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide"
-                         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                      {imageTestimonials.map((testimonial, idx) => (
-                        <div key={idx} className="flex-shrink-0 w-[200px] sm:w-[220px] snap-start">
-                          <ReelsImageCard
-                            imageUrl={testimonial.imageUrl}
-                            alt={testimonial.author}
-                            onClick={() => openReelsModal({
-                              type: 'image',
-                              imageUrl: testimonial.imageUrl,
-                              author: testimonial.author,
-                              text: testimonial.text,
-                              likes: testimonial.likes || 12,
-                              comments: testimonial.comments || 5
-                            })}
-                          />
-                        </div>
-                      ))}
-                    </div>
+                  {/* Horizontal Scrollable Container - EXACT SIZE */}
+                  <div className="flex gap-3 overflow-x-auto px-3 pb-4 -mx-3">
+                    {imageTestimonials.map((testimonial, idx) => (
+                      <ReelsImageCard
+                        key={idx}
+                        imageUrl={testimonial.imageUrl}
+                        alt={testimonial.author}
+                        onClick={() => {
+                          setImageSliderStartIndex(idx);
+                          setImageSliderOpen(true);
+                        }}
+                      />
+                    ))}
                   </div>
                 </div>
               )}
 
-              {/* VIDEO TESTIMONIALS SLIDER - REELS STYLE (ONLY VIDEO THUMBNAIL, NO TEXT) */}
+              {/* VIDEO TESTIMONIALS SLIDER - FACEBOOK REELS STYLE (170x300px) */}
               {videoTestimonials.length > 0 && (
                 <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-gray-200 w-full">
                   <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 mb-2 md:mb-3">Video Reviews</h2>
                   <p className="text-gray-600 text-sm md:text-base mb-4 md:mb-6">Watch authentic testimonials from our graduates</p>
                   
-                  {/* Horizontal Scrollable Container */}
-                  <div className="relative -mx-4 px-4 md:mx-0 md:px-0">
-                    <div className="flex gap-3 md:gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide"
-                         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                      {videoTestimonials.map((testimonial, idx) => (
-                        <div key={idx} className="flex-shrink-0 w-[200px] sm:w-[220px] snap-start">
-                          <ReelsVideoCard
-                            videoUrl={testimonial.videoUrl}
-                            onClick={() => openReelsModal({
-                              type: 'video',
-                              videoUrl: testimonial.videoUrl,
-                              author: testimonial.author,
-                              text: testimonial.text,
-                              likes: testimonial.likes || 28,
-                              comments: testimonial.comments || 8
-                            })}
-                          />
-                        </div>
-                      ))}
-                    </div>
+                  {/* Horizontal Scrollable Container - EXACT SIZE */}
+                  <div className="flex gap-3 overflow-x-auto px-3 pb-4 -mx-3">
+                    {videoTestimonials.map((testimonial, idx) => (
+                      <ReelsVideoCard
+                        key={idx}
+                        videoUrl={testimonial.videoUrl}
+                        index={idx}
+                        onClick={() => {
+                          setVideoReelsStartIndex(idx);
+                          setVideoReelsOpen(true);
+                        }}
+                      />
+                    ))}
                   </div>
                 </div>
               )}
