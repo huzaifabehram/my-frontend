@@ -13,6 +13,10 @@
 // UPDATED: Increased font sizes for better readability
 // UPDATED: Free Lecture labels, HTML description support, reviews carousel
 // UPDATED: Portrait cards for testimonials and reels-style video player
+// NEW: Rich text HTML support for description
+// NEW: Reviews now display in horizontal carousel (fixed display issue)
+// NEW: Multiple reviews allowed from same user
+// NEW: Facebook Reels-style UI - cards show only image/video, full info in modal overlay
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, Heart, MessageCircle } from 'lucide-react';
@@ -154,17 +158,35 @@ function VideoPlayer({ url, className = "", isReelsStyle = false }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FACEBOOK-STYLE CARD COMPONENTS
+// REELS-STYLE COMPONENTS (NEW - Facebook/Instagram Reels UI)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Video Thumbnail Card with Play Overlay - Portrait Style
-function VideoThumbnailCard({ videoUrl, onClick }) {
+// Simple Card - Only shows image/video thumbnail (NO text/likes on card)
+function ReelsImageCard({ imageUrl, alt, onClick }) {
+  return (
+    <div 
+      className="relative aspect-[9/16] bg-gray-900 rounded-xl overflow-hidden cursor-pointer group shadow-lg hover:shadow-2xl transition-all duration-300"
+      onClick={onClick}
+    >
+      <img 
+        src={imageUrl} 
+        alt={alt} 
+        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+      />
+      {/* Subtle hover effect - no text on card */}
+      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all duration-300" />
+    </div>
+  );
+}
+
+// Simple Video Card - Only shows thumbnail with play button (NO text/likes on card)
+function ReelsVideoCard({ videoUrl, onClick }) {
   const ytId = getYouTubeId(videoUrl);
   const thumbnailUrl = ytId ? `https://img.youtube.com/vi/${ytId}/maxresdefault.jpg` : null;
 
   return (
     <div 
-      className="relative aspect-[9/16] bg-gray-900 rounded-xl overflow-hidden cursor-pointer group shadow-lg"
+      className="relative aspect-[9/16] bg-gray-900 rounded-xl overflow-hidden cursor-pointer group shadow-lg hover:shadow-2xl transition-all duration-300"
       onClick={onClick}
     >
       {thumbnailUrl ? (
@@ -176,7 +198,7 @@ function VideoThumbnailCard({ videoUrl, onClick }) {
       ) : (
         <div className="w-full h-full bg-gradient-to-br from-purple-900 to-gray-900" />
       )}
-      <div className="absolute inset-0 bg-black bg-opacity-30 group-hover:bg-opacity-40 transition-all duration-300 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black bg-opacity-20 group-hover:bg-opacity-30 transition-all duration-300 flex items-center justify-center">
         <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-white bg-opacity-90 group-hover:bg-opacity-100 flex items-center justify-center shadow-2xl transition-all duration-300 transform group-hover:scale-110">
           <Play size={36} className="text-purple-600 ml-1" fill="currentColor" />
         </div>
@@ -185,102 +207,8 @@ function VideoThumbnailCard({ videoUrl, onClick }) {
   );
 }
 
-// Image Card - Portrait Style
-function ImageCard({ imageUrl, alt, onClick }) {
-  return (
-    <div 
-      className="relative aspect-[3/4] bg-gray-100 rounded-xl overflow-hidden cursor-pointer group shadow-lg"
-      onClick={onClick}
-    >
-      <img 
-        src={imageUrl} 
-        alt={alt} 
-        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-      />
-    </div>
-  );
-}
-
-// Social Actions Component
-function SocialActions({ likes = 0, comments = 0, onLike, onComment, isLiked = false }) {
-  return (
-    <div className="border-t border-gray-200 pt-3">
-      <div className="flex items-center justify-between text-sm text-gray-500 mb-3">
-        <span className="flex items-center gap-1">
-          {likes > 0 && (
-            <>
-              <Heart size={18} className="text-red-500" fill="currentColor" />
-              <span>{likes}</span>
-            </>
-          )}
-        </span>
-        <span>{comments > 0 ? `${comments} comments` : ''}</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <button
-          onClick={onLike}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg transition-all duration-200 ${
-            isLiked 
-              ? 'text-red-500 bg-red-50 hover:bg-red-100' 
-              : 'text-gray-600 hover:bg-gray-100'
-          }`}
-        >
-          <Heart size={20} fill={isLiked ? 'currentColor' : 'none'} />
-          <span className="font-semibold text-sm">Like</span>
-        </button>
-        <button
-          onClick={onComment}
-          className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-gray-600 hover:bg-gray-100 transition-all duration-200"
-        >
-          <MessageCircle size={20} />
-          <span className="font-semibold text-sm">Comment</span>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// Facebook-Style Post Card
-function TestimonialCard({ children, author, text, likes, comments, onLike, onComment, isLiked }) {
-  return (
-    <div className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 overflow-hidden border border-gray-100 transform hover:-translate-y-1 w-full">
-      {/* Card Header */}
-      <div className="p-4 pb-3">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="w-11 h-11 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-white font-bold text-base flex-shrink-0">
-            {author?.charAt(0) || '?'}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold text-gray-900 text-base truncate">{author || 'Student'}</p>
-            <p className="text-sm text-gray-500">Course Student</p>
-          </div>
-        </div>
-        {text && (
-          <p className="text-gray-700 text-sm leading-relaxed mb-3">{text}</p>
-        )}
-      </div>
-
-      {/* Media Content */}
-      <div className="px-0">
-        {children}
-      </div>
-
-      {/* Social Actions */}
-      <div className="px-4 pb-4 pt-3">
-        <SocialActions 
-          likes={likes} 
-          comments={comments} 
-          onLike={onLike} 
-          onComment={onComment}
-          isLiked={isLiked}
-        />
-      </div>
-    </div>
-  );
-}
-
-// Modal Component - Full Screen
-function MediaModal({ isOpen, onClose, children, title }) {
+// Full Screen Reels Modal with Bottom Overlay Info
+function ReelsModal({ isOpen, onClose, children, author, text, likes, comments, isVideo = false }) {
   useEffect(() => {
     if (isOpen) {
       document.body.style.overflow = 'hidden';
@@ -296,21 +224,63 @@ function MediaModal({ isOpen, onClose, children, title }) {
 
   return (
     <div 
-      className="fixed inset-0 z-[9999] bg-black bg-opacity-95 flex items-center justify-center p-0"
+      className="fixed inset-0 z-[9999] bg-black bg-opacity-98 flex items-center justify-center p-0"
       onClick={onClose}
     >
       <div 
         className="relative w-full h-full flex items-center justify-center"
         onClick={(e) => e.stopPropagation()}
       >
+        {/* Close Button */}
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 z-10 p-3 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-full transition-colors backdrop-blur-sm"
+          className="absolute top-4 right-4 z-[10000] p-3 bg-white bg-opacity-20 hover:bg-opacity-30 rounded-full transition-colors backdrop-blur-sm"
         >
           <X size={28} className="text-white" />
         </button>
-        <div className="w-full h-full flex items-center justify-center p-4">
-          {children}
+        
+        {/* Content Container */}
+        <div className="relative w-full h-full flex items-center justify-center p-4">
+          <div className="relative w-full max-w-md mx-auto h-full flex items-center justify-center">
+            {/* Media Content */}
+            <div className="relative w-full">
+              {children}
+              
+              {/* Bottom Overlay - Facebook Reels Style */}
+              <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black via-black/80 to-transparent">
+                <div className="space-y-3">
+                  {/* Author Name */}
+                  <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-purple-700 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                      {author?.charAt(0) || '?'}
+                    </div>
+                    <p className="font-semibold text-white text-base">{author || 'Student'}</p>
+                  </div>
+                  
+                  {/* Caption/Text */}
+                  {text && (
+                    <p className="text-white text-sm leading-relaxed line-clamp-3">{text}</p>
+                  )}
+                  
+                  {/* Likes and Comments */}
+                  <div className="flex items-center gap-4 text-white text-sm">
+                    {likes > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <Heart size={18} className="text-red-400" fill="currentColor" />
+                        <span>{likes}</span>
+                      </div>
+                    )}
+                    {comments > 0 && (
+                      <div className="flex items-center gap-1.5">
+                        <MessageCircle size={18} />
+                        <span>{comments}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -404,13 +374,9 @@ export default function CourseLandingPage() {
   const [reviewRating, setReviewRating] = useState(5);
   const [submittingReview, setSubmittingReview] = useState(false);
 
-  // Modal states
-  const [videoModalOpen, setVideoModalOpen] = useState(false);
-  const [imageModalOpen, setImageModalOpen] = useState(false);
-  const [modalContent, setModalContent] = useState(null);
-
-  // Like states for testimonials
-  const [likedTestimonials, setLikedTestimonials] = useState({});
+  // Modal states for Reels-style views
+  const [reelsModalOpen, setReelsModalOpen] = useState(false);
+  const [reelsModalContent, setReelsModalContent] = useState(null);
 
   useEffect(() => {
     if (!id) return;
@@ -512,7 +478,7 @@ export default function CourseLandingPage() {
     };
   }, [isPreviewOpen]);
 
-  // Handle review submission
+  // Handle review submission - REMOVED multiple review restriction
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
     if (!reviewText.trim()) {
@@ -541,25 +507,10 @@ export default function CourseLandingPage() {
     }
   };
 
-  // Handle video modal
-  const openVideoModal = (testimonial) => {
-    setModalContent(testimonial);
-    setVideoModalOpen(true);
-  };
-
-  // Handle image modal
-  const openImageModal = (testimonial) => {
-    setModalContent(testimonial);
-    setImageModalOpen(true);
-  };
-
-  // Handle like toggle
-  const handleLike = (testimonialId, type) => {
-    const key = `${type}-${testimonialId}`;
-    setLikedTestimonials(prev => ({
-      ...prev,
-      [key]: !prev[key]
-    }));
+  // Handle Reels modal for testimonials and videos
+  const openReelsModal = (content) => {
+    setReelsModalContent(content);
+    setReelsModalOpen(true);
   };
 
   if (loading || fullCourseLoading) {
@@ -674,35 +625,28 @@ export default function CourseLandingPage() {
         </div>
       )}
 
-      {/* VIDEO MODAL - FULL SCREEN */}
-      <MediaModal
-        isOpen={videoModalOpen}
-        onClose={() => setVideoModalOpen(false)}
-        title="Video Review"
+      {/* REELS MODAL - Full Screen with Bottom Overlay */}
+      <ReelsModal
+        isOpen={reelsModalOpen}
+        onClose={() => setReelsModalOpen(false)}
+        author={reelsModalContent?.author}
+        text={reelsModalContent?.text}
+        likes={reelsModalContent?.likes || 0}
+        comments={reelsModalContent?.comments || 0}
+        isVideo={reelsModalContent?.type === 'video'}
       >
-        {modalContent && (
-          <div className="w-full max-w-md mx-auto">
-            <VideoPlayer url={modalContent.videoUrl} isReelsStyle={true} />
-          </div>
-        )}
-      </MediaModal>
-
-      {/* IMAGE MODAL - FULL SCREEN */}
-      <MediaModal
-        isOpen={imageModalOpen}
-        onClose={() => setImageModalOpen(false)}
-        title="Student Testimonial"
-      >
-        {modalContent && (
-          <div className="w-full max-w-2xl mx-auto">
+        {reelsModalContent?.type === 'video' ? (
+          <VideoPlayer url={reelsModalContent.videoUrl} isReelsStyle={true} />
+        ) : (
+          <div className="w-full aspect-[9/16] bg-black rounded-lg overflow-hidden">
             <img
-              src={modalContent.imageUrl}
-              alt={modalContent.author}
-              className="w-full h-auto max-h-[90vh] object-contain rounded-lg"
+              src={reelsModalContent?.imageUrl}
+              alt={reelsModalContent?.author}
+              className="w-full h-full object-cover"
             />
           </div>
         )}
-      </MediaModal>
+      </ReelsModal>
 
       {/* ANNOUNCEMENT BAR */}
       {courseData.discountPrice && courseData.discountPrice < courseData.originalPrice && (
@@ -980,13 +924,16 @@ export default function CourseLandingPage() {
                 </div>
               )}
 
-              {/* DESCRIPTION - HTML RENDERING SUPPORT */}
+              {/* DESCRIPTION - HTML RENDERING WITH RICH TEXT SUPPORT */}
               {courseData.description && (
                 <div className="mb-8 md:mb-12 w-full">
                   <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 mb-4">Description</h2>
                   <div className="relative">
                     <div 
-                      className={`text-gray-700 leading-relaxed text-sm md:text-base space-y-3 ${!showFullDescription ? 'max-h-32 overflow-hidden' : ''}`}
+                      className={`text-gray-700 leading-relaxed text-sm md:text-base prose prose-sm md:prose-base max-w-none ${!showFullDescription ? 'max-h-40 overflow-hidden' : ''}`}
+                      style={{
+                        wordBreak: 'break-word',
+                      }}
                       dangerouslySetInnerHTML={{ __html: courseData.description }}
                     />
                     {!showFullDescription && (
@@ -1068,7 +1015,7 @@ export default function CourseLandingPage() {
                 )}
               </div>
 
-              {/* TEXT REVIEWS - HORIZONTAL CAROUSEL */}
+              {/* TEXT REVIEWS - HORIZONTAL CAROUSEL (FIXED DISPLAY) */}
               {textReviews.length > 0 && (
                 <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-gray-200 w-full">
                   <div className="mb-6 md:mb-8 flex items-center gap-3 md:gap-4">
@@ -1088,17 +1035,17 @@ export default function CourseLandingPage() {
                           <div className="bg-white rounded-xl shadow-md hover:shadow-xl transition-all duration-300 border border-gray-100 p-5 h-full">
                             <div className="flex items-start gap-3 md:gap-4 mb-3">
                               <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-lg md:text-xl flex-shrink-0">
-                                {review.author?.charAt(0) || '?'}
+                                {review.author?.charAt(0) || review.user?.name?.charAt(0) || '?'}
                               </div>
                               <div className="flex-1 min-w-0">
-                                <p className="font-bold text-gray-900 text-base md:text-lg">{review.author || 'Student'}</p>
+                                <p className="font-bold text-gray-900 text-base md:text-lg">{review.author || review.user?.name || 'Student'}</p>
                                 <div className="flex items-center gap-2 mt-1">
                                   <div className="flex gap-0.5">
                                     {Array.from({ length: 5 }).map((_, i) => (
                                       <Star key={i} size={14} className="text-yellow-400 md:w-4 md:h-4" fill={i < (review.rating || 5) ? 'currentColor' : 'none'} />
                                     ))}
                                   </div>
-                                  <span className="text-xs md:text-sm text-gray-500">• {review.date || 'Recently'}</span>
+                                  <span className="text-xs md:text-sm text-gray-500">• {review.date || new Date(review.createdAt).toLocaleDateString() || 'Recently'}</span>
                                 </div>
                               </div>
                             </div>
@@ -1164,80 +1111,62 @@ export default function CourseLandingPage() {
                 )}
               </div>
 
-              {/* IMAGE TESTIMONIALS SLIDER - PORTRAIT CARDS */}
+              {/* IMAGE TESTIMONIALS SLIDER - REELS STYLE (ONLY IMAGE, NO TEXT) */}
               {imageTestimonials.length > 0 && (
                 <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-gray-200 w-full">
                   <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 mb-2 md:mb-3">Student Testimonials</h2>
-                  <p className="text-gray-600 text-sm md:text-base mb-4 md:mb-6">See what our students have to say about their learning journey</p>
+                  <p className="text-gray-600 text-sm md:text-base mb-4 md:mb-6">See what our students have to say</p>
                   
                   {/* Horizontal Scrollable Container */}
                   <div className="relative -mx-4 px-4 md:mx-0 md:px-0">
                     <div className="flex gap-3 md:gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide"
                          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                      {imageTestimonials.map((testimonial, idx) => {
-                        const testimonialKey = `image-${idx}`;
-                        const isLiked = likedTestimonials[testimonialKey];
-                        const likeCount = (testimonial.likes || 12) + (isLiked ? 1 : 0);
-                        
-                        return (
-                          <div key={idx} className="flex-shrink-0 w-[280px] sm:w-[300px] snap-start">
-                            <TestimonialCard
-                              author={testimonial.author}
-                              text={testimonial.text}
-                              likes={likeCount}
-                              comments={testimonial.comments || 5}
-                              onLike={() => handleLike(idx, 'image')}
-                              onComment={() => openImageModal(testimonial)}
-                              isLiked={isLiked}
-                            >
-                              <ImageCard
-                                imageUrl={testimonial.imageUrl}
-                                alt={testimonial.author}
-                                onClick={() => openImageModal(testimonial)}
-                              />
-                            </TestimonialCard>
-                          </div>
-                        );
-                      })}
+                      {imageTestimonials.map((testimonial, idx) => (
+                        <div key={idx} className="flex-shrink-0 w-[200px] sm:w-[220px] snap-start">
+                          <ReelsImageCard
+                            imageUrl={testimonial.imageUrl}
+                            alt={testimonial.author}
+                            onClick={() => openReelsModal({
+                              type: 'image',
+                              imageUrl: testimonial.imageUrl,
+                              author: testimonial.author,
+                              text: testimonial.text,
+                              likes: testimonial.likes || 12,
+                              comments: testimonial.comments || 5
+                            })}
+                          />
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* VIDEO TESTIMONIALS SLIDER - REELS STYLE */}
+              {/* VIDEO TESTIMONIALS SLIDER - REELS STYLE (ONLY VIDEO THUMBNAIL, NO TEXT) */}
               {videoTestimonials.length > 0 && (
                 <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-gray-200 w-full">
                   <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 mb-2 md:mb-3">Video Reviews</h2>
-                  <p className="text-gray-600 text-sm md:text-base mb-4 md:mb-6">Watch authentic video testimonials from our course graduates</p>
+                  <p className="text-gray-600 text-sm md:text-base mb-4 md:mb-6">Watch authentic testimonials from our graduates</p>
                   
                   {/* Horizontal Scrollable Container */}
                   <div className="relative -mx-4 px-4 md:mx-0 md:px-0">
                     <div className="flex gap-3 md:gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide"
                          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                      {videoTestimonials.map((testimonial, idx) => {
-                        const testimonialKey = `video-${idx}`;
-                        const isLiked = likedTestimonials[testimonialKey];
-                        const likeCount = (testimonial.likes || 28) + (isLiked ? 1 : 0);
-                        
-                        return (
-                          <div key={idx} className="flex-shrink-0 w-[280px] sm:w-[300px] snap-start">
-                            <TestimonialCard
-                              author={testimonial.author}
-                              text={testimonial.text}
-                              likes={likeCount}
-                              comments={testimonial.comments || 8}
-                              onLike={() => handleLike(idx, 'video')}
-                              onComment={() => openVideoModal(testimonial)}
-                              isLiked={isLiked}
-                            >
-                              <VideoThumbnailCard
-                                videoUrl={testimonial.videoUrl}
-                                onClick={() => openVideoModal(testimonial)}
-                              />
-                            </TestimonialCard>
-                          </div>
-                        );
-                      })}
+                      {videoTestimonials.map((testimonial, idx) => (
+                        <div key={idx} className="flex-shrink-0 w-[200px] sm:w-[220px] snap-start">
+                          <ReelsVideoCard
+                            videoUrl={testimonial.videoUrl}
+                            onClick={() => openReelsModal({
+                              type: 'video',
+                              videoUrl: testimonial.videoUrl,
+                              author: testimonial.author,
+                              text: testimonial.text,
+                              likes: testimonial.likes || 28,
+                              comments: testimonial.comments || 8
+                            })}
+                          />
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -1400,6 +1329,43 @@ export default function CourseLandingPage() {
         .scrollbar-hide {
           -ms-overflow-style: none;
           scrollbar-width: none;
+        }
+        /* Prose styles for HTML description */
+        .prose ul {
+          list-style-type: disc;
+          padding-left: 1.5rem;
+          margin: 0.75rem 0;
+        }
+        .prose ol {
+          list-style-type: decimal;
+          padding-left: 1.5rem;
+          margin: 0.75rem 0;
+        }
+        .prose li {
+          margin: 0.25rem 0;
+        }
+        .prose p {
+          margin: 0.75rem 0;
+        }
+        .prose strong {
+          font-weight: 600;
+          color: #111827;
+        }
+        .prose em {
+          font-style: italic;
+        }
+        .prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
+          font-weight: 700;
+          margin-top: 1.5rem;
+          margin-bottom: 0.75rem;
+          color: #111827;
+        }
+        .prose a {
+          color: #9333ea;
+          text-decoration: underline;
+        }
+        .prose a:hover {
+          color: #7c3aed;
         }
       `}</style>
     </div>
