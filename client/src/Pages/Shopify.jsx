@@ -20,6 +20,7 @@
 // NEW: Auto-play videos in slider (muted), full sound in reels view
 // NEW: IntersectionObserver for video auto-play
 // NEW: Full screen reels overlays with Like/Comment/Share icons
+// NEW: Auto-sliding image testimonials carousel with edge blur, pause on click, resume on scroll/outside-click
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Zap, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, Heart, MessageCircle, Share2, Bookmark, ThumbsUp } from 'lucide-react';
@@ -211,7 +212,6 @@ function ReelsVideoCard({ videoUrl, onClick, index }) {
       onClick={onClick}
     >
       {ytId ? (
-        // YouTube thumbnail with play button
         <>
           <img 
             src={thumbnailUrl} 
@@ -225,7 +225,6 @@ function ReelsVideoCard({ videoUrl, onClick, index }) {
           </div>
         </>
       ) : (
-        // Direct video with auto-play
         <video
           ref={videoRef}
           src={videoUrl}
@@ -240,19 +239,148 @@ function ReelsVideoCard({ videoUrl, onClick, index }) {
   );
 }
 
-// Image Card - EXACT SIZE 170x300px
-function ReelsImageCard({ imageUrl, alt, onClick }) {
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTO-SLIDE IMAGE TESTIMONIALS CAROUSEL
+// Features:
+//  • Auto-slides every ~2.8s, wraps back to start
+//  • Pauses when user clicks anywhere inside the section
+//  • Resumes when user scrolls OR clicks outside the section
+//  • Left/right edges fade out with CSS mask gradient
+//  • Larger cards: 200px × 380px
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AutoSlideImageTestimonials({ imageTestimonials, onImageClick }) {
+  const scrollRef     = useRef(null);
+  const sectionRef    = useRef(null);
+  const autoSlideRef  = useRef(null);
+  const isPausedRef   = useRef(false);
+  const [isPaused, setIsPaused] = useState(false);
+
+  const CARD_WIDTH = 200;
+  const CARD_GAP   = 12;
+  const STEP       = CARD_WIDTH + CARD_GAP;
+  const SLIDE_INTERVAL = 2800;
+
+  // ── Start / restart the interval ──────────────────────────────────────────
+  const startAutoSlide = () => {
+    if (autoSlideRef.current) clearInterval(autoSlideRef.current);
+    autoSlideRef.current = setInterval(() => {
+      if (!isPausedRef.current && scrollRef.current) {
+        const container = scrollRef.current;
+        const maxScroll = container.scrollWidth - container.clientWidth;
+        if (container.scrollLeft >= maxScroll - 4) {
+          container.scrollTo({ left: 0, behavior: 'smooth' });
+        } else {
+          container.scrollBy({ left: STEP, behavior: 'smooth' });
+        }
+      }
+    }, SLIDE_INTERVAL);
+  };
+
+  const pause = () => {
+    isPausedRef.current = true;
+    setIsPaused(true);
+  };
+
+  const resume = () => {
+    isPausedRef.current = false;
+    setIsPaused(false);
+  };
+
+  useEffect(() => {
+    startAutoSlide();
+
+    // Resume on any page scroll
+    const handleWindowScroll = () => {
+      if (isPausedRef.current) resume();
+    };
+
+    // Resume on click outside the section
+    const handleDocClick = (e) => {
+      if (sectionRef.current && !sectionRef.current.contains(e.target)) {
+        resume();
+      }
+    };
+
+    window.addEventListener('scroll', handleWindowScroll, { passive: true });
+    document.addEventListener('click', handleDocClick);
+
+    return () => {
+      if (autoSlideRef.current) clearInterval(autoSlideRef.current);
+      window.removeEventListener('scroll', handleWindowScroll);
+      document.removeEventListener('click', handleDocClick);
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
-    <div 
-      className="w-[170px] h-[300px] rounded-xl overflow-hidden flex-shrink-0 relative cursor-pointer group shadow-lg hover:shadow-2xl transition-all duration-300"
-      onClick={onClick}
+    <div
+      ref={sectionRef}
+      className="relative"
+      onClick={pause}
     >
-      <img 
-        src={imageUrl} 
-        alt={alt} 
-        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-      />
-      <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all duration-300" />
+      {/* Edge-blur mask wrapper */}
+      <div
+        className="relative overflow-hidden"
+        style={{
+          WebkitMaskImage:
+            'linear-gradient(to right, transparent 0px, black 90px, black calc(100% - 90px), transparent 100%)',
+          maskImage:
+            'linear-gradient(to right, transparent 0px, black 90px, black calc(100% - 90px), transparent 100%)',
+        }}
+      >
+        {/* Scrollable strip */}
+        <div
+          ref={scrollRef}
+          className="flex gap-3 overflow-x-auto pb-4 px-3"
+          style={{
+            scrollbarWidth: 'none',
+            msOverflowStyle: 'none',
+            WebkitOverflowScrolling: 'touch',
+          }}
+        >
+          {imageTestimonials.map((testimonial, idx) => (
+            <div
+              key={idx}
+              className="flex-shrink-0 rounded-xl overflow-hidden relative cursor-pointer group shadow-lg hover:shadow-2xl transition-all duration-300"
+              style={{ width: `${CARD_WIDTH}px`, height: '380px' }}
+              onClick={(e) => {
+                e.stopPropagation(); // don't bubble to section (already paused by section click)
+                pause();
+                onImageClick(idx);
+              }}
+            >
+              <img
+                src={testimonial.imageUrl}
+                alt={testimonial.author || 'Student testimonial'}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                draggable={false}
+              />
+              {/* Subtle hover overlay */}
+              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all duration-300" />
+              {/* Bottom author tag */}
+              {testimonial.author && (
+                <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
+              )}
+              {testimonial.author && (
+                <p className="absolute bottom-3 left-3 text-white text-sm font-semibold pointer-events-none drop-shadow">
+                  {testimonial.author}
+                </p>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Paused pill indicator */}
+      {isPaused && (
+        <div
+          className="absolute top-2 right-2 flex items-center gap-1.5 bg-black/60 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-full pointer-events-none select-none"
+          style={{ zIndex: 10 }}
+        >
+          <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block" />
+          Paused — scroll or click outside to resume
+        </div>
+      )}
     </div>
   );
 }
@@ -276,7 +404,6 @@ function VideoReelsView({ isOpen, onClose, videos, startIndex = 0 }) {
   }, [isOpen, startIndex]);
 
   useEffect(() => {
-    // Manage video playback - unmute and play active video
     videoRefs.current.forEach((video, idx) => {
       if (video) {
         if (idx === currentIndex) {
@@ -302,11 +429,8 @@ function VideoReelsView({ isOpen, onClose, videos, startIndex = 0 }) {
 
   if (!isOpen) return null;
 
-  const currentVideo = videos[currentIndex];
-
   return (
     <div className="fixed inset-0 bg-black z-50 overflow-y-scroll snap-y snap-mandatory" ref={containerRef}>
-      {/* Close Button */}
       <button
         onClick={onClose}
         className="fixed top-4 right-4 text-white text-2xl z-50 w-10 h-10 flex items-center justify-center bg-black bg-opacity-50 rounded-full hover:bg-opacity-70 transition"
@@ -327,10 +451,8 @@ function VideoReelsView({ isOpen, onClose, videos, startIndex = 0 }) {
             className="h-full w-full object-cover"
           />
 
-          {/* Gradient Overlay at Bottom */}
           <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-black/80 to-transparent pointer-events-none"></div>
 
-          {/* Bottom Left Content */}
           <div className="absolute bottom-6 left-4 text-white z-10 max-w-[70%]">
             <p className="font-bold text-base mb-2">{video.author || 'Student'}</p>
             {video.text && (
@@ -338,7 +460,6 @@ function VideoReelsView({ isOpen, onClose, videos, startIndex = 0 }) {
             )}
           </div>
 
-          {/* Right Side Icons */}
           <div className="absolute right-3 bottom-24 flex flex-col items-center gap-6 text-white z-10">
             <button className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer">
               <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition">
@@ -346,21 +467,18 @@ function VideoReelsView({ isOpen, onClose, videos, startIndex = 0 }) {
               </div>
               <span className="text-xs">{video.likes || 0}</span>
             </button>
-
             <button className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer">
               <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition">
                 <MessageCircle size={24} />
               </div>
               <span className="text-xs">{video.comments || 0}</span>
             </button>
-
             <button className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer">
               <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition">
                 <Share2 size={24} />
               </div>
               <span className="text-xs">Share</span>
             </button>
-
             <button className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer">
               <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition">
                 <Bookmark size={24} />
@@ -404,11 +522,8 @@ function ImageSliderView({ isOpen, onClose, images, startIndex = 0 }) {
 
   if (!isOpen) return null;
 
-  const currentImage = images[currentIndex];
-
   return (
     <div className="fixed inset-0 bg-black z-50 flex overflow-x-auto snap-x snap-mandatory">
-      {/* Close Button */}
       <button
         onClick={onClose}
         className="fixed top-4 right-4 text-white text-2xl z-50 w-10 h-10 flex items-center justify-center bg-black bg-opacity-50 rounded-full hover:bg-opacity-70 transition"
@@ -424,10 +539,8 @@ function ImageSliderView({ isOpen, onClose, images, startIndex = 0 }) {
             className="w-full h-full object-contain"
           />
 
-          {/* Gradient Overlay at Bottom */}
           <div className="absolute bottom-0 left-0 w-full h-32 bg-gradient-to-t from-black/80 to-transparent pointer-events-none"></div>
 
-          {/* Bottom Left Content */}
           <div className="absolute bottom-6 left-4 text-white z-10 max-w-[70%]">
             <p className="font-bold text-base mb-2">{image.author || 'Student'}</p>
             {image.text && (
@@ -435,7 +548,6 @@ function ImageSliderView({ isOpen, onClose, images, startIndex = 0 }) {
             )}
           </div>
 
-          {/* Right Side Icons */}
           <div className="absolute right-3 bottom-24 flex flex-col items-center gap-6 text-white z-10">
             <button className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer">
               <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition">
@@ -443,21 +555,18 @@ function ImageSliderView({ isOpen, onClose, images, startIndex = 0 }) {
               </div>
               <span className="text-xs">{image.likes || 0}</span>
             </button>
-
             <button className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer">
               <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition">
                 <MessageCircle size={24} />
               </div>
               <span className="text-xs">{image.comments || 0}</span>
             </button>
-
             <button className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer">
               <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition">
                 <Share2 size={24} />
               </div>
               <span className="text-xs">Share</span>
             </button>
-
             <button className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer">
               <div className="w-12 h-12 rounded-full bg-white bg-opacity-20 flex items-center justify-center hover:bg-opacity-30 transition">
                 <Bookmark size={24} />
@@ -466,7 +575,6 @@ function ImageSliderView({ isOpen, onClose, images, startIndex = 0 }) {
             </button>
           </div>
 
-          {/* Navigation Arrows */}
           {index > 0 && (
             <button
               onClick={() => setCurrentIndex(index - 1)}
@@ -484,7 +592,6 @@ function ImageSliderView({ isOpen, onClose, images, startIndex = 0 }) {
             </button>
           )}
 
-          {/* Counter */}
           <div className="absolute top-4 left-1/2 transform -translate-x-1/2 text-white text-sm bg-black bg-opacity-50 px-3 py-1 rounded-full">
             {index + 1} / {images.length}
           </div>
@@ -705,7 +812,6 @@ export default function CourseLandingPage() {
       setReviewText('');
       setReviewRating(5);
       setShowReviewForm(false);
-      // Refresh course data to show new review
       const updatedCourse = await fetchCourseById(courseData._id);
       if (updatedCourse) setFullCourse(updatedCourse);
     } catch (err) {
@@ -737,7 +843,6 @@ export default function CourseLandingPage() {
     );
   }
 
-  // Use real instructor data or fallback to course-level instructor fields
   const instructor = instructorData ? {
     name:     instructorData.name || 'Instructor',
     rating:   instructorData.instructorRating || 0,
@@ -758,11 +863,10 @@ export default function CourseLandingPage() {
 
   const totalLectures = sections.reduce((a, s) => a + (s.lectures || 0), 0);
 
-  // Get testimonials from course data
-  const textReviews = courseData.reviews_list || [];
-  const imageTestimonials = courseData.imageTestimonials || [];
-  const videoTestimonials = courseData.videoTestimonials || [];
-  const projectGallery = courseData.projectGallery || [];
+  const textReviews        = courseData.reviews_list    || [];
+  const imageTestimonials  = courseData.imageTestimonials || [];
+  const videoTestimonials  = courseData.videoTestimonials || [];
+  const projectGallery     = courseData.projectGallery   || [];
 
   return (
     <div className="min-h-screen bg-gray-50 overflow-x-hidden w-full">
@@ -836,7 +940,7 @@ export default function CourseLandingPage() {
         startIndex={videoReelsStartIndex}
       />
 
-      {/* IMAGE SLIDER VIEW - HORIZONTAL SCROLL */}
+      {/* IMAGE SLIDER VIEW - HORIZONTAL SCROLL (fullscreen) */}
       <ImageSliderView
         isOpen={imageSliderOpen}
         onClose={() => setImageSliderOpen(false)}
@@ -925,7 +1029,7 @@ export default function CourseLandingPage() {
 
               <p className="text-lg md:text-xl lg:text-2xl text-gray-300 mb-4 md:mb-6 leading-relaxed">{courseData.subtitle}</p>
 
-              {/* EDGE-TO-EDGE PREVIEW VIDEO PLAYER - MOVED ABOVE "CREATED BY" */}
+              {/* EDGE-TO-EDGE PREVIEW VIDEO PLAYER */}
               <div className="-mx-4 lg:-mx-6 mb-4 md:mb-6">
                 <div className="relative w-full bg-black aspect-video cursor-pointer" onClick={handlePreviewClick}>
                   <CourseThumbnail course={courseData} />
@@ -968,7 +1072,7 @@ export default function CourseLandingPage() {
               </div>
             </div>
 
-            {/* Right: Preview Video (Desktop) */}
+            {/* Right: Preview Video Card (Desktop) */}
             <div className="hidden lg:block">
               <div className="sticky top-24">
                 <div className="bg-white rounded-lg shadow-2xl overflow-hidden">
@@ -1127,9 +1231,7 @@ export default function CourseLandingPage() {
                   <div className="relative">
                     <div 
                       className={`text-gray-700 leading-relaxed text-sm md:text-base prose prose-sm md:prose-base max-w-none ${!showFullDescription ? 'max-h-40 overflow-hidden' : ''}`}
-                      style={{
-                        wordBreak: 'break-word',
-                      }}
+                      style={{ wordBreak: 'break-word' }}
                       dangerouslySetInnerHTML={{ __html: courseData.description }}
                     />
                     {!showFullDescription && (
@@ -1211,7 +1313,7 @@ export default function CourseLandingPage() {
                 )}
               </div>
 
-              {/* TEXT REVIEWS - HORIZONTAL CAROUSEL (FIXED DISPLAY) */}
+              {/* TEXT REVIEWS - HORIZONTAL CAROUSEL */}
               {textReviews.length > 0 && (
                 <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-gray-200 w-full">
                   <div className="mb-6 md:mb-8 flex items-center gap-3 md:gap-4">
@@ -1222,7 +1324,6 @@ export default function CourseLandingPage() {
                     </div>
                   </div>
                   
-                  {/* Horizontal Scrollable Container */}
                   <div className="relative -mx-4 px-4 md:mx-0 md:px-0">
                     <div className="flex gap-3 md:gap-4 overflow-x-auto pb-4 snap-x snap-mandatory scrollbar-hide"
                          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
@@ -1254,7 +1355,7 @@ export default function CourseLandingPage() {
                 </div>
               )}
 
-              {/* WRITE A REVIEW BUTTON */}
+              {/* WRITE A REVIEW */}
               <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-gray-200 w-full">
                 <button
                   onClick={() => setShowReviewForm(!showReviewForm)}
@@ -1262,7 +1363,6 @@ export default function CourseLandingPage() {
                   {showReviewForm ? 'Cancel Review' : 'Write a Review'}
                 </button>
 
-                {/* REVIEW FORM */}
                 {showReviewForm && (
                   <form onSubmit={handleReviewSubmit} className="mt-4 md:mt-6 bg-gray-50 rounded-lg p-4 md:p-6 border border-gray-200">
                     <h3 className="text-lg md:text-xl font-bold text-gray-900 mb-4">Share Your Experience</h3>
@@ -1307,35 +1407,34 @@ export default function CourseLandingPage() {
                 )}
               </div>
 
-              {/* IMAGE TESTIMONIALS SLIDER - FACEBOOK REELS STYLE (170x300px) */}
+              {/* ─────────────────────────────────────────────────────────────
+                  IMAGE TESTIMONIALS — AUTO-SLIDE CAROUSEL (NEW)
+                  • 200×380px cards (larger than before)
+                  • Auto-slides every 2.8s, wraps to start
+                  • Left/right edges fade with CSS mask gradient
+                  • Pauses on click inside; resumes on scroll or outside click
+              ───────────────────────────────────────────────────────────── */}
               {imageTestimonials.length > 0 && (
                 <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-gray-200 w-full">
                   <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 mb-2 md:mb-3">Student Testimonials</h2>
                   <p className="text-gray-600 text-sm md:text-base mb-4 md:mb-6">See what our students have to say</p>
-                  
-                  {/* Horizontal Scrollable Container - EXACT SIZE */}
-                  <div className="flex gap-3 overflow-x-auto px-3 pb-4 -mx-3">
-                    {imageTestimonials.map((testimonial, idx) => (
-                      <ReelsImageCard
-                        key={idx}
-                        imageUrl={testimonial.imageUrl}
-                        alt={testimonial.author}
-                        onClick={() => {
-                          setImageSliderStartIndex(idx);
-                          setImageSliderOpen(true);
-                        }}
-                      />
-                    ))}
-                  </div>
+
+                  <AutoSlideImageTestimonials
+                    imageTestimonials={imageTestimonials}
+                    onImageClick={(idx) => {
+                      setImageSliderStartIndex(idx);
+                      setImageSliderOpen(true);
+                    }}
+                  />
                 </div>
               )}
+
               {/* VIDEO TESTIMONIALS SLIDER - FACEBOOK REELS STYLE (170x300px) */}
               {videoTestimonials.length > 0 && (
                 <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-gray-200 w-full">
                   <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 mb-2 md:mb-3">Video Reviews</h2>
                   <p className="text-gray-600 text-sm md:text-base mb-4 md:mb-6">Watch authentic testimonials from our graduates</p>
                   
-                  {/* Horizontal Scrollable Container - EXACT SIZE */}
                   <div className="flex gap-3 overflow-x-auto px-3 pb-4 -mx-3">
                     {videoTestimonials.map((testimonial, idx) => (
                       <ReelsVideoCard
@@ -1352,7 +1451,7 @@ export default function CourseLandingPage() {
                 </div>
               )}
 
-              {/* PROJECT GALLERY (from instructor dashboard) */}
+              {/* PROJECT GALLERY */}
               {projectGallery.length > 0 && (
                 <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-gray-200 w-full">
                   <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 mb-2">Project gallery</h2>
@@ -1384,7 +1483,6 @@ export default function CourseLandingPage() {
 
             {/* Sidebar (Desktop) */}
             <div className="hidden lg:block lg:col-span-1">
-              {/* This includes section for features */}
               <div className="sticky top-24">
                 <div className="bg-white border border-gray-200 rounded-lg p-6 mb-6 shadow-sm">
                   <h3 className="text-xl font-bold text-gray-900 mb-4">This course includes:</h3>
@@ -1501,7 +1599,6 @@ export default function CourseLandingPage() {
 
       <div className="h-16 md:h-20 lg:h-0" />
 
-      {/* Hide scrollbar globally for smooth scrolling */}
       <style jsx>{`
         .scrollbar-hide::-webkit-scrollbar {
           display: none;
