@@ -251,61 +251,63 @@ function ReelsVideoCard({ videoUrl, onClick, index }) {
 //   We pick a per-card rate of ~4 s/card so each image is clearly readable.
 // • Pause/resume purely via `animation-play-state: paused / running`.
 //   No JS timers → zero jank.
-// • Pauses on click inside the section.
-// • Resumes on window scroll OR click outside the section.
+// • Pauses only when the user scrolls (wheel/touch) INSIDE this section.
+// • Resumes automatically when the user scrolls OUTSIDE this section.
+// • No click-pause, no pause notification.
 // • Left/right edges fade with CSS mask-image gradient.
-// • No click-to-open image feature (removed).
 // ─────────────────────────────────────────────────────────────────────────────
 
 function AutoSlideImageTestimonials({ imageTestimonials }) {
   const sectionRef  = useRef(null);
-  const trackRef    = useRef(null);
   const [isPaused, setIsPaused] = useState(false);
   const isPausedRef = useRef(false);
 
   const CARD_WIDTH = 200;
   const CARD_GAP   = 12;
-  // ~4 seconds of visibility per card; total = cards × 4s
   const totalDuration = imageTestimonials.length * 4;
 
-  const pause = () => {
-    isPausedRef.current = true;
-    setIsPaused(true);
-  };
-
-  const resume = () => {
-    isPausedRef.current = false;
-    setIsPaused(false);
-  };
+  const pause = () => { isPausedRef.current = true;  setIsPaused(true);  };
+  const resume = () => { isPausedRef.current = false; setIsPaused(false); };
 
   useEffect(() => {
-    const handleWindowScroll = () => {
-      if (isPausedRef.current) resume();
+    // Pause when wheel/touch scroll happens INSIDE the section
+    const handleSectionWheel = () => pause();
+    const handleSectionTouch = () => pause();
+
+    // Resume when wheel/touch scroll happens OUTSIDE the section
+    const handleWindowWheel = (e) => {
+      if (isPausedRef.current && sectionRef.current && !sectionRef.current.contains(e.target)) {
+        resume();
+      }
     };
-    const handleDocClick = (e) => {
-      if (sectionRef.current && !sectionRef.current.contains(e.target)) {
+    const handleWindowTouch = (e) => {
+      if (isPausedRef.current && sectionRef.current && !sectionRef.current.contains(e.target)) {
         resume();
       }
     };
 
-    window.addEventListener('scroll', handleWindowScroll, { passive: true });
-    document.addEventListener('click', handleDocClick);
+    const section = sectionRef.current;
+    if (section) {
+      section.addEventListener('wheel',      handleSectionWheel, { passive: true });
+      section.addEventListener('touchmove',  handleSectionTouch, { passive: true });
+    }
+    window.addEventListener('wheel',     handleWindowWheel, { passive: true });
+    window.addEventListener('touchmove', handleWindowTouch, { passive: true });
+
     return () => {
-      window.removeEventListener('scroll', handleWindowScroll);
-      document.removeEventListener('click', handleDocClick);
+      if (section) {
+        section.removeEventListener('wheel',     handleSectionWheel);
+        section.removeEventListener('touchmove', handleSectionTouch);
+      }
+      window.removeEventListener('wheel',     handleWindowWheel);
+      window.removeEventListener('touchmove', handleWindowTouch);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // We render the list twice so the seam is invisible
   const doubled = [...imageTestimonials, ...imageTestimonials];
 
   return (
-    <div
-      ref={sectionRef}
-      className="relative select-none"
-      onClick={pause}
-    >
-      {/* Keyframe + marquee styles — scoped inline so no global pollution */}
+    <div ref={sectionRef} className="relative select-none">
       <style>{`
         @keyframes testimonial-marquee {
           0%   { transform: translateX(0); }
@@ -330,9 +332,7 @@ function AutoSlideImageTestimonials({ imageTestimonials }) {
             'linear-gradient(to right, transparent 0px, black 40px, black calc(100% - 40px), transparent 100%)',
         }}
       >
-        {/* The continuously moving track — doubled width for infinite loop */}
         <div
-          ref={trackRef}
           className={`testimonial-track flex pb-3${isPaused ? ' paused' : ''}`}
           style={{ gap: `${CARD_GAP}px`, width: 'max-content' }}
         >
@@ -349,7 +349,6 @@ function AutoSlideImageTestimonials({ imageTestimonials }) {
                 className="w-full h-full object-cover"
                 draggable={false}
               />
-              {/* Bottom author gradient + name */}
               <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black/75 to-transparent pointer-events-none" />
               {testimonial.author && (
                 <p className="absolute bottom-3 left-3 right-3 text-white text-sm font-semibold pointer-events-none drop-shadow line-clamp-1">
@@ -360,17 +359,6 @@ function AutoSlideImageTestimonials({ imageTestimonials }) {
           ))}
         </div>
       </div>
-
-      {/* Paused indicator */}
-      {isPaused && (
-        <div
-          className="absolute top-2 right-2 flex items-center gap-1.5 bg-black/60 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none select-none"
-          style={{ zIndex: 10 }}
-        >
-          <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block flex-shrink-0" />
-          Paused · scroll or click outside to resume
-        </div>
-      )}
     </div>
   );
 }
