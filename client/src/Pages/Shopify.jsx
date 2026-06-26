@@ -1307,60 +1307,28 @@ export default function CourseLandingPage() {
                 )}
               </div>
 
-              {/* IMAGE TESTIMONIALS SLIDER - AUTO-SLIDING REELS STYLE */}
-{imageTestimonials.length > 0 && (() => {
-  const sliderRef = useRef(null);
-  const intervalRef = useRef(null);
-  const isPausedRef = useRef(false);
-
-  const startAutoSlide = useCallback(() => {
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(() => {
-      if (sliderRef.current && !isPausedRef.current) {
-        const el = sliderRef.current;
-        const cardWidth = 152; // card width + gap
-        const maxScroll = el.scrollWidth - el.clientWidth;
-        const next = el.scrollLeft + cardWidth;
-        if (next >= maxScroll) {
-          el.scrollTo({ left: 0, behavior: 'smooth' });
-        } else {
-          el.scrollTo({ left: next, behavior: 'smooth' });
-        }
-      }
-    }, 2200);
-    isPausedRef.current = false;
-  }, []);
-
-  const pauseAutoSlide = useCallback(() => {
-    isPausedRef.current = true;
-  }, []);
-
-  const resumeAutoSlide = useCallback(() => {
-    if (isPausedRef.current) {
-      isPausedRef.current = false;
-    }
-  }, []);
-
-  useEffect(() => {
-    startAutoSlide();
-    const handleOutsideClick = (e) => {
-      if (sliderRef.current && !sliderRef.current.closest('section')?.contains(e.target)) {
-        resumeAutoSlide();
-      }
-    };
-    const handleScroll = () => resumeAutoSlide();
-    document.addEventListener('click', handleOutsideClick);
-    document.addEventListener('scroll', handleScroll, true);
-    return () => {
-      clearInterval(intervalRef.current);
-      document.removeEventListener('click', handleOutsideClick);
-      document.removeEventListener('scroll', handleScroll, true);
-    };
-  }, [startAutoSlide, resumeAutoSlide]);
-
-  return null; // hooks block only — actual JSX below
-})() || (
-  <div>
+              {/* IMAGE TESTIMONIALS SLIDER - FACEBOOK REELS STYLE (170x300px) */}
+              {imageTestimonials.length > 0 && (
+                <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-gray-200 w-full">
+                  <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-gray-900 mb-2 md:mb-3">Student Testimonials</h2>
+                  <p className="text-gray-600 text-sm md:text-base mb-4 md:mb-6">See what our students have to say</p>
+                  
+                  {/* Horizontal Scrollable Container - EXACT SIZE */}
+                  <div className="flex gap-3 overflow-x-auto px-3 pb-4 -mx-3">
+                    {imageTestimonials.map((testimonial, idx) => (
+                      <ReelsImageCard
+                        key={idx}
+                        imageUrl={testimonial.imageUrl}
+                        alt={testimonial.author}
+                        onClick={() => {
+                          setImageSliderStartIndex(idx);
+                          setImageSliderOpen(true);
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
               {/* VIDEO TESTIMONIALS SLIDER - FACEBOOK REELS STYLE (170x300px) */}
               {videoTestimonials.length > 0 && (
                 <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-gray-200 w-full">
