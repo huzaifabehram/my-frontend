@@ -240,42 +240,33 @@ function ReelsVideoCard({ videoUrl, onClick, index }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AUTO-SLIDE IMAGE TESTIMONIALS CAROUSEL
-// Features:
-//  • Auto-slides every ~2.8s, wraps back to start
-//  • Pauses when user clicks anywhere inside the section
-//  • Resumes when user scrolls OR clicks outside the section
-//  • Left/right edges fade out with CSS mask gradient
-//  • Larger cards: 200px × 380px
+// AUTO-SLIDE IMAGE TESTIMONIALS CAROUSEL — CSS marquee, butter-smooth
+//
+// Strategy: duplicate the card list so the strip is 2× wide, then animate
+// translateX from 0 → -50% with a linear CSS animation. When it reaches -50%
+// the duplicate set is pixel-identical to the start → seamless loop.
+//
+// • Speed is controlled by `--marquee-duration` (total time for one full loop).
+//   Cards are 200px + 12px gap = 212px each. With N cards the strip is N×212px.
+//   We pick a per-card rate of ~4 s/card so each image is clearly readable.
+// • Pause/resume purely via `animation-play-state: paused / running`.
+//   No JS timers → zero jank.
+// • Pauses on click inside the section.
+// • Resumes on window scroll OR click outside the section.
+// • Left/right edges fade with CSS mask-image gradient.
+// • No click-to-open image feature (removed).
 // ─────────────────────────────────────────────────────────────────────────────
 
-function AutoSlideImageTestimonials({ imageTestimonials, onImageClick }) {
-  const scrollRef     = useRef(null);
-  const sectionRef    = useRef(null);
-  const autoSlideRef  = useRef(null);
-  const isPausedRef   = useRef(false);
+function AutoSlideImageTestimonials({ imageTestimonials }) {
+  const sectionRef  = useRef(null);
+  const trackRef    = useRef(null);
   const [isPaused, setIsPaused] = useState(false);
+  const isPausedRef = useRef(false);
 
   const CARD_WIDTH = 200;
   const CARD_GAP   = 12;
-  const STEP       = CARD_WIDTH + CARD_GAP;
-  const SLIDE_INTERVAL = 2800;
-
-  // ── Start / restart the interval ──────────────────────────────────────────
-  const startAutoSlide = () => {
-    if (autoSlideRef.current) clearInterval(autoSlideRef.current);
-    autoSlideRef.current = setInterval(() => {
-      if (!isPausedRef.current && scrollRef.current) {
-        const container = scrollRef.current;
-        const maxScroll = container.scrollWidth - container.clientWidth;
-        if (container.scrollLeft >= maxScroll - 4) {
-          container.scrollTo({ left: 0, behavior: 'smooth' });
-        } else {
-          container.scrollBy({ left: STEP, behavior: 'smooth' });
-        }
-      }
-    }, SLIDE_INTERVAL);
-  };
+  // ~4 seconds of visibility per card; total = cards × 4s
+  const totalDuration = imageTestimonials.length * 4;
 
   const pause = () => {
     isPausedRef.current = true;
@@ -288,14 +279,9 @@ function AutoSlideImageTestimonials({ imageTestimonials, onImageClick }) {
   };
 
   useEffect(() => {
-    startAutoSlide();
-
-    // Resume on any page scroll
     const handleWindowScroll = () => {
       if (isPausedRef.current) resume();
     };
-
-    // Resume on click outside the section
     const handleDocClick = (e) => {
       if (sectionRef.current && !sectionRef.current.contains(e.target)) {
         resume();
@@ -304,65 +290,69 @@ function AutoSlideImageTestimonials({ imageTestimonials, onImageClick }) {
 
     window.addEventListener('scroll', handleWindowScroll, { passive: true });
     document.addEventListener('click', handleDocClick);
-
     return () => {
-      if (autoSlideRef.current) clearInterval(autoSlideRef.current);
       window.removeEventListener('scroll', handleWindowScroll);
       document.removeEventListener('click', handleDocClick);
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // We render the list twice so the seam is invisible
+  const doubled = [...imageTestimonials, ...imageTestimonials];
+
   return (
     <div
       ref={sectionRef}
-      className="relative"
+      className="relative select-none"
       onClick={pause}
     >
-      {/* Edge-blur mask wrapper */}
+      {/* Keyframe + marquee styles — scoped inline so no global pollution */}
+      <style>{`
+        @keyframes testimonial-marquee {
+          0%   { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+        .testimonial-track {
+          animation: testimonial-marquee ${totalDuration}s linear infinite;
+          will-change: transform;
+        }
+        .testimonial-track.paused {
+          animation-play-state: paused;
+        }
+      `}</style>
+
+      {/* Edge-fade mask */}
       <div
-        className="relative overflow-hidden"
+        className="overflow-hidden"
         style={{
           WebkitMaskImage:
-            'linear-gradient(to right, transparent 0px, black 90px, black calc(100% - 90px), transparent 100%)',
+            'linear-gradient(to right, transparent 0px, black 100px, black calc(100% - 100px), transparent 100%)',
           maskImage:
-            'linear-gradient(to right, transparent 0px, black 90px, black calc(100% - 90px), transparent 100%)',
+            'linear-gradient(to right, transparent 0px, black 100px, black calc(100% - 100px), transparent 100%)',
         }}
       >
-        {/* Scrollable strip */}
+        {/* The continuously moving track — doubled width for infinite loop */}
         <div
-          ref={scrollRef}
-          className="flex gap-3 overflow-x-auto pb-4 px-3"
-          style={{
-            scrollbarWidth: 'none',
-            msOverflowStyle: 'none',
-            WebkitOverflowScrolling: 'touch',
-          }}
+          ref={trackRef}
+          className={`testimonial-track flex pb-3${isPaused ? ' paused' : ''}`}
+          style={{ gap: `${CARD_GAP}px`, width: 'max-content' }}
         >
-          {imageTestimonials.map((testimonial, idx) => (
+          {doubled.map((testimonial, idx) => (
             <div
               key={idx}
-              className="flex-shrink-0 rounded-xl overflow-hidden relative cursor-pointer group shadow-lg hover:shadow-2xl transition-all duration-300"
-              style={{ width: `${CARD_WIDTH}px`, height: '380px' }}
-              onClick={(e) => {
-                e.stopPropagation(); // don't bubble to section (already paused by section click)
-                pause();
-                onImageClick(idx);
-              }}
+              className="flex-shrink-0 rounded-xl overflow-hidden relative shadow-lg"
+              style={{ width: `${CARD_WIDTH}px`, height: '390px', cursor: 'default' }}
+              aria-hidden={idx >= imageTestimonials.length}
             >
               <img
                 src={testimonial.imageUrl}
                 alt={testimonial.author || 'Student testimonial'}
-                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                className="w-full h-full object-cover"
                 draggable={false}
               />
-              {/* Subtle hover overlay */}
-              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all duration-300" />
-              {/* Bottom author tag */}
+              {/* Bottom author gradient + name */}
+              <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black/75 to-transparent pointer-events-none" />
               {testimonial.author && (
-                <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
-              )}
-              {testimonial.author && (
-                <p className="absolute bottom-3 left-3 text-white text-sm font-semibold pointer-events-none drop-shadow">
+                <p className="absolute bottom-3 left-3 right-3 text-white text-sm font-semibold pointer-events-none drop-shadow line-clamp-1">
                   {testimonial.author}
                 </p>
               )}
@@ -371,14 +361,14 @@ function AutoSlideImageTestimonials({ imageTestimonials, onImageClick }) {
         </div>
       </div>
 
-      {/* Paused pill indicator */}
+      {/* Paused indicator */}
       {isPaused && (
         <div
-          className="absolute top-2 right-2 flex items-center gap-1.5 bg-black/60 backdrop-blur-sm text-white text-xs px-3 py-1.5 rounded-full pointer-events-none select-none"
+          className="absolute top-2 right-2 flex items-center gap-1.5 bg-black/60 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none select-none"
           style={{ zIndex: 10 }}
         >
-          <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block" />
-          Paused — scroll or click outside to resume
+          <span className="w-2 h-2 rounded-full bg-yellow-400 inline-block flex-shrink-0" />
+          Paused · scroll or click outside to resume
         </div>
       )}
     </div>
@@ -1421,10 +1411,6 @@ export default function CourseLandingPage() {
 
                   <AutoSlideImageTestimonials
                     imageTestimonials={imageTestimonials}
-                    onImageClick={(idx) => {
-                      setImageSliderStartIndex(idx);
-                      setImageSliderOpen(true);
-                    }}
                   />
                 </div>
               )}
