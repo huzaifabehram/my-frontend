@@ -325,9 +325,9 @@ function AutoSlideImageTestimonials({ imageTestimonials }) {
         className="overflow-hidden"
         style={{
           WebkitMaskImage:
-            'linear-gradient(to right, transparent 0px, black 100px, black calc(100% - 100px), transparent 100%)',
+            'linear-gradient(to right, transparent 0px, black 40px, black calc(100% - 40px), transparent 100%)',
           maskImage:
-            'linear-gradient(to right, transparent 0px, black 100px, black calc(100% - 100px), transparent 100%)',
+            'linear-gradient(to right, transparent 0px, black 40px, black calc(100% - 40px), transparent 100%)',
         }}
       >
         {/* The continuously moving track — doubled width for infinite loop */}
