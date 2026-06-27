@@ -524,7 +524,13 @@ function normalizeReview(raw, idx) {
     null;
 
   // ── Stable key ───────────────────────────────────────────────────────────
-  const key = raw._id || raw.id || raw.reviewId || raw.review_id || `review-${author}-${idx}`;
+  // Server _id is always unique and preferred. When absent (e.g. optimistic
+  // local reviews), combine author + text snippet + createdAt timestamp so
+  // the same person can submit multiple reviews and each gets its own card.
+  const textSnippet = text.slice(0, 30).replace(/\s+/g, '-');
+  const tsSnippet   = dateRaw ? String(dateRaw).slice(0, 24) : String(idx);
+  const key = raw._id || raw.id || raw.reviewId || raw.review_id
+    || `review-${author}-${textSnippet}-${tsSnippet}`;
 
   return { key, author, text, rating, date, avatar, userId: raw.userId || raw.user_id || raw.user?._id || null };
 }
@@ -687,13 +693,21 @@ export default function CourseLandingPage() {
       setReviewText('');
       setReviewRating(5);
       setShowReviewForm(false);
-
-      const updatedCourse = await fetchCourseById(courseData._id);
-      if (updatedCourse) {
-        setFullCourse(updatedCourse);
-        setLocalNewReviews([]);
-      }
       alert('Review submitted successfully!');
+
+      // Re-fetch in the background. Only drop the optimistic local copy once
+      // the server actually echoes reviews back — some backends are eventually
+      // consistent and the re-fetch may arrive before the write is visible,
+      // which would make the card vanish until the next hard refresh.
+      fetchCourseById(courseData._id).then(updatedCourse => {
+        if (!updatedCourse) return;
+        setFullCourse(updatedCourse);
+        const serverReviewCount =
+          (Array.isArray(updatedCourse.reviews_list) ? updatedCourse.reviews_list.filter(r => r && typeof r === 'object').length : 0) +
+          (Array.isArray(updatedCourse.reviews) ? updatedCourse.reviews.filter(r => r && typeof r === 'object').length : 0);
+        // Only clear optimistic list once server confirms reviews exist
+        if (serverReviewCount > 0) setLocalNewReviews([]);
+      }).catch(() => { /* network error — keep local copy visible */ });
     } catch (err) {
       console.error('Failed to submit review:', err);
       setLocalNewReviews(prev => [optimisticReview, ...prev]);
@@ -746,10 +760,12 @@ export default function CourseLandingPage() {
 
   const totalLectures = sections.reduce((a, s) => a + (s.lectures || 0), 0);
 
-  // ─── FIX 5: Build the reviews array — no longer drops arrays of objects ──
-  // Previously: `typeof courseData.reviews[0] === 'object'` silently failed
-  // when the first element was a Mongoose-populated object or the array was
-  // paginated. Now we accept any array whose items are objects.
+  // ─── FIX 5 + FIX 6: Build the reviews array ────────────────────────────
+  // Merge ALL possible sources (reviews_list, reviews, localNewReviews) then
+  // de-dupe by server _id so we never show the same card twice even if both
+  // fields are populated. This also fixes "disappears on refresh" — previously
+  // safeReviewsArr was skipped whenever reviews_list was non-empty, meaning
+  // whichever field the backend uses after a POST was silently ignored.
   const safeReviewsList = Array.isArray(courseData.reviews_list)
     ? courseData.reviews_list.filter(r => r && typeof r === 'object')
     : [];
@@ -758,18 +774,18 @@ export default function CourseLandingPage() {
     ? courseData.reviews.filter(r => r && typeof r === 'object')
     : [];
 
+  // Always merge both arrays; de-dupe handles any overlap.
   const rawReviews = [
     ...localNewReviews,
     ...safeReviewsList,
-    // Only include reviews from the generic array if reviews_list is empty,
-    // to avoid duplicates when the backend populates both fields.
-    ...(safeReviewsList.length === 0 ? safeReviewsArr : []),
+    ...safeReviewsArr,
   ];
 
   const textReviews = rawReviews
     .map((r, idx) => normalizeReview(r, idx))
     .filter(Boolean)
-    // De-dupe by stable key so a re-fetch never shows the same card twice
+    // De-dupe by stable key — server _id makes this safe even when both
+    // reviews_list and reviews contain the same document.
     .filter((r, idx, arr) => arr.findIndex(x => x.key === r.key) === idx);
 
   const visibleReviews = showAllReviews ? textReviews : textReviews.slice(0, REVIEWS_PAGE_SIZE);
