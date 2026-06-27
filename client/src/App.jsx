@@ -8,6 +8,7 @@ import Shopify                    from "./Pages/Shopify";
 import CoursesPage                from "./Pages/CoursesPage";
 import Portals                    from "./Pages/Portals";
 import InstructorDashboard        from "./Pages/InstructorDashboard";
+import MetaPixelRouteTracker      from "./components/MetaPixelRouteTracker";
 
 // ─── Error boundary: shows a readable message instead of a blank screen ───────
 class ErrorBoundary extends React.Component {
@@ -86,6 +87,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <BrowserRouter>
+        <MetaPixelRouteTracker />
         <AuthProvider>
           <CoursesProvider>
             <AppRoutes />

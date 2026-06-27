@@ -24,6 +24,12 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Share2, Bookmark, ThumbsUp, Volume2, VolumeX } from 'lucide-react';
 import { useCourses } from '../context/CoursesContext';
 import { useAuth } from '../context/AuthContext';
+import {
+  trackViewContent,
+  trackAddToCart,
+  setPendingCourse,
+} from '../utils/facebookPixel';
+import FreeLectureVideoTracker, { FreeLectureIframeTracker } from '../components/FreeLectureVideoTracker';
 
 // ── YouTube embed helper ───────────────────────────────────────────────────
 function getYouTubeId(url) {
@@ -656,6 +662,36 @@ function TextReviewsSlider({ reviews }) {
   );
 }
 
+// ── Preview player with Meta Pixel free-lecture tracking ─────────────────────
+function PreviewVideoWithTracking({ url, course, lecture }) {
+  if (!url) return null;
+
+  const ytId     = getYouTubeId(url);
+  const isNative = !ytId && !isBunnyUrl(url) && (isDirectVideo(url) || isCloudinaryVideo(url));
+
+  if (!course || !lecture) {
+    return <VideoPlayer url={url} className="w-full" />;
+  }
+
+  if (isNative) {
+    return (
+      <FreeLectureVideoTracker
+        course={course}
+        lecture={lecture}
+        src={url}
+        className="w-full aspect-video bg-black object-cover"
+        controls
+      />
+    );
+  }
+
+  return (
+    <FreeLectureIframeTracker course={course} lecture={lecture}>
+      <VideoPlayer url={url} className="w-full" />
+    </FreeLectureIframeTracker>
+  );
+}
+
 export default function CourseLandingPage() {
   const navigate = useNavigate();
   const { id }   = useParams();
@@ -669,6 +705,7 @@ export default function CourseLandingPage() {
   const [showFullInstructorDescription, setShowFullInstructorDescription] = useState(false);
   const [isPreviewOpen,         setIsPreviewOpen]         = useState(false);
   const [currentVideo,          setCurrentVideo]          = useState('');
+  const [activePreviewLecture,  setActivePreviewLecture]  = useState(null);
   const [fullCourse,            setFullCourse]            = useState(null);
   const [fullCourseLoading,     setFullCourseLoading]     = useState(false);
   const [instructorData,        setInstructorData]        = useState(null);
@@ -687,6 +724,7 @@ export default function CourseLandingPage() {
   const [fetchedReviews,    setFetchedReviews]    = useState([]);
 
   const descriptionRef = useRef(null);
+  const viewContentFiredRef = useRef(null);
 
   const [videoLikes, setVideoLikes] = useState({});
   const handleVideoLike = useCallback((idx) => {
@@ -773,9 +811,44 @@ export default function CourseLandingPage() {
   }, [sections]);
 
   const handleNavigate = (path) => { setMobileMenuOpen(false); navigate(path); };
-  const handlePreviewClick  = () => { setCurrentVideo(courseData?.previewVideoUrl || ''); setIsPreviewOpen(true); };
-  const handleClosePreview  = () => { setIsPreviewOpen(false); setCurrentVideo(''); };
-  const handleLectureClick  = (videoUrl) => { setCurrentVideo(videoUrl); };
+
+  // Meta Pixel: ViewContent when a specific course landing page loads
+  useEffect(() => {
+    if (!id || !courseData?._id) return;
+    const key = String(courseData._id);
+    if (viewContentFiredRef.current === key) return;
+    viewContentFiredRef.current = key;
+    trackViewContent(courseData);
+  }, [id, courseData?._id, courseData?.title]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleEnrollClick = useCallback(() => {
+    if (!courseData?._id) return;
+    trackAddToCart(courseData);
+    setPendingCourse(courseData);
+    const courseId = courseData._id || courseData.id;
+    navigate(`/auth/register?redirect=${encodeURIComponent('/portal')}&courseId=${courseId}`);
+    setMobileMenuOpen(false);
+  }, [courseData, navigate]);
+
+  const handlePreviewClick  = () => {
+    setCurrentVideo(courseData?.previewVideoUrl || '');
+    setActivePreviewLecture({
+      id:    'main-preview',
+      _id:   'main-preview',
+      title: `${courseData?.title || 'Course'} Preview`,
+    });
+    setIsPreviewOpen(true);
+  };
+  const handleClosePreview  = () => {
+    setIsPreviewOpen(false);
+    setCurrentVideo('');
+    setActivePreviewLecture(null);
+  };
+  const handleLectureClick  = (lecture) => {
+    setCurrentVideo(lecture.videoUrl);
+    setActivePreviewLecture(lecture);
+    setIsPreviewOpen(true);
+  };
 
   useEffect(() => {
     const handleKeyDown = (e) => { if (e.key === 'Escape' && isPreviewOpen) handleClosePreview(); };
@@ -978,7 +1051,7 @@ export default function CourseLandingPage() {
             </div>
           </div>
           <div className="w-full bg-black">
-            <div className="max-w-7xl mx-auto"><VideoPlayer url={currentVideo} className="w-full" /></div>
+            <div className="max-w-7xl mx-auto"><PreviewVideoWithTracking url={currentVideo} course={courseData} lecture={activePreviewLecture} /></div>
           </div>
           <div className="flex-1 overflow-y-auto bg-gradient-to-b from-black to-[#1a1208]">
             <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
@@ -989,7 +1062,7 @@ export default function CourseLandingPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4">
                   {previewLectures.map((lecture, idx) => (
                     <div key={`${lecture.sectionIdx}-${lecture.lectureIdx}`}
-                      onClick={() => handleLectureClick(lecture.videoUrl)}
+                      onClick={() => handleLectureClick(lecture)}
                       className="bg-white bg-opacity-5 hover:bg-opacity-10 border border-[#3d3020] rounded-lg p-3 md:p-4 cursor-pointer transition group">
                       <div className="flex items-center gap-3 md:gap-4">
                         <div className="flex-shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-full bg-[#e8540a] group-hover:bg-[#c94708] flex items-center justify-center transition">
@@ -1176,13 +1249,13 @@ export default function CourseLandingPage() {
                       </span>
                       {discountPct && <span className="text-base font-semibold text-[#e8540a]">{discountPct}% off</span>}
                     </div>
-                    <button onClick={() => handleNavigate('/auth/register')}
+                    <button onClick={handleEnrollClick}
                       className="w-full bg-[#e8540a] hover:bg-[#c94708] text-white font-bold py-3 rounded-xl transition text-lg border-none cursor-pointer shadow-lg mb-3">
                       {discountPct ? (
                         <span>Enroll Now • {priceLabel} • <span className="text-[#fde8d8]">{discountPct}% OFF</span></span>
                       ) : `Enroll Now in ${priceLabel}`}
                     </button>
-                    <button onClick={() => handleNavigate('/auth/register')}
+                    <button onClick={handleEnrollClick}
                       className="w-full bg-white hover:bg-[#f8f4ed] text-[#1a1208] font-semibold py-3 rounded-xl transition text-lg border-2 border-[#ece6dd] cursor-pointer">
                       Buy now
                     </button>
@@ -1266,7 +1339,7 @@ export default function CourseLandingPage() {
                                     {lecture.duration && <span className="text-sm text-[#9e9789]">{lecture.duration}</span>}
                                     {lecture.preview && lecture.videoUrl && (
                                       <button
-                                        onClick={() => { setCurrentVideo(lecture.videoUrl); setIsPreviewOpen(true); }}
+                                        onClick={(e) => { e.stopPropagation(); handleLectureClick(lecture); }}
                                         className="flex items-center bg-[#fde8d8] hover:bg-[#fbdcc3] text-[#9a3c0e] font-bold text-xs md:text-sm cursor-pointer border-none whitespace-nowrap transition px-2.5 py-1.5 rounded-full">
                                         Free Lecture
                                       </button>
@@ -1285,7 +1358,7 @@ export default function CourseLandingPage() {
 
               {/* ENROLL NOW BUTTON */}
               <div className="mb-8 md:mb-12 w-full">
-                <button onClick={() => handleNavigate('/auth/register')}
+                <button onClick={handleEnrollClick}
                   className="w-full bg-[#1a1208] hover:bg-[#2d2416] text-white font-bold py-3 md:py-4 rounded-xl transition text-lg md:text-xl border-none cursor-pointer shadow-lg">
                   {discountPct ? (
                     <span>Enroll Now • {priceLabel} • <span className="text-[#f9c97a]">{discountPct}% OFF</span></span>
@@ -1680,7 +1753,7 @@ export default function CourseLandingPage() {
       {/* STICKY BOTTOM BAR — MOBILE */}
       <div className="fixed bottom-0 left-0 right-0 lg:hidden bg-white border-t-2 border-[#ece6dd] p-3 md:p-4 z-50 flex items-center w-full shadow-2xl">
         <button
-          onClick={() => handleNavigate('/auth/register')}
+          onClick={handleEnrollClick}
           style={{
             background: 'linear-gradient(135deg, #FF5A00 0%, #FF6A00 100%)',
             boxShadow: '0 8px 24px rgba(255, 90, 0, 0.25)',

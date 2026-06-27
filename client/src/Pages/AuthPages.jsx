@@ -2,6 +2,14 @@
 import React, { useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { enrollCourse } from "../api/courseApi";
+import {
+  trackCompleteRegistration,
+  trackInitiateCheckout,
+  trackPurchase,
+  getPendingCourse,
+  clearPendingCourse,
+} from "../utils/facebookPixel";
 
 export default function AuthPage({ mode = "login" }) {
   const navigate            = useNavigate();
@@ -14,6 +22,19 @@ export default function AuthPage({ mode = "login" }) {
   });
   const [error,   setError]   = useState("");
   const [loading, setLoading] = useState(false);
+  const checkoutFiredRef = React.useRef(false);
+
+  // Meta Pixel: InitiateCheckout once when user arrives to register for a course
+  React.useEffect(() => {
+    if (checkoutFiredRef.current) return;
+    const courseId = searchParams.get("courseId");
+    if (!courseId) return;
+    const pending = getPendingCourse();
+    if (pending && String(pending._id || pending.id) === courseId) {
+      checkoutFiredRef.current = true;
+      trackInitiateCheckout(pending);
+    }
+  }, [searchParams]);
 
   function handleChange(e) {
     setForm(f => ({ ...f, [e.target.name]: e.target.value }));
@@ -52,6 +73,24 @@ export default function AuthPage({ mode = "login" }) {
       const user = isLogin
         ? await login(form.email.trim(), form.password)
         : await register(form.name.trim(), form.email.trim(), form.password, form.role);
+
+      // Meta Pixel: registration completed
+      if (!isLogin) {
+        trackCompleteRegistration();
+      }
+
+      // Meta Pixel: complete enrollment funnel → Purchase
+      const courseId = searchParams.get("courseId");
+      const pending = getPendingCourse();
+      if (courseId && pending && String(pending._id || pending.id) === courseId) {
+        try {
+          await enrollCourse(courseId);
+          trackPurchase(pending);
+          clearPendingCourse();
+        } catch (enrollErr) {
+          console.warn("[Meta Pixel] Post-auth enrollment failed:", enrollErr?.message);
+        }
+      }
 
       // ── REDIRECT LOGIC ────────────────────────────────────────────────
       // If the user came from a course page (e.g. clicked "Enroll"),

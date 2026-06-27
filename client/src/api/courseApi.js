@@ -16,7 +16,7 @@ export const fetchCourse = (id) => API.get(`/courses/${id}`);
 export const fetchReviews = (id) => API.get(`/courses/${id}/reviews`);
 export const fetchSimilar = (id) => API.get(`/courses/${id}/similar`);
 export const submitReview = (id, data) => API.post(`/courses/${id}/reviews`, data);
-export const enrollCourse = (id) => API.post(`/courses/${id}/enroll`);
+export const enrollCourse = (id) => API.post(`/enrollments/${id}`);
 export const createCheckout = (data) => API.post("/payments/checkout", data);
 
 export default API;
