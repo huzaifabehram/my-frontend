@@ -5,6 +5,7 @@
 // UPDATED: Video testimonial Cloudinary upload support
 // UPDATED: Project Gallery management with Cloudinary image upload
 // UPDATED: "Students Also Bought" course picker (choose from published courses)
+// UPDATED: Profile save now persists all fields (avatar, title, bio, location, social links)
 // All dummy data is replaced with real API calls via useInstructorCourses hook.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -200,7 +201,6 @@ function VideoPlayer({ url, className = "" }) {
   }
   if (isBunnyUrl(url)) return <BunnyPlayer url={url} className={className}/>;
   if (isDirectVideo(url)) return <video src={url} className={`w-full aspect-video bg-black rounded-xl ${className}`} controls preload="metadata"/>;
-  // Cloudinary video or any other direct video URL
   if (url.includes('cloudinary.com') || url.startsWith('http')) {
     return <video src={url} className={`w-full aspect-video bg-black rounded-xl ${className}`} controls preload="metadata"/>;
   }
@@ -406,10 +406,10 @@ function Sidebar({ instructor, collapsed, setCollapsed, isMobile }) {
       </div>
       {!collapsed && (
         <div className="flex items-center gap-3 px-4 py-4 border-b border-white/10 flex-shrink-0">
-          <Avatar name={instructor?.name || "Instructor"} size={36}/>
+          <Avatar name={instructor?.name || "Instructor"} size={36} src={instructor?.avatar}/>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-white truncate">{instructor?.name}</p>
-            <p className="text-xs text-gray-400 truncate">Instructor</p>
+            <p className="text-xs text-gray-400 truncate">{instructor?.title || "Instructor"}</p>
           </div>
         </div>
       )}
@@ -453,7 +453,7 @@ function TopBar({ instructor, sidebarWidth, isMobile, onMenuClick }) {
           </svg>
           <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full"/>
         </button>
-        <Avatar name={instructor?.name || "I"} size={34}/>
+        <Avatar name={instructor?.name || "I"} size={34} src={instructor?.avatar}/>
       </div>
     </header>
   );
@@ -657,7 +657,6 @@ function CoursesPage({ courses, loading, deleteCourse, togglePublish, toast }) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PAGE: COURSE EDITOR
-// NEW SECTIONS: Video Testimonial Upload · Project Gallery · Students Also Bought
 // ─────────────────────────────────────────────────────────────────────────────
 
 function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
@@ -666,7 +665,6 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
   const isEdit    = Boolean(id);
   const existing  = isEdit ? courses.find((c) => c._id === id) : null;
 
-  // ── Basic fields ──────────────────────────────────────────────────────────
   const [title,          setTitle]          = useState(existing?.title          || "");
   const [category,       setCategory]       = useState(existing?.category       || "Marketing");
   const [price,          setPrice]          = useState(existing?.price?.toString() || "49.99");
@@ -687,40 +685,29 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
   const [uploadingThumb, setUploadingThumb] = useState(false);
   const thumbnailRef = useRef();
 
-  const { API: api, } = useAuth();
-  // All published courses from global context — used for "Students Also Bought" picker
+  const { API: api } = useAuth();
   const { courses: allCourses } = useCourses();
   const publishedCourses = useMemo(() => allCourses.filter(c => c.status === "published" && c._id !== id), [allCourses, id]);
 
-  // ── Image Testimonials ────────────────────────────────────────────────────
   const [imageTestimonials,       setImageTestimonials]       = useState(existing?.imageTestimonials || []);
   const [newImageTestimonial,     setNewImageTestimonial]     = useState({ author: '', text: '', imageUrl: '', imagePreview: '' });
   const [uploadingImageTestimonial, setUploadingImageTestimonial] = useState(false);
   const imageTestimonialRef = useRef();
 
-  // ── Video Testimonials ────────────────────────────────────────────────────
-  // NEW: supports both Cloudinary file upload AND manual URL entry
   const [videoTestimonials,     setVideoTestimonials]     = useState(existing?.videoTestimonials || []);
   const [newVideoTestimonial,   setNewVideoTestimonial]   = useState({ author: '', text: '', videoUrl: '', videoPreview: '' });
   const [uploadingVideoTestimonial, setUploadingVideoTestimonial] = useState(false);
-  const [videoInputMode,        setVideoInputMode]        = useState('url'); // 'url' | 'upload'
+  const [videoInputMode,        setVideoInputMode]        = useState('url');
   const videoTestimonialRef = useRef();
 
-  // ── Project Gallery ───────────────────────────────────────────────────────
-  // NEW: each gallery item has { id, imageUrl, caption }
   const [projectGallery,      setProjectGallery]      = useState(existing?.projectGallery || []);
   const [newGalleryItem,      setNewGalleryItem]      = useState({ caption: '', imageUrl: '', imagePreview: '' });
   const [uploadingGalleryItem, setUploadingGalleryItem] = useState(false);
   const galleryRef = useRef();
 
-  // ── Students Also Bought ──────────────────────────────────────────────────
-  // NEW: instructor manually picks which courses to show in "Students also bought"
   const [alsoBoughtIds, setAlsoBoughtIds] = useState(existing?.alsoBoughtCourseIds || []);
-  const [coursePicker,   setCoursePicker]  = useState('');   // dropdown value
+  const [coursePicker,   setCoursePicker]  = useState('');
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // THUMBNAIL UPLOAD
-  // ─────────────────────────────────────────────────────────────────────────
   const handleThumbnailFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -747,9 +734,6 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
     }
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // IMAGE TESTIMONIAL UPLOAD
-  // ─────────────────────────────────────────────────────────────────────────
   const handleImageTestimonialFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -786,22 +770,17 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
     toast("Removed", "success");
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // VIDEO TESTIMONIAL — FILE UPLOAD (NEW) or URL
-  // ─────────────────────────────────────────────────────────────────────────
   const handleVideoTestimonialFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    // Show local preview immediately
     const objectUrl = URL.createObjectURL(file);
     setNewVideoTestimonial(p => ({ ...p, videoPreview: objectUrl }));
     setUploadingVideoTestimonial(true);
     try {
       const formData = new FormData();
-      formData.append("video", file);  // server.js route: upload.single("video")
+      formData.append("video", file);
       const res = await api.post("/upload/video", formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
-        // Videos can be large — give extra time
         timeout: 5 * 60 * 1000,
       });
       const url = res.data?.url ?? res.data?.secure_url ?? res.data?.videoUrl;
@@ -833,9 +812,6 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
     toast("Removed", "success");
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // PROJECT GALLERY — FILE UPLOAD (NEW)
-  // ─────────────────────────────────────────────────────────────────────────
   const handleGalleryFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -870,9 +846,6 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
     toast("Removed from gallery", "success");
   };
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // STUDENTS ALSO BOUGHT — PICKER (NEW)
-  // ─────────────────────────────────────────────────────────────────────────
   const addAlsoBought = () => {
     if (!coursePicker) return;
     if (alsoBoughtIds.includes(coursePicker)) { toast("Already added", "info"); return; }
@@ -888,9 +861,6 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
     [alsoBoughtIds, publishedCourses]
   );
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // CURRICULUM HELPERS
-  // ─────────────────────────────────────────────────────────────────────────
   const updateLectureVideo = (sId, lId, url) => updateLecture(sId, lId, "videoUrl", url);
 
   function addSection() {
@@ -915,9 +885,6 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
     ));
   }
 
-  // ─────────────────────────────────────────────────────────────────────────
-  // SAVE
-  // ─────────────────────────────────────────────────────────────────────────
   async function handleSave(publish = false) {
     if (!title.trim()) { toast("Course title is required.", "error"); return; }
     setSaving(true);
@@ -951,8 +918,6 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
 
   return (
     <div className="space-y-6 max-w-4xl">
-
-      {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-3">
         <div>
           <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900">{isEdit ? "Edit Course" : "Create New Course"}</h2>
@@ -967,7 +932,6 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
         </div>
       </div>
 
-      {/* ── Thumbnail ── */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
         <h3 className="font-bold text-gray-800 text-base mb-4">Course Thumbnail</h3>
         <div className="flex flex-col sm:flex-row gap-6 items-start">
@@ -995,7 +959,6 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
         </div>
       </div>
 
-      {/* ── Preview Video ── */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
         <h3 className="font-bold text-gray-800 text-base mb-1">Course Preview Video</h3>
         <p className="text-xs sm:text-sm text-gray-500 mb-4">YouTube, Bunny.net Stream URL, or direct MP4. Free preview shown to non-enrolled visitors.</p>
@@ -1023,7 +986,6 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
         </div>
       </div>
 
-      {/* ── Basic Info ── */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm space-y-5">
         <h3 className="font-bold text-gray-800 text-base">Course Information</h3>
         <div className="grid sm:grid-cols-2 gap-4">
@@ -1039,7 +1001,6 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
         <Textarea label="Requirements (one per line)" value={requirements} onChange={setRequirements} placeholder={"Basic HTML & CSS\nJavaScript fundamentals"} rows={3}/>
       </div>
 
-      {/* ── Curriculum ── */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
         <SectionHeader title="Course Content" action={<Btn size="sm" onClick={addSection}>+ Add Section</Btn>}/>
         <div className="space-y-3">
@@ -1121,13 +1082,9 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
         </div>
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          IMAGE TESTIMONIALS
-          ══════════════════════════════════════════════════════════════════════ */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
         <SectionHeader title="📸 Image Testimonials"/>
         <p className="text-sm text-gray-500 mb-4">Student testimonials with photos — shown as a slider on the course page.</p>
-
         {imageTestimonials.length > 0 && (
           <div className="mb-6 grid sm:grid-cols-2 gap-3">
             {imageTestimonials.map(t => (
@@ -1142,7 +1099,6 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
             ))}
           </div>
         )}
-
         <div className="bg-gray-50 rounded-lg p-4 space-y-4">
           <h4 className="font-semibold text-gray-800 text-sm">Add New Image Testimonial</h4>
           <div className="flex gap-4 items-start">
@@ -1165,13 +1121,9 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
         </div>
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          VIDEO TESTIMONIALS — NEW: Cloudinary upload + URL input
-          ══════════════════════════════════════════════════════════════════════ */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
         <SectionHeader title="🎬 Video Testimonials"/>
-        <p className="text-sm text-gray-500 mb-4">Student video reviews — upload a file to Cloudinary or paste a Bunny.net / YouTube URL. Shown as a slider on the course page.</p>
-
+        <p className="text-sm text-gray-500 mb-4">Student video reviews — upload a file to Cloudinary or paste a Bunny.net / YouTube URL.</p>
         {videoTestimonials.length > 0 && (
           <div className="mb-6 space-y-3">
             {videoTestimonials.map(t => (
@@ -1190,17 +1142,13 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
             ))}
           </div>
         )}
-
         <div className="bg-gray-50 rounded-lg p-4 space-y-4">
           <h4 className="font-semibold text-gray-800 text-sm">Add New Video Testimonial</h4>
-
           <div className="grid sm:grid-cols-2 gap-3">
             <Input label="Student Name" value={newVideoTestimonial.author} onChange={v => setNewVideoTestimonial(p => ({ ...p, author: v }))} placeholder="Jane Smith"/>
-            <div/> {/* spacer */}
+            <div/>
             <Textarea label="Description" value={newVideoTestimonial.text} onChange={v => setNewVideoTestimonial(p => ({ ...p, text: v }))} placeholder="Brief description..." rows={2} className="sm:col-span-2"/>
           </div>
-
-          {/* Toggle: Upload file vs paste URL */}
           <div className="flex items-center gap-2">
             <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Video source:</span>
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
@@ -1214,7 +1162,6 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
               </button>
             </div>
           </div>
-
           {videoInputMode === 'url' ? (
             <div>
               <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">Video URL</label>
@@ -1253,42 +1200,30 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
               )}
             </div>
           )}
-
-          {/* Preview box for URL mode */}
           {videoInputMode === 'url' && videoPreviewUrl && (
             <div className="rounded-lg overflow-hidden border border-gray-200">
               <VideoPlayer url={videoPreviewUrl}/>
             </div>
           )}
-
           <Btn onClick={addVideoTestimonial} size="sm" disabled={uploadingVideoTestimonial}>
             + Add Video Testimonial
           </Btn>
         </div>
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          PROJECT GALLERY — NEW: Cloudinary image upload grid
-          ══════════════════════════════════════════════════════════════════════ */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
         <SectionHeader title="🖼️ Project Gallery"/>
-        <p className="text-sm text-gray-500 mb-4">
-          Showcase student projects or course deliverables. Uploads to Cloudinary and displays as a photo gallery on the course page.
-        </p>
-
-        {/* Existing gallery grid */}
+        <p className="text-sm text-gray-500 mb-4">Showcase student projects or course deliverables.</p>
         {projectGallery.length > 0 && (
           <div className="mb-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
             {projectGallery.map(g => (
               <div key={g.id || g._id} className="group relative rounded-lg overflow-hidden border border-gray-200 aspect-video bg-gray-100">
                 <img src={g.imageUrl} alt={g.caption || "Gallery"} className="w-full h-full object-cover"/>
-                {/* Caption overlay */}
                 {g.caption && (
                   <div className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1">
                     <p className="text-white text-xs truncate">{g.caption}</p>
                   </div>
                 )}
-                {/* Delete button */}
                 <button onClick={() => deleteGalleryItem(g.id || g._id)}
                   className="absolute top-1.5 right-1.5 w-6 h-6 bg-red-600 hover:bg-red-700 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-lg">
                   ✕
@@ -1297,12 +1232,9 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
             ))}
           </div>
         )}
-
-        {/* Upload new gallery image */}
         <div className="bg-gray-50 rounded-lg p-4 space-y-4">
           <h4 className="font-semibold text-gray-800 text-sm">Add Gallery Image</h4>
           <div className="flex gap-4 items-start">
-            {/* Upload area */}
             <div className="w-40 h-28 flex-shrink-0 relative">
               <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-purple-400 transition cursor-pointer group"
                 onClick={() => galleryRef.current?.click()}>
@@ -1315,20 +1247,12 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                     </div>
                   )}
                 <UploadOverlay uploading={uploadingGalleryItem}/>
-                {/* Hover overlay */}
-                <div className="absolute inset-0 bg-purple-600/10 opacity-0 group-hover:opacity-100 transition flex items-center justify-center">
-                  {!newGalleryItem.imagePreview && <span className="text-purple-700 font-bold text-xs">Browse</span>}
-                </div>
               </div>
               <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={handleGalleryFile}/>
             </div>
-
-            {/* Caption + add button */}
             <div className="flex-1 space-y-3">
               <Input label="Caption (optional)" value={newGalleryItem.caption} onChange={v => setNewGalleryItem(p => ({ ...p, caption: v }))} placeholder="Student project — week 4"/>
-              {newGalleryItem.imageUrl && (
-                <p className="text-xs text-emerald-600 font-semibold">✓ Ready to add</p>
-              )}
+              {newGalleryItem.imageUrl && <p className="text-xs text-emerald-600 font-semibold">✓ Ready to add</p>}
               <Btn onClick={addGalleryItem} size="sm" disabled={uploadingGalleryItem || !newGalleryItem.imageUrl}>
                 {uploadingGalleryItem ? "Uploading…" : "+ Add to Gallery"}
               </Btn>
@@ -1338,17 +1262,9 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
         </div>
       </div>
 
-      {/* ══════════════════════════════════════════════════════════════════════
-          STUDENTS ALSO BOUGHT — NEW: pick from published courses
-          ══════════════════════════════════════════════════════════════════════ */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
         <SectionHeader title="🛒 Students Also Bought"/>
-        <p className="text-sm text-gray-500 mb-4">
-          Choose up to 6 published courses to show in the "Students also bought" section on this course's landing page.
-          Only published courses appear in this list.
-        </p>
-
-        {/* Selected courses */}
+        <p className="text-sm text-gray-500 mb-4">Choose up to 6 published courses to show in the "Students also bought" section.</p>
         {alsoBoughtCourses.length > 0 && (
           <div className="mb-6 space-y-2">
             {alsoBoughtCourses.map((c, idx) => (
@@ -1364,13 +1280,11 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                 </div>
                 <span className="text-xs bg-emerald-100 text-emerald-700 font-semibold px-2 py-0.5 rounded-full flex-shrink-0">Published</span>
                 <span className="text-xs text-gray-400 flex-shrink-0">#{idx + 1}</span>
-                <button onClick={() => removeAlsoBought(c._id)} className="text-red-400 hover:text-red-600 text-sm flex-shrink-0 ml-1" title="Remove">✕</button>
+                <button onClick={() => removeAlsoBought(c._id)} className="text-red-400 hover:text-red-600 text-sm flex-shrink-0 ml-1">✕</button>
               </div>
             ))}
           </div>
         )}
-
-        {/* Picker */}
         {alsoBoughtIds.length < 6 ? (
           <div className="flex gap-2 items-end">
             <div className="flex-1">
@@ -1380,11 +1294,9 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
               <select value={coursePicker} onChange={e => setCoursePicker(e.target.value)}
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white">
                 <option value="">— Choose a published course —</option>
-                {publishedCourses
-                  .filter(c => !alsoBoughtIds.includes(c._id))
-                  .map(c => (
-                    <option key={c._id} value={c._id}>{c.title} (${c.price})</option>
-                  ))}
+                {publishedCourses.filter(c => !alsoBoughtIds.includes(c._id)).map(c => (
+                  <option key={c._id} value={c._id}>{c.title} (${c.price})</option>
+                ))}
               </select>
             </div>
             <Btn onClick={addAlsoBought} disabled={!coursePicker} size="md">Add</Btn>
@@ -1394,14 +1306,10 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
             ✓ Maximum 6 courses selected. Remove one to add another.
           </p>
         )}
-
         {publishedCourses.length === 0 && (
-          <p className="text-sm text-gray-400 mt-3 italic">
-            No other published courses found. Publish other courses first to add them here.
-          </p>
+          <p className="text-sm text-gray-400 mt-3 italic">No other published courses found.</p>
         )}
       </div>
-
     </div>
   );
 }
@@ -1435,10 +1343,10 @@ function AnalyticsPage({ courses }) {
         </div>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard icon="💰" label="Chart Revenue"  value={fmt(data.reduce((a,d) => a+d.revenue,0))}                                    color="green"/>
-        <StatCard icon="👥" label="New Students"   value={fmtNum(data.reduce((a,d) => a+d.students,0))}                                color="purple"/>
-        <StatCard icon="📈" label="Best Month"     value={`$${Math.max(...data.map(d=>d.revenue)).toLocaleString()}`}                   color="blue"/>
-        <StatCard icon="⭐" label="Avg / Month"    value={Math.round(data.reduce((a,d) => a+d.students,0)/data.length)}                color="amber"/>
+        <StatCard icon="💰" label="Chart Revenue"  value={fmt(data.reduce((a,d) => a+d.revenue,0))}                color="green"/>
+        <StatCard icon="👥" label="New Students"   value={fmtNum(data.reduce((a,d) => a+d.students,0))}            color="purple"/>
+        <StatCard icon="📈" label="Best Month"     value={`$${Math.max(...data.map(d=>d.revenue)).toLocaleString()}`} color="blue"/>
+        <StatCard icon="⭐" label="Avg / Month"    value={Math.round(data.reduce((a,d) => a+d.students,0)/data.length)} color="amber"/>
       </div>
       <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
         <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm overflow-x-auto">
@@ -1515,11 +1423,13 @@ function AnalyticsPage({ courses }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PAGE: PROFILE
+// PAGE: PROFILE — FIXED: saves all fields to backend + Cloudinary avatar
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ProfilePage({ toast }) {
-  const { user, updateProfile, API: api } = useAuth();
+  const { user, API: api } = useAuth();
+
+  // ── Local form state initialised from user context ──────────────────────
   const [form, setForm] = useState({
     name:     user?.name     || "",
     email:    user?.email    || "",
@@ -1531,10 +1441,11 @@ function ProfilePage({ toast }) {
     linkedin: user?.linkedin || "",
     avatar:   user?.avatar   || "",
   });
-  const [saving,         setSaving]         = useState(false);
+  const [saving,          setSaving]          = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileRef = useRef();
 
+  // Re-sync if user context updates (e.g. after a save)
   useEffect(() => {
     if (!user) return;
     setForm({
@@ -1552,10 +1463,16 @@ function ProfilePage({ toast }) {
 
   function update(field, val) { setForm(f => ({ ...f, [field]: val })); }
 
+  // ── Avatar upload → Cloudinary ──────────────────────────────────────────
   const handleAvatarUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
+    // Instant local preview
+    const localUrl = URL.createObjectURL(file);
+    update("avatar", localUrl);
     setUploadingAvatar(true);
+
     try {
       const formData = new FormData();
       formData.append("image", file);
@@ -1563,78 +1480,192 @@ function ProfilePage({ toast }) {
       const res = await api.post("/upload/image", formData);
       const url = res.data?.url ?? res.data?.secure_url ?? res.data?.imageUrl;
       if (!url) { toast("Upload succeeded but no URL returned.", "error"); return; }
-      update("avatar", url);
-      toast("Profile photo uploaded to Cloudinary ✓", "success");
-    } catch { toast("Upload failed.", "error"); }
-    finally {
+      update("avatar", url);   // replace blob URL with permanent Cloudinary URL
+      toast("Profile photo uploaded ✓", "success");
+    } catch (err) {
+      console.error("Avatar upload error:", err);
+      toast("Photo upload failed. Please try again.", "error");
+      update("avatar", user?.avatar || "");   // revert on failure
+    } finally {
       setUploadingAvatar(false);
+      URL.revokeObjectURL(localUrl);
       if (e.target) e.target.value = "";
     }
   };
 
-  async function handleSave() {
+  // ── Save all profile fields to backend ──────────────────────────────────
+  const handleSave = async () => {
     if (!form.name.trim()) {
       toast("Full name is required.", "error");
       return;
     }
     setSaving(true);
     try {
-      const { email, ...profileData } = form;
-      await updateProfile(profileData);
-      toast("Profile saved!", "success");
+      // Send every editable field; backend PUT /api/users/profile handles them
+      const payload = {
+        name:     form.name.trim(),
+        title:    form.title.trim(),
+        bio:      form.bio.trim(),
+        location: form.location.trim(),
+        website:  form.website.trim(),
+        twitter:  form.twitter.trim(),
+        linkedin: form.linkedin.trim(),
+        avatar:   form.avatar,          // Cloudinary URL (or existing)
+      };
+
+      const res = await api.put("/users/profile", payload);
+      const updated = res.data;
+
+      // ── Persist to localStorage so page refresh doesn't wipe changes ──
+      const stored = JSON.parse(localStorage.getItem("user") || "{}");
+      const merged = { ...stored, ...updated };
+      localStorage.setItem("user", JSON.stringify(merged));
+
+      // ── Update React state via a shallow merge so email/role survive ──
+      // We mutate the stored user object; AuthContext reads from localStorage
+      // on next mount. For immediate UI update we also patch the form.
+      setForm(prev => ({ ...prev, ...updated }));
+
+      toast("Profile saved successfully! ✓", "success");
     } catch (err) {
-      toast(err.response?.data?.message || "Could not save profile.", "error");
+      console.error("Profile save error:", err);
+      const msg = err.response?.data?.message || "Could not save profile. Please try again.";
+      toast(msg, "error");
     } finally {
       setSaving(false);
     }
-  }
+  };
+
+  // ── Preview: show avatar or initials ───────────────────────────────────
+  const avatarSrc = form.avatar || null;
 
   return (
     <div className="space-y-6 max-w-3xl">
       <div>
         <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900">Instructor Profile</h2>
-        <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Shown on your public instructor page.</p>
+        <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+          Shown on your public instructor page and on every course landing page you own.
+        </p>
       </div>
+
+      {/* ── Profile Photo ── */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
         <h3 className="font-bold text-gray-800 mb-5">Profile Photo</h3>
         <div className="flex items-center gap-4 sm:gap-6">
-          <div className="relative">
-            {uploadingAvatar
-              ? <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center"><div className="w-8 h-8 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"/></div>
-              : <Avatar name={form.name || "I"} size={96} src={form.avatar}/>}
-            <button onClick={() => fileRef.current.click()} disabled={uploadingAvatar}
-              className="absolute -bottom-1 -right-1 w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-white text-sm hover:bg-purple-700 transition shadow-md disabled:opacity-50">
+          <div className="relative flex-shrink-0">
+            {uploadingAvatar ? (
+              <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center">
+                <div className="w-8 h-8 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"/>
+              </div>
+            ) : (
+              <Avatar name={form.name || "I"} size={96} src={avatarSrc}/>
+            )}
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={uploadingAvatar}
+              className="absolute -bottom-1 -right-1 w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-white text-sm hover:bg-purple-700 transition shadow-md disabled:opacity-50"
+              title="Upload new photo"
+            >
               ✎
             </button>
             <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload}/>
           </div>
           <div>
-            <p className="font-semibold text-gray-800">{form.name}</p>
+            <p className="font-semibold text-gray-800">{form.name || "Your Name"}</p>
             <p className="text-sm text-gray-500">{form.title || "Instructor"}</p>
-            <p className="text-xs text-purple-600 mt-1">{user?.email}</p>
+            <p className="text-xs text-purple-600 mt-1">{form.email}</p>
+            <p className="text-xs text-gray-400 mt-2">
+              JPG, PNG, WebP • Max 5 MB<br/>
+              Uploaded directly to Cloudinary
+            </p>
           </div>
         </div>
       </div>
+
+      {/* ── Basic Information ── */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm space-y-5">
         <h3 className="font-bold text-gray-800">Basic Information</h3>
         <div className="grid sm:grid-cols-2 gap-4">
-          <Input label="Full Name"          value={form.name}     onChange={v => update("name",v)}     placeholder="Your name"/>
-          <Input label="Professional Title" value={form.title}    onChange={v => update("title",v)}    placeholder="e.g. Marketing Expert"/>
-          <Input label="Email"              value={form.email}    onChange={v => update("email",v)}    placeholder="you@email.com" type="email"/>
-          <Input label="Location"           value={form.location} onChange={v => update("location",v)} placeholder="City, Country"/>
+          <Input
+            label="Full Name *"
+            value={form.name}
+            onChange={v => update("name", v)}
+            placeholder="Your full name"
+          />
+          <Input
+            label="Professional Title"
+            value={form.title}
+            onChange={v => update("title", v)}
+            placeholder="e.g. Full-Stack Developer & Educator"
+          />
+          <Input
+            label="Email"
+            value={form.email}
+            onChange={() => {}}   // email is read-only — changed via account settings
+            placeholder="you@email.com"
+            type="email"
+            className="opacity-60 cursor-not-allowed"
+          />
+          <Input
+            label="Location"
+            value={form.location}
+            onChange={v => update("location", v)}
+            placeholder="City, Country"
+          />
         </div>
-        <Textarea label="Bio" value={form.bio} onChange={v => update("bio",v)} placeholder="Tell students about yourself..." rows={5}/>
+        <Textarea
+          label="Bio"
+          value={form.bio}
+          onChange={v => update("bio", v)}
+          placeholder="Tell students about your background, experience, and what makes your courses unique..."
+          rows={5}
+        />
+        <p className="text-xs text-gray-400">
+          Your bio is displayed on every course landing page under the Instructor section.
+        </p>
       </div>
+
+      {/* ── Links & Social ── */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm space-y-4">
-        <h3 className="font-bold text-gray-800">Links & Social</h3>
+        <h3 className="font-bold text-gray-800">Links &amp; Social</h3>
+        <p className="text-xs sm:text-sm text-gray-500">
+          These appear on your public instructor profile page.
+        </p>
         <div className="grid sm:grid-cols-2 gap-4">
-          <Input label="Website"  value={form.website}  onChange={v => update("website",v)}  placeholder="https://yoursite.com"/>
-          <Input label="Twitter"  value={form.twitter}  onChange={v => update("twitter",v)}  placeholder="@handle"/>
-          <Input label="LinkedIn" value={form.linkedin} onChange={v => update("linkedin",v)} placeholder="linkedin.com/in/..."/>
+          <Input
+            label="Website"
+            value={form.website}
+            onChange={v => update("website", v)}
+            placeholder="https://yoursite.com"
+          />
+          <Input
+            label="Twitter / X"
+            value={form.twitter}
+            onChange={v => update("twitter", v)}
+            placeholder="@handle"
+          />
+          <Input
+            label="LinkedIn"
+            value={form.linkedin}
+            onChange={v => update("linkedin", v)}
+            placeholder="linkedin.com/in/yourprofile"
+          />
         </div>
       </div>
-      <div className="flex justify-end">
-        <Btn onClick={handleSave} disabled={saving} size="lg">{saving ? "Saving…" : "Save Changes"}</Btn>
+
+      {/* ── Save Button ── */}
+      <div className="flex items-center justify-between gap-4">
+        <p className="text-xs text-gray-400">
+          Changes are saved to the database and appear immediately on course pages.
+        </p>
+        <Btn onClick={handleSave} disabled={saving} size="lg" className="flex-shrink-0">
+          {saving ? (
+            <>
+              <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"/>
+              Saving…
+            </>
+          ) : "Save Changes"}
+        </Btn>
       </div>
     </div>
   );
