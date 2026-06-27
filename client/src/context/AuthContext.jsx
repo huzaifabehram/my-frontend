@@ -67,13 +67,14 @@ localStorage.removeItem("user");
 setUser(null);
 };
 
-// ── Update profile (used by ProfileTab) ───────────────────────────────────
+// ── Update profile (used by InstructorDashboard ProfilePage) ─────────────
 const updateProfile = async (data) => {
-const res = await API.patch("/auth/profile", data);
-const updated = { ...user, ...res.data };
-localStorage.setItem("user", JSON.stringify(updated));
-setUser(updated);
-return updated;
+  const res = await API.put("/users/profile", data);
+  const updated = res.data;
+  const merged = { ...user, ...updated };
+  localStorage.setItem("user", JSON.stringify(merged));
+  setUser(merged);
+  return updated;
 };
 
 const saveSession = (token, user) => {

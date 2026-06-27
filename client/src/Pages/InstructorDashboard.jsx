@@ -1427,7 +1427,7 @@ function AnalyticsPage({ courses }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ProfilePage({ toast }) {
-  const { user, API: api } = useAuth();
+  const { user, updateProfile, API: api } = useAuth();
 
   // ── Local form state initialised from user context ──────────────────────
   const [form, setForm] = useState({
@@ -1499,9 +1499,13 @@ function ProfilePage({ toast }) {
       toast("Full name is required.", "error");
       return;
     }
+    if (uploadingAvatar) {
+      toast("Please wait for the photo upload to finish.", "error");
+      return;
+    }
     setSaving(true);
     try {
-      // Send every editable field; backend PUT /api/users/profile handles them
+      const avatarUrl = form.avatar?.startsWith("http") ? form.avatar : (user?.avatar || "");
       const payload = {
         name:     form.name.trim(),
         title:    form.title.trim(),
@@ -1510,22 +1514,10 @@ function ProfilePage({ toast }) {
         website:  form.website.trim(),
         twitter:  form.twitter.trim(),
         linkedin: form.linkedin.trim(),
-        avatar:   form.avatar,          // Cloudinary URL (or existing)
+        avatar:   avatarUrl,
       };
 
-      const res = await api.put("/users/profile", payload);
-      const updated = res.data;
-
-      // ── Persist to localStorage so page refresh doesn't wipe changes ──
-      const stored = JSON.parse(localStorage.getItem("user") || "{}");
-      const merged = { ...stored, ...updated };
-      localStorage.setItem("user", JSON.stringify(merged));
-
-      // ── Update React state via a shallow merge so email/role survive ──
-      // We mutate the stored user object; AuthContext reads from localStorage
-      // on next mount. For immediate UI update we also patch the form.
-      setForm(prev => ({ ...prev, ...updated }));
-
+      await updateProfile(payload);
       toast("Profile saved successfully! ✓", "success");
     } catch (err) {
       console.error("Profile save error:", err);
