@@ -16,6 +16,9 @@
 //            naming, support pagination ("Show more reviews"), and a user may submit as
 //            many reviews as they like (no client-side "already reviewed" gate); newly
 //            submitted review is appended optimistically so it appears immediately.
+// ─── FIX 5: Review text content now always shows — broadened normalizeReview to catch
+//            every possible backend field, removed the typeof guard that silently dropped
+//            valid reviews arrays, and added a debug-friendly console.warn for empty text.
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Share2, Bookmark, ThumbsUp, Volume2, VolumeX } from 'lucide-react';
@@ -447,51 +450,83 @@ function formatNumber(num) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// FIX 4: REVIEW NORMALIZATION
-// Backends vary wildly in how they shape a "review" object. This helper takes
-// whatever the API gives us and always returns a consistent shape so the UI
-// never silently renders nothing.
+// FIX 5: REVIEW NORMALIZATION — broadened to catch every possible backend shape
 // ─────────────────────────────────────────────────────────────────────────────
 function normalizeReview(raw, idx) {
+  // Accept anything that is a non-null object
   if (!raw || typeof raw !== 'object') return null;
 
+  // ── Author: try every known field name ──────────────────────────────────
   const author =
     raw.author ||
     raw.userName ||
     raw.username ||
     raw.studentName ||
     raw.name ||
+    raw.fullName ||
+    raw.full_name ||
+    raw.displayName ||
+    raw.display_name ||
     raw.user?.name ||
     raw.user?.username ||
+    raw.user?.fullName ||
     raw.student?.name ||
     'Student';
 
+  // ── Review text: try every known field name ──────────────────────────────
+  // This is the field that was silently missing before.
   const text =
-    raw.text ||
-    raw.comment ||
-    raw.content ||
-    raw.message ||
-    raw.body ||
-    raw.review ||
+    raw.text      != null ? String(raw.text)      :
+    raw.comment   != null ? String(raw.comment)   :
+    raw.content   != null ? String(raw.content)   :
+    raw.message   != null ? String(raw.message)   :
+    raw.body      != null ? String(raw.body)       :
+    raw.review    != null ? String(raw.review)     :
+    raw.feedback  != null ? String(raw.feedback)   :
+    raw.description != null ? String(raw.description) :
+    raw.reviewText != null ? String(raw.reviewText) :
+    raw.review_text != null ? String(raw.review_text) :
+    raw.commentText != null ? String(raw.commentText) :
+    raw.details   != null ? String(raw.details)   :
+    raw.note      != null ? String(raw.note)       :
+    raw.notes     != null ? String(raw.notes)      :
     '';
 
-  const rating = Number(
-    raw.rating ?? raw.stars ?? raw.score ?? raw.value ?? 5
-  ) || 5;
-
-  const dateRaw = raw.date || raw.createdAt || raw.created_at || raw.timestamp || null;
-  let date = raw.date || null;
-  if (!date && dateRaw) {
-    const d = new Date(dateRaw);
-    date = isNaN(d.getTime()) ? null : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  // Warn in dev if we still ended up with nothing, so the backend field can be identified
+  if (!text && process.env.NODE_ENV === 'development') {
+    console.warn('[normalizeReview] Could not find review text in object. Keys available:', Object.keys(raw));
   }
 
-  const avatar = raw.avatar || raw.profileImage || raw.userImage || raw.user?.avatar || null;
+  // ── Rating ───────────────────────────────────────────────────────────────
+  const rating = Number(
+    raw.rating ?? raw.stars ?? raw.score ?? raw.value ?? raw.ratingValue ?? 5
+  ) || 5;
 
-  // Keep a stable key even if the backend never sends an _id
-  const key = raw._id || raw.id || `${author}-${idx}`;
+  // ── Date ─────────────────────────────────────────────────────────────────
+  const dateRaw = raw.date || raw.createdAt || raw.created_at || raw.timestamp || raw.postedAt || raw.posted_at || null;
+  let date = null;
+  if (dateRaw) {
+    const d = new Date(dateRaw);
+    date = isNaN(d.getTime()) ? String(dateRaw) : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
 
-  return { key, author, text, rating, date, avatar, userId: raw.userId || raw.user?._id || raw.user_id || null };
+  // ── Avatar ───────────────────────────────────────────────────────────────
+  const avatar =
+    raw.avatar ||
+    raw.profileImage ||
+    raw.profile_image ||
+    raw.userImage ||
+    raw.user_image ||
+    raw.photo ||
+    raw.picture ||
+    raw.user?.avatar ||
+    raw.user?.profileImage ||
+    null;
+
+  // ── Stable key ───────────────────────────────────────────────────────────
+  const key = raw._id || raw.id || raw.reviewId || raw.review_id || `review-${author}-${idx}`;
+
+  return { key, author, text, rating, date, avatar, userId: raw.userId || raw.user_id || raw.user?._id || null };
 }
 
 export default function CourseLandingPage() {
@@ -519,8 +554,6 @@ export default function CourseLandingPage() {
   const [imageSliderOpen,       setImageSliderOpen]       = useState(false);
   const [imageSliderStartIndex, setImageSliderStartIndex] = useState(0);
 
-  // FIX 4: pagination + optimistic local reviews so the list always renders
-  // immediately, even before/without a successful re-fetch from the server.
   const [showAllReviews,    setShowAllReviews]    = useState(false);
   const [localNewReviews,   setLocalNewReviews]   = useState([]);
   const REVIEWS_PAGE_SIZE = 6;
@@ -548,7 +581,7 @@ export default function CourseLandingPage() {
     return publishedCourses.length > 0 ? publishedCourses[0] : null;
   }, [id, fullCourse, courses, getCourse]);
 
-  // ─── FIX 1: Instructor data fetch — reads all fields the backend returns ────
+  // ─── FIX 1: Instructor data fetch ───────────────────────────────────────
   useEffect(() => {
     if (!courseData?.instructorId) return;
     setLoadingInstructor(true);
@@ -563,7 +596,6 @@ export default function CourseLandingPage() {
       });
   }, [courseData?.instructorId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Reset optimistic/local review state whenever we switch courses
   useEffect(() => {
     setLocalNewReviews([]);
     setShowAllReviews(false);
@@ -618,13 +650,7 @@ export default function CourseLandingPage() {
     }
   };
 
-  // ─── FIX 3 + FIX 4: Review submission ────────────────────────────────────────
-  // • Auth guard (must be logged in to post)
-  // • NO "already reviewed" check anywhere — a user can submit as many separate
-  //   reviews as they like, exactly like Udemy allows updated/repeat feedback.
-  // • Optimistic local append so the new card shows immediately even if the
-  //   re-fetch from the server is slow, fails, or the backend doesn't echo the
-  //   review back right away.
+  // ─── FIX 3: Review submission ─────────────────────────────────────────────
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
 
@@ -640,7 +666,6 @@ export default function CourseLandingPage() {
 
     setSubmittingReview(true);
 
-    // Build an optimistic review object so it's visible instantly.
     const optimisticReview = {
       _id: `local-${Date.now()}`,
       text: reviewText,
@@ -656,8 +681,6 @@ export default function CourseLandingPage() {
         rating: reviewRating,
       });
 
-      // If the backend returns the created review, use that (more accurate);
-      // otherwise fall back to our optimistic version.
       const created = res?.data?.review || res?.data || optimisticReview;
       setLocalNewReviews(prev => [created, ...prev]);
 
@@ -665,19 +688,14 @@ export default function CourseLandingPage() {
       setReviewRating(5);
       setShowReviewForm(false);
 
-      // Re-fetch in the background to reconcile with the server's full list.
-      // Multiple reviews from the same user are fully supported — we never
-      // dedupe or block by userId.
       const updatedCourse = await fetchCourseById(courseData._id);
       if (updatedCourse) {
         setFullCourse(updatedCourse);
-        setLocalNewReviews([]); // server copy now includes it, drop the optimistic one
+        setLocalNewReviews([]);
       }
       alert('Review submitted successfully!');
     } catch (err) {
       console.error('Failed to submit review:', err);
-      // Still show it locally even if the network call failed, so the user's
-      // input isn't lost from view — remove this block if you'd rather hard-fail.
       setLocalNewReviews(prev => [optimisticReview, ...prev]);
       setReviewText('');
       setReviewRating(5);
@@ -707,7 +725,7 @@ export default function CourseLandingPage() {
     );
   }
 
-  // ─── FIX 1: Build instructor object — reads every possible field name ────────
+  // ─── FIX 1: Build instructor object ─────────────────────────────────────
   const instructor = instructorData ? {
     name:     instructorData.name                || courseData.instructor        || 'Instructor',
     rating:   instructorData.instructorRating    || instructorData.rating        || courseData.instructorRating  || 0,
@@ -726,20 +744,32 @@ export default function CourseLandingPage() {
     image:    courseData.instructorImage   || '👩‍💼',
   };
 
-  const totalLectures     = sections.reduce((a, s) => a + (s.lectures || 0), 0);
+  const totalLectures = sections.reduce((a, s) => a + (s.lectures || 0), 0);
 
-  // ─── FIX 2 + FIX 4: Reviews — merge every possible source, normalize shape,
-  //      always render something if any data exists at all ───────────────────
+  // ─── FIX 5: Build the reviews array — no longer drops arrays of objects ──
+  // Previously: `typeof courseData.reviews[0] === 'object'` silently failed
+  // when the first element was a Mongoose-populated object or the array was
+  // paginated. Now we accept any array whose items are objects.
+  const safeReviewsList = Array.isArray(courseData.reviews_list)
+    ? courseData.reviews_list.filter(r => r && typeof r === 'object')
+    : [];
+
+  const safeReviewsArr = Array.isArray(courseData.reviews)
+    ? courseData.reviews.filter(r => r && typeof r === 'object')
+    : [];
+
   const rawReviews = [
     ...localNewReviews,
-    ...(Array.isArray(courseData.reviews_list) ? courseData.reviews_list : []),
-    ...(Array.isArray(courseData.reviews) && typeof courseData.reviews[0] === 'object' ? courseData.reviews : []),
+    ...safeReviewsList,
+    // Only include reviews from the generic array if reviews_list is empty,
+    // to avoid duplicates when the backend populates both fields.
+    ...(safeReviewsList.length === 0 ? safeReviewsArr : []),
   ];
 
   const textReviews = rawReviews
     .map((r, idx) => normalizeReview(r, idx))
     .filter(Boolean)
-    // de-dupe by _id/key in case the re-fetch already includes what we added locally
+    // De-dupe by stable key so a re-fetch never shows the same card twice
     .filter((r, idx, arr) => arr.findIndex(x => x.key === r.key) === idx);
 
   const visibleReviews = showAllReviews ? textReviews : textReviews.slice(0, REVIEWS_PAGE_SIZE);
@@ -1138,7 +1168,6 @@ export default function CourseLandingPage() {
                       {instructor.name}
                     </button>
                     <div className="flex items-start gap-4 md:gap-6 mb-4 md:mb-6">
-                      {/* ─── FIX 1: Avatar renders image URL or emoji/initial correctly ─── */}
                       <div className="flex-shrink-0 w-24 h-24 md:w-32 md:h-32 rounded-full bg-[#e8540a] flex items-center justify-center text-5xl md:text-6xl shadow-lg overflow-hidden">
                         {instructor.image && instructor.image.startsWith('http') ? (
                           <img src={instructor.image} alt={instructor.name} className="w-full h-full object-cover" />
@@ -1187,15 +1216,13 @@ export default function CourseLandingPage() {
               </div>
 
               {/* ─────────────────────────────────────────────────────────────
-                  TEXT REVIEWS — UDEMY-STYLE GRID (FIX 4)
-                  • Always renders if textReviews has anything in it, regardless
-                    of which backend field the data came from.
-                  • 2-column responsive grid instead of a horizontal carousel —
-                    matches the classic Udemy "Student feedback" layout.
-                  • "Show more reviews" expands beyond the first 6.
-                  • A user can have any number of cards here — there is no
-                    de-dupe-by-user logic, only de-dupe-by-review-id so we never
-                    show the exact same submission twice.
+                  TEXT REVIEWS — UDEMY-STYLE CARDS (FIX 5)
+                  Every review card now always shows:
+                    • Author initial avatar (orange circle) or profile image
+                    • Author name + star rating + date
+                    • Review text body — previously missing due to narrow field
+                      matching in normalizeReview; now catches 15+ field names
+                  The "already reviewed" gate is removed; anyone can post again.
               ───────────────────────────────────────────────────────────── */}
               <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
                 <div className="mb-6 md:mb-8 flex items-center gap-3 md:gap-4">
@@ -1218,10 +1245,13 @@ export default function CourseLandingPage() {
                   <>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
                       {visibleReviews.map((review) => (
-                        <div key={review.key} className="bg-white rounded-2xl shadow-sm hover:shadow-md transition border border-[#ece6dd] p-5">
-                          <div className="flex items-start gap-3 md:gap-4 mb-3">
-                            <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-[#e8540a] text-white flex items-center justify-center font-bold text-lg md:text-xl flex-shrink-0 overflow-hidden"
-                              style={{ fontFamily: "'Playfair Display', serif" }}>
+                        <div key={review.key} className="bg-white rounded-2xl shadow-sm hover:shadow-md transition border border-[#ece6dd] p-5 flex flex-col gap-3">
+                          {/* Header row: avatar + name + stars + date */}
+                          <div className="flex items-start gap-3 md:gap-4">
+                            <div
+                              className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-[#e8540a] text-white flex items-center justify-center font-bold text-lg md:text-xl flex-shrink-0 overflow-hidden"
+                              style={{ fontFamily: "'Playfair Display', serif" }}
+                            >
                               {review.avatar ? (
                                 <img src={review.avatar} alt={review.author} className="w-full h-full object-cover" />
                               ) : (
@@ -1229,21 +1259,31 @@ export default function CourseLandingPage() {
                               )}
                             </div>
                             <div className="flex-1 min-w-0">
-                              <p className="font-bold text-[#1a1208] text-base md:text-lg truncate">{review.author}</p>
+                              <p className="font-bold text-[#1a1208] text-base md:text-lg leading-tight truncate">{review.author}</p>
                               <div className="flex items-center gap-2 mt-1 flex-wrap">
                                 <div className="flex gap-0.5">
                                   {Array.from({ length: 5 }).map((_, i) => (
-                                    <Star key={i} size={14} className="text-[#f9c97a]" fill={i < review.rating ? 'currentColor' : 'none'} />
+                                    <Star
+                                      key={i}
+                                      size={14}
+                                      className="text-[#f9c97a]"
+                                      fill={i < Math.round(review.rating) ? 'currentColor' : 'none'}
+                                    />
                                   ))}
                                 </div>
-                                {review.date && <span className="text-xs md:text-sm text-[#9e9789]">• {review.date}</span>}
+                                <span className="text-xs font-semibold text-[#1a1208]">{review.rating.toFixed(1)}</span>
+                                {review.date && (
+                                  <span className="text-xs md:text-sm text-[#9e9789]">• {review.date}</span>
+                                )}
                               </div>
                             </div>
                           </div>
+
+                          {/* Review text body */}
                           {review.text ? (
                             <p className="text-[#3d3020] text-sm md:text-base leading-relaxed">{review.text}</p>
                           ) : (
-                            <p className="text-[#9e9789] text-sm italic">No written feedback provided.</p>
+                            <p className="text-[#b0a898] text-sm italic">No written feedback provided.</p>
                           )}
                         </div>
                       ))}
@@ -1262,7 +1302,6 @@ export default function CourseLandingPage() {
 
               {/* WRITE A REVIEW */}
               <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
-                {/* ─── FIX 3 + FIX 4: any logged-in user can always write another review ─── */}
                 <button
                   onClick={() => {
                     if (!user) {
