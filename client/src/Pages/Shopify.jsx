@@ -6,6 +6,9 @@
 // CHANGE 5: Video cards sized to match image testimonials (200x390px), slider auto-play muted, full-screen viewer with sound
 // CHANGE 6: Enroll Now buttons show "Enroll Now • PKR X • XX% OFF" format
 // CHANGE 7: Video likes default to 6690 per video with individual counters
+// ─── NEW CHANGE A: Sticky enroll button — premium gradient, shadow, typography, text/color rules
+// ─── NEW CHANGE B: Announcement bar — seamless infinite marquee (no jump/pause)
+// ─── NEW CHANGE C: Video Reviews — no play overlay, center-video autoplay, pause-on-leave
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Share2, Bookmark, ThumbsUp, Volume2, VolumeX } from 'lucide-react';
@@ -99,63 +102,129 @@ function VideoPlayer({ url, className = "", isReelsStyle = false, autoPlay = fal
 //           full-screen viewer opens with sound on click
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Individual video card for the slider — auto-plays muted when visible
-function VideoSliderCard({ videoUrl, onClick, index }) {
-  const videoRef    = useRef(null);
-  const containerRef = useRef(null);
+// ─── NEW CHANGE C: VideoSliderCard
+// Removed: play button overlay entirely (no Play icon, no overlay div)
+// Added:   exposed videoRef via ref prop so the parent slider can control playback
+// The IntersectionObserver is removed from the card — playback is now controlled
+// centrally by the parent VideoReviewsSlider via the activeIndex mechanism.
+const VideoSliderCard = React.forwardRef(function VideoSliderCard({ videoUrl, onClick, index, isActive }, ref) {
   const ytId = getYouTubeId(videoUrl);
-
-  useEffect(() => {
-    if (!videoRef.current) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (!videoRef.current) return;
-          if (entry.isIntersecting) {
-            videoRef.current.muted = true;
-            videoRef.current.play().catch(() => {});
-          } else {
-            videoRef.current.pause();
-          }
-        });
-      },
-      { threshold: 0.6 }
-    );
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, []);
 
   return (
     <div
-      ref={containerRef}
-      className="flex-shrink-0 rounded-xl overflow-hidden relative cursor-pointer group shadow-lg hover:shadow-2xl transition-all duration-300"
+      className="flex-shrink-0 rounded-xl overflow-hidden relative cursor-pointer shadow-lg hover:shadow-2xl transition-all duration-300"
       style={{ width: '200px', height: '390px' }}
       onClick={onClick}
     >
       {ytId ? (
-        <>
-          <img src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`}
-            alt="Video thumbnail" className="w-full h-full object-cover" />
-          <div className="absolute inset-0 bg-black/30 group-hover:bg-black/40 transition flex items-center justify-center">
-            <div className="w-16 h-16 rounded-full bg-white/90 group-hover:bg-white flex items-center justify-center shadow-2xl transition transform group-hover:scale-110">
-              <Play size={24} className="text-[#e8540a] ml-1" fill="currentColor" />
-            </div>
-          </div>
-        </>
+        // YouTube: show thumbnail only (autoplay handled by full-screen viewer)
+        <img
+          src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`}
+          alt="Video thumbnail"
+          className="w-full h-full object-cover"
+        />
       ) : (
-        <>
-          <video ref={videoRef} src={videoUrl}
-            className="w-full h-full object-cover" muted loop playsInline preload="metadata" />
-          {/* Play overlay hint */}
-          <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition flex items-center justify-center">
-            <div className="w-14 h-14 rounded-full bg-white/0 group-hover:bg-white/80 flex items-center justify-center transition transform group-hover:scale-110">
-              <Play size={20} className="text-[#e8540a] ml-0.5 opacity-0 group-hover:opacity-100 transition" fill="currentColor" />
-            </div>
-          </div>
-        </>
+        // Direct video: exposed ref, muted, loops when active
+        <video
+          ref={ref}
+          src={videoUrl}
+          className="w-full h-full object-cover"
+          muted
+          loop
+          playsInline
+          preload="metadata"
+        />
       )}
-      {/* Bottom gradient */}
+      {/* Bottom gradient — kept for visual polish, no play icon */}
       <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
+    </div>
+  );
+});
+
+// ─── NEW CHANGE C: VideoReviewsSlider
+// Wraps all VideoSliderCard instances.
+// Uses IntersectionObserver on the *slider container* + scroll-snap to detect
+// which card is nearest the center, then plays only that video, pausing all others.
+// YouTube cards are skipped (they're thumbnails; clicking opens the full-screen viewer).
+function VideoReviewsSlider({ videoTestimonials, onCardClick }) {
+  const sliderRef  = useRef(null);
+  const cardRefs   = useRef([]);                 // one ref per card
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  // Assign a stable ref slot for each card
+  const getCardRef = (idx) => (el) => { cardRefs.current[idx] = el; };
+
+  // Play/pause based on activeIndex
+  useEffect(() => {
+    cardRefs.current.forEach((videoEl, idx) => {
+      if (!videoEl) return;                      // null = YouTube card (no <video>)
+      if (idx === activeIndex) {
+        videoEl.muted = true;
+        videoEl.play().catch(() => {});
+      } else {
+        videoEl.pause();
+      }
+    });
+  }, [activeIndex]);
+
+  // Use IntersectionObserver on each card to find the most-visible one
+  useEffect(() => {
+    const cards = sliderRef.current?.querySelectorAll('[data-video-card]');
+    if (!cards || cards.length === 0) return;
+
+    const ratios = new Array(videoTestimonials.length).fill(0);
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          const idx = Number(entry.target.dataset.videoCard);
+          ratios[idx] = entry.intersectionRatio;
+        });
+        // Pick the card with the highest visibility ratio
+        let best = 0;
+        ratios.forEach((r, i) => { if (r > ratios[best]) best = i; });
+        setActiveIndex(best);
+      },
+      {
+        root: sliderRef.current,
+        threshold: Array.from({ length: 21 }, (_, i) => i / 20), // 0.00 → 1.00 in 0.05 steps
+      }
+    );
+
+    cards.forEach((card) => observer.observe(card));
+    return () => observer.disconnect();
+  }, [videoTestimonials.length]);
+
+  return (
+    <div
+      ref={sliderRef}
+      className="flex gap-3 overflow-x-auto px-1 pb-4"
+      style={{
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none',
+        scrollSnapType: 'x mandatory',
+        WebkitOverflowScrolling: 'touch',
+      }}
+    >
+      {videoTestimonials.map((testimonial, idx) => {
+        const ytId = getYouTubeId(testimonial.videoUrl);
+        return (
+          // data-video-card drives the IntersectionObserver index lookup
+          <div
+            key={idx}
+            data-video-card={idx}
+            style={{ scrollSnapAlign: 'center', flexShrink: 0 }}
+          >
+            <VideoSliderCard
+              ref={ytId ? null : getCardRef(idx)}   // only attach ref to native <video>
+              videoUrl={testimonial.videoUrl}
+              index={idx}
+              isActive={idx === activeIndex}
+              onClick={() => onCardClick(idx)}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -497,7 +566,6 @@ export default function CourseLandingPage() {
   // CHANGE 4: Show Less handler — scroll back to top of description without jarring jump
   const handleToggleDescription = () => {
     if (showFullDescription) {
-      // Collapse: keep viewport at the description heading
       const el = descriptionRef.current;
       if (el) {
         const top = el.getBoundingClientRect().top + window.scrollY - 80;
@@ -630,12 +698,43 @@ export default function CourseLandingPage() {
         onLike={handleVideoLike}
       />
 
-      {/* ANNOUNCEMENT BAR */}
+      {/* ─── NEW CHANGE B: ANNOUNCEMENT BAR — seamless infinite marquee ─────────
+          The text is duplicated inside the track so the loop is invisible.
+          The animation translates by exactly -50% (one copy width), then resets
+          to 0 — because translateX(0) === translateX(-50%) visually at that point.
+          Result: butter-smooth, no jump, no pause on any device.
+      ───────────────────────────────────────────────────────────────────────── */}
       {courseData.discountPrice && courseData.discountPrice < courseData.originalPrice && (
-        <div className="bg-[#1a1208] text-center py-2 md:py-3 px-4 w-full">
-          <p className="text-sm md:text-base font-semibold text-[#f9c97a]">
-            🎉 Limited Time Offer: Save {Math.round((1 - courseData.discountPrice / courseData.originalPrice) * 100)}% - Ends Soon!
-          </p>
+        <div className="bg-[#1a1208] py-2 md:py-3 w-full overflow-hidden">
+          <style>{`
+            @keyframes announcement-marquee {
+              0%   { transform: translateX(0); }
+              100% { transform: translateX(-50%); }
+            }
+            .announcement-track {
+              display: flex;
+              width: max-content;
+              animation: announcement-marquee 18s linear infinite;
+              will-change: transform;
+            }
+            .announcement-track:hover {
+              animation-play-state: paused;
+            }
+          `}</style>
+          <div className="announcement-track">
+            {/* Two identical copies — the -50% translation lands on the seam */}
+            {[0, 1].map((copy) => (
+              <span
+                key={copy}
+                className="text-sm md:text-base font-semibold text-[#f9c97a] whitespace-nowrap px-16"
+                aria-hidden={copy === 1}
+              >
+                🎉 Limited Time Offer: Save {Math.round((1 - courseData.discountPrice / courseData.originalPrice) * 100)}% — Ends Soon!
+                &nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;
+                🎉 Limited Time Offer: Save {Math.round((1 - courseData.discountPrice / courseData.originalPrice) * 100)}% — Ends Soon!
+              </span>
+            ))}
+          </div>
         </div>
       )}
 
@@ -1057,21 +1156,22 @@ export default function CourseLandingPage() {
                 </div>
               )}
 
-              {/* CHANGE 5: VIDEO TESTIMONIALS — slider with auto-play muted + click to full view */}
+              {/* ─── NEW CHANGE C: VIDEO TESTIMONIALS
+                  Replaced the raw flex+map with <VideoReviewsSlider>.
+                  The slider component handles:
+                    • No play button overlay on any card
+                    • IntersectionObserver detects the most-visible card
+                    • Only that card's <video> plays (muted); all others pause
+                    • Click still opens the full-screen viewer (with sound)
+              ─────────────────────────────────────────────────────────────── */}
               {videoTestimonials.length > 0 && (
                 <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
                   <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#1a1208] mb-2 md:mb-3" style={{ fontFamily: "'Playfair Display', serif" }}>Video Reviews</h2>
                   <p className="text-[#9e9789] text-sm md:text-base mb-4 md:mb-6">Watch authentic testimonials from our graduates</p>
-                  <div className="flex gap-3 overflow-x-auto px-1 pb-4" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-                    {videoTestimonials.map((testimonial, idx) => (
-                      <VideoSliderCard
-                        key={idx}
-                        videoUrl={testimonial.videoUrl}
-                        index={idx}
-                        onClick={() => { setVideoReelsStartIndex(idx); setVideoReelsOpen(true); }}
-                      />
-                    ))}
-                  </div>
+                  <VideoReviewsSlider
+                    videoTestimonials={videoTestimonials}
+                    onCardClick={(idx) => { setVideoReelsStartIndex(idx); setVideoReelsOpen(true); }}
+                  />
                 </div>
               )}
 
@@ -1194,7 +1294,17 @@ export default function CourseLandingPage() {
         </div>
       </footer>
 
-      {/* CHANGE 6: STICKY BOTTOM BAR - MOBILE with "Enroll Now • Price • XX% OFF" */}
+      {/* ─── NEW CHANGE A: STICKY BOTTOM BAR — MOBILE
+          Changes from original:
+            • Button background: linear-gradient(135deg, #FF5A00 0%, #FF6A00 100%)
+            • Button shadow:     0 8px 24px rgba(255, 90, 0, 0.25)
+            • Font family:       Inter, SF Pro Display, Poppins (via inline style)
+            • Font weight:       800
+            • Text layout:       "Enroll Now In PKR 3,360" (white) + " • " (white) + "76% OFF" (black)
+            • No bullet between "Now" and "In" — one bullet only before the discount
+            • Perfect vertical + horizontal centering preserved
+            • All other attributes (sticky, position, width, height, padding, border-radius) unchanged
+      ─────────────────────────────────────────────────────────────────────── */}
       <div className="fixed bottom-0 left-0 right-0 lg:hidden bg-white border-t-2 border-[#ece6dd] p-3 md:p-4 z-50 flex items-center justify-between gap-3 md:gap-4 w-full shadow-2xl">
         <div className="flex flex-col min-w-0">
           <div className="flex items-baseline gap-1.5 md:gap-2">
@@ -1202,11 +1312,31 @@ export default function CourseLandingPage() {
           </div>
           {discountPct && <span className="text-xs md:text-sm text-[#e8540a] font-semibold">{discountPct}% off</span>}
         </div>
-        <button onClick={() => handleNavigate('/auth/register')}
-          className="flex-1 bg-[#e8540a] hover:bg-[#c94708] text-white font-bold py-2.5 md:py-3 rounded-xl transition text-sm md:text-base border-none cursor-pointer shadow-lg whitespace-nowrap">
+        <button
+          onClick={() => handleNavigate('/auth/register')}
+          style={{
+            background: 'linear-gradient(135deg, #FF5A00 0%, #FF6A00 100%)',
+            boxShadow: '0 8px 24px rgba(255, 90, 0, 0.25)',
+            fontFamily: "'Inter', 'SF Pro Display', 'Poppins', sans-serif",
+            fontWeight: 800,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: 'none',
+            cursor: 'pointer',
+          }}
+          className="flex-1 text-white py-2.5 md:py-3 rounded-xl transition text-sm md:text-base whitespace-nowrap"
+        >
           {discountPct ? (
-            <span>Enroll Now • <span className="text-[#fde8d8]">{discountPct}% OFF</span></span>
-          ) : 'Enroll Now'}
+            // "Enroll Now In PKR X" in white, " • " separator in white, "XX% OFF" in black
+            <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.25rem', flexWrap: 'nowrap' }}>
+              <span style={{ color: '#FFFFFF' }}>Enroll Now In {priceLabel}</span>
+              <span style={{ color: '#FFFFFF', margin: '0 2px' }}> • </span>
+              <span style={{ color: '#000000' }}>{discountPct}% OFF</span>
+            </span>
+          ) : (
+            <span style={{ color: '#FFFFFF' }}>Enroll Now In {priceLabel}</span>
+          )}
         </button>
       </div>
 
