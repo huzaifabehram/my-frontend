@@ -888,6 +888,11 @@ export default function CourseLandingPage() {
   // ─── FIX 1: Build instructor object ─────────────────────────────────────
   const instructor = instructorData ? {
     name:     instructorData.name                || courseData.instructor        || 'Instructor',
+    title:    instructorData.title               || courseData.instructorTitle   || '',
+    location: instructorData.location            || courseData.instructorLocation|| '',
+    website:  instructorData.website             || courseData.instructorWebsite || '',
+    twitter:  instructorData.twitter             || courseData.instructorTwitter || '',
+    linkedin: instructorData.linkedin            || courseData.instructorLinkedin|| '',
     rating:   instructorData.instructorRating    || instructorData.rating        || courseData.instructorRating  || 0,
     reviews:  instructorData.instructorReviews   || instructorData.reviewCount   || courseData.instructorReviews || 0,
     students: instructorData.instructorStudents  || instructorData.studentCount  || courseData.instructorStudents|| 0,
@@ -896,6 +901,11 @@ export default function CourseLandingPage() {
     image:    instructorData.avatar              || instructorData.profileImage  || instructorData.instructorImage || courseData.instructorImage || '👩‍💼',
   } : {
     name:     courseData.instructor        || 'Instructor',
+    title:    courseData.instructorTitle   || '',
+    location: courseData.instructorLocation|| '',
+    website:  courseData.instructorWebsite || '',
+    twitter:  courseData.instructorTwitter || '',
+    linkedin: courseData.instructorLinkedin|| '',
     rating:   courseData.instructorRating  || 0,
     reviews:  courseData.instructorReviews || 0,
     students: courseData.instructorStudents|| 0,
@@ -1136,6 +1146,9 @@ export default function CourseLandingPage() {
                     className="text-[#e87040] hover:text-[#f0a070] font-semibold bg-transparent border-none cursor-pointer p-0 underline">
                     {instructor.name}
                   </button>
+                  {instructor.title && (
+                    <span className="text-[#c8bfaf]"> · {instructor.title}</span>
+                  )}
                 </p>
               </div>
               <div className="flex flex-wrap gap-3 md:gap-4 text-[#7a6e62] text-sm md:text-base">
@@ -1324,10 +1337,15 @@ export default function CourseLandingPage() {
                 ) : (
                   <>
                     <button onClick={() => handleNavigate('/instructor')}
-                      className="text-[#e8540a] hover:text-[#c94708] font-bold text-xl md:text-2xl bg-transparent border-none cursor-pointer p-0 mb-4 block underline"
+                      className="text-[#e8540a] hover:text-[#c94708] font-bold text-xl md:text-2xl bg-transparent border-none cursor-pointer p-0 mb-1 block underline"
                       style={{ fontFamily: "'Playfair Display', serif" }}>
                       {instructor.name}
                     </button>
+                    {instructor.title && (
+                      <span className="inline-block mb-4 px-3 py-1 rounded-full bg-[#fdf2ea] text-[#e8540a] text-sm font-semibold border border-[#f5d4bc]">
+                        {instructor.title}
+                      </span>
+                    )}
                     <div className="flex items-start gap-4 md:gap-6 mb-4 md:mb-6">
                       <div className="flex-shrink-0 w-24 h-24 md:w-32 md:h-32 rounded-full bg-[#e8540a] flex items-center justify-center text-5xl md:text-6xl shadow-lg overflow-hidden">
                         {instructor.image && instructor.image.startsWith('http') ? (
@@ -1371,6 +1389,24 @@ export default function CourseLandingPage() {
                           <ChevronDown size={16} className={`transition-transform ${showFullInstructorBio ? 'rotate-180' : ''}`} />
                         </button>
                       </>
+                    )}
+                    {(instructor.location || instructor.website || instructor.twitter || instructor.linkedin) && (
+                      <div className="mt-4 flex flex-wrap gap-3 text-sm text-[#9e9789]">
+                        {instructor.location && (
+                          <span className="flex items-center gap-1.5"><Globe size={14} className="text-[#e8540a]" />{instructor.location}</span>
+                        )}
+                        {instructor.website && (
+                          <a href={instructor.website.startsWith('http') ? instructor.website : `https://${instructor.website}`}
+                            target="_blank" rel="noopener noreferrer"
+                            className="text-[#e8540a] hover:underline">Website</a>
+                        )}
+                        {instructor.twitter && <span>Twitter: {instructor.twitter}</span>}
+                        {instructor.linkedin && (
+                          <a href={instructor.linkedin.startsWith('http') ? instructor.linkedin : `https://${instructor.linkedin}`}
+                            target="_blank" rel="noopener noreferrer"
+                            className="text-[#e8540a] hover:underline">LinkedIn</a>
+                        )}
+                      </div>
                     )}
                   </>
                 )}

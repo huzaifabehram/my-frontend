@@ -64,6 +64,11 @@ export function normalizeCourse(raw, index) {
   const instructorName = inst && typeof inst === "object" ? inst.name : (inst || "Instructor");
   const instructorBio  = inst && typeof inst === "object" ? (inst.bio || "") : "";
   const instructorImg  = inst && typeof inst === "object" ? (inst.avatar || "👩‍💼") : "👩‍💼";
+  const instructorTitle    = inst && typeof inst === "object" ? (inst.title || "") : "";
+  const instructorLocation = inst && typeof inst === "object" ? (inst.location || "") : "";
+  const instructorWebsite  = inst && typeof inst === "object" ? (inst.website || "") : "";
+  const instructorTwitter  = inst && typeof inst === "object" ? (inst.twitter || "") : "";
+  const instructorLinkedin = inst && typeof inst === "object" ? (inst.linkedin || "") : "";
   const instructorId =
     inst && typeof inst === "object" && inst._id != null
       ? String(inst._id)
@@ -145,6 +150,11 @@ export function normalizeCourse(raw, index) {
     instructorId,
     instructorBio,
     instructorImage:    instructorImg,
+    instructorTitle,
+    instructorLocation,
+    instructorWebsite,
+    instructorTwitter,
+    instructorLinkedin,
     instructorRating:   0,
     instructorReviews:  0,
     instructorStudents: 0,

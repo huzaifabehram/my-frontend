@@ -1519,7 +1519,7 @@ function AnalyticsPage({ courses }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ProfilePage({ toast }) {
-  const { user, API: api } = useAuth();
+  const { user, updateProfile, API: api } = useAuth();
   const [form, setForm] = useState({
     name:     user?.name     || "",
     email:    user?.email    || "",
@@ -1535,6 +1535,21 @@ function ProfilePage({ toast }) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileRef = useRef();
 
+  useEffect(() => {
+    if (!user) return;
+    setForm({
+      name:     user.name     || "",
+      email:    user.email    || "",
+      title:    user.title    || "",
+      bio:      user.bio      || "",
+      location: user.location || "",
+      website:  user.website  || "",
+      twitter:  user.twitter  || "",
+      linkedin: user.linkedin || "",
+      avatar:   user.avatar   || "",
+    });
+  }, [user]);
+
   function update(field, val) { setForm(f => ({ ...f, [field]: val })); }
 
   const handleAvatarUpload = async (e) => {
@@ -1544,11 +1559,12 @@ function ProfilePage({ toast }) {
     try {
       const formData = new FormData();
       formData.append("image", file);
+      formData.append("type", "avatar");
       const res = await api.post("/upload/image", formData);
       const url = res.data?.url ?? res.data?.secure_url ?? res.data?.imageUrl;
       if (!url) { toast("Upload succeeded but no URL returned.", "error"); return; }
       update("avatar", url);
-      toast("Profile photo uploaded ✓", "success");
+      toast("Profile photo uploaded to Cloudinary ✓", "success");
     } catch { toast("Upload failed.", "error"); }
     finally {
       setUploadingAvatar(false);
@@ -1556,12 +1572,21 @@ function ProfilePage({ toast }) {
     }
   };
 
-  function handleSave() {
+  async function handleSave() {
+    if (!form.name.trim()) {
+      toast("Full name is required.", "error");
+      return;
+    }
     setSaving(true);
-    setTimeout(() => {
+    try {
+      const { email, ...profileData } = form;
+      await updateProfile(profileData);
+      toast("Profile saved!", "success");
+    } catch (err) {
+      toast(err.response?.data?.message || "Could not save profile.", "error");
+    } finally {
       setSaving(false);
-      toast("Profile saved! (connect PATCH /api/auth/profile to persist)", "success");
-    }, 800);
+    }
   }
 
   return (
