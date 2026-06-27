@@ -562,6 +562,7 @@ export default function CourseLandingPage() {
 
   const [showAllReviews,    setShowAllReviews]    = useState(false);
   const [localNewReviews,   setLocalNewReviews]   = useState([]);
+  const [fetchedReviews,    setFetchedReviews]    = useState([]);
   const REVIEWS_PAGE_SIZE = 6;
 
   const descriptionRef = useRef(null);
@@ -580,6 +581,17 @@ export default function CourseLandingPage() {
       setFullCourseLoading(false);
     });
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Fallback: fetch reviews directly when course detail omits reviews_list
+  useEffect(() => {
+    if (!id) return;
+    api.get(`/courses/${id}/reviews`)
+      .then((res) => {
+        const list = Array.isArray(res.data) ? res.data : [];
+        setFetchedReviews(list);
+      })
+      .catch(() => setFetchedReviews([]));
+  }, [id, api]);
 
   const courseData = useMemo(() => {
     if (id) return fullCourse || getCourse(id);
@@ -708,6 +720,10 @@ export default function CourseLandingPage() {
         // Only clear optimistic list once server confirms reviews exist
         if (serverReviewCount > 0) setLocalNewReviews([]);
       }).catch(() => { /* network error — keep local copy visible */ });
+
+      api.get(`/courses/${courseData._id}/reviews`)
+        .then((res) => setFetchedReviews(Array.isArray(res.data) ? res.data : []))
+        .catch(() => {});
     } catch (err) {
       console.error('Failed to submit review:', err);
       setLocalNewReviews(prev => [optimisticReview, ...prev]);
@@ -774,11 +790,12 @@ export default function CourseLandingPage() {
     ? courseData.reviews.filter(r => r && typeof r === 'object')
     : [];
 
-  // Always merge both arrays; de-dupe handles any overlap.
+  // Always merge all sources; de-dupe handles any overlap.
   const rawReviews = [
     ...localNewReviews,
     ...safeReviewsList,
     ...safeReviewsArr,
+    ...fetchedReviews,
   ];
 
   const textReviews = rawReviews

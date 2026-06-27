@@ -110,6 +110,25 @@ export function normalizeCourse(raw, index) {
     ? source.alsoBoughtCourseIds.map((id) => String(id))
     : [];
 
+  const reviewsList = Array.isArray(source.reviews_list)
+    ? source.reviews_list
+        .filter((r) => r && typeof r === "object")
+        .map((r) => ({
+          _id:    r._id || r.id,
+          author: r.author || r.user?.name || r.student?.name || "Anonymous",
+          avatar: r.avatar || r.user?.avatar || r.student?.avatar || "",
+          rating: Number(r.rating) || 5,
+          text:   r.text ?? r.comment ?? r.content ?? "",
+          date:   r.date || r.createdAt || null,
+        }))
+    : [];
+
+  const reviewCount =
+    Number(source.totalRatings) ||
+    Number(source.reviews) ||
+    reviewsList.length ||
+    0;
+
   return {
     _id:   source._id || "",
     id:    source._id || "",
@@ -131,7 +150,7 @@ export function normalizeCourse(raw, index) {
     instructorCourses:  0,
 
     rating:           Number(source.rating)       || 0,
-    reviews:          Number(source.totalRatings) || 0,
+    reviews:          reviewCount,
     studentsEnrolled: students,
     students,
     price:            rawDiscount,
@@ -158,7 +177,7 @@ export function normalizeCourse(raw, index) {
     color: COLOR_POOL[idx % COLOR_POOL.length],
 
     sections,
-    reviews_list: [],
+    reviews_list: reviewsList,
     imageTestimonials,
     videoTestimonials,
     projectGallery,
