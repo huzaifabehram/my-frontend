@@ -115,7 +115,8 @@ export function normalizeCourse(raw, index) {
         .filter((r) => r && typeof r === "object")
         .map((r) => ({
           _id:    r._id || r.id,
-          author: r.author || r.user?.name || r.student?.name || "Anonymous",
+          author: r.author || r.authorName || r.user?.name || r.student?.name || "Anonymous",
+          authorName: r.authorName || r.author || "",
           avatar: r.avatar || r.user?.avatar || r.student?.avatar || "",
           rating: Number(r.rating) || 5,
           text:   r.text ?? r.comment ?? r.content ?? "",

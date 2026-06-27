@@ -458,6 +458,7 @@ function normalizeReview(raw, idx) {
 
   // ── Author: try every known field name ──────────────────────────────────
   const author =
+    raw.authorName ||
     raw.author ||
     raw.userName ||
     raw.username ||
@@ -535,6 +536,126 @@ function normalizeReview(raw, idx) {
   return { key, author, text, rating, date, avatar, userId: raw.userId || raw.user_id || raw.user?._id || null };
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// TEXT REVIEWS SLIDER — Udemy-style horizontal cards
+// ─────────────────────────────────────────────────────────────────────────────
+function TextReviewsSlider({ reviews }) {
+  const sliderRef = useRef(null);
+  const [canScrollLeft,  setCanScrollLeft]  = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+
+  const updateScrollButtons = useCallback(() => {
+    const el = sliderRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 4);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
+  }, []);
+
+  useEffect(() => {
+    updateScrollButtons();
+    const el = sliderRef.current;
+    if (!el) return;
+    el.addEventListener('scroll', updateScrollButtons, { passive: true });
+    window.addEventListener('resize', updateScrollButtons);
+    return () => {
+      el.removeEventListener('scroll', updateScrollButtons);
+      window.removeEventListener('resize', updateScrollButtons);
+    };
+  }, [reviews.length, updateScrollButtons]);
+
+  const scroll = (dir) => {
+    const el = sliderRef.current;
+    if (!el) return;
+    const card = el.querySelector('[data-review-card]');
+    const step = card ? card.offsetWidth + 16 : 360;
+    el.scrollBy({ left: dir * step, behavior: 'smooth' });
+  };
+
+  if (!reviews.length) return null;
+
+  return (
+    <div className="relative group">
+      {canScrollLeft && (
+        <button
+          type="button"
+          onClick={() => scroll(-1)}
+          aria-label="Previous reviews"
+          className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 md:w-12 md:h-12 rounded-full bg-white shadow-lg border border-[#ece6dd] flex items-center justify-center text-[#1a1208] hover:bg-[#fdf2ea] hover:text-[#e8540a] transition cursor-pointer"
+        >
+          <ChevronLeft size={22} />
+        </button>
+      )}
+      {canScrollRight && (
+        <button
+          type="button"
+          onClick={() => scroll(1)}
+          aria-label="Next reviews"
+          className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 md:w-12 md:h-12 rounded-full bg-white shadow-lg border border-[#ece6dd] flex items-center justify-center text-[#1a1208] hover:bg-[#fdf2ea] hover:text-[#e8540a] transition cursor-pointer"
+        >
+          <ChevronRight size={22} />
+        </button>
+      )}
+
+      <div
+        ref={sliderRef}
+        className="flex gap-4 overflow-x-auto px-1 py-1 scroll-smooth"
+        style={{
+          scrollSnapType: 'x mandatory',
+          WebkitOverflowScrolling: 'touch',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+        }}
+      >
+        {reviews.map((review) => (
+          <div
+            key={review.key}
+            data-review-card
+            className="flex-shrink-0 w-[min(88vw,340px)] md:w-[380px] bg-white rounded-2xl shadow-sm hover:shadow-md transition border border-[#ece6dd] p-5 flex flex-col gap-3"
+            style={{ scrollSnapAlign: 'start' }}
+          >
+            <div className="flex items-start gap-3 md:gap-4">
+              <div
+                className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-[#e8540a] text-white flex items-center justify-center font-bold text-lg md:text-xl flex-shrink-0 overflow-hidden"
+                style={{ fontFamily: "'Playfair Display', serif" }}
+              >
+                {review.avatar ? (
+                  <img src={review.avatar} alt={review.author} className="w-full h-full object-cover" />
+                ) : (
+                  review.author.charAt(0).toUpperCase()
+                )}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-[#1a1208] text-base md:text-lg leading-tight truncate">{review.author}</p>
+                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                  <div className="flex gap-0.5">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Star
+                        key={i}
+                        size={14}
+                        className="text-[#f9c97a]"
+                        fill={i < Math.round(review.rating) ? 'currentColor' : 'none'}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-xs font-semibold text-[#1a1208]">{review.rating.toFixed(1)}</span>
+                  {review.date && (
+                    <span className="text-xs md:text-sm text-[#9e9789]">• {review.date}</span>
+                  )}
+                </div>
+              </div>
+            </div>
+            {review.text ? (
+              <p className="text-[#3d3020] text-sm md:text-base leading-relaxed line-clamp-6">{review.text}</p>
+            ) : (
+              <p className="text-[#b0a898] text-sm italic">No written feedback provided.</p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function CourseLandingPage() {
   const navigate = useNavigate();
   const { id }   = useParams();
@@ -553,6 +674,7 @@ export default function CourseLandingPage() {
   const [loadingInstructor,     setLoadingInstructor]     = useState(false);
   const [showReviewForm,        setShowReviewForm]        = useState(false);
   const [reviewText,            setReviewText]            = useState('');
+  const [reviewAuthorName,      setReviewAuthorName]      = useState('');
   const [reviewRating,          setReviewRating]          = useState(5);
   const [submittingReview,      setSubmittingReview]      = useState(false);
   const [videoReelsOpen,        setVideoReelsOpen]        = useState(false);
@@ -560,10 +682,8 @@ export default function CourseLandingPage() {
   const [imageSliderOpen,       setImageSliderOpen]       = useState(false);
   const [imageSliderStartIndex, setImageSliderStartIndex] = useState(0);
 
-  const [showAllReviews,    setShowAllReviews]    = useState(false);
   const [localNewReviews,   setLocalNewReviews]   = useState([]);
   const [fetchedReviews,    setFetchedReviews]    = useState([]);
-  const REVIEWS_PAGE_SIZE = 6;
 
   const descriptionRef = useRef(null);
 
@@ -593,6 +713,12 @@ export default function CourseLandingPage() {
       .catch(() => setFetchedReviews([]));
   }, [id, api]);
 
+  useEffect(() => {
+    if (user?.name && !reviewAuthorName) {
+      setReviewAuthorName(user.name);
+    }
+  }, [user?.name]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const courseData = useMemo(() => {
     if (id) return fullCourse || getCourse(id);
     const publishedCourses = courses.filter(c => c.status === 'published');
@@ -616,7 +742,6 @@ export default function CourseLandingPage() {
 
   useEffect(() => {
     setLocalNewReviews([]);
-    setShowAllReviews(false);
   }, [courseData?._id]);
 
   const sections = courseData?.sections || [];
@@ -672,8 +797,9 @@ export default function CourseLandingPage() {
   const handleReviewSubmit = async (e) => {
     e.preventDefault();
 
-    if (!user) {
-      handleNavigate('/auth/login');
+    const trimmedName = reviewAuthorName.trim();
+    if (!trimmedName) {
+      alert('Please enter your name');
       return;
     }
 
@@ -688,15 +814,17 @@ export default function CourseLandingPage() {
       _id: `local-${Date.now()}`,
       text: reviewText,
       rating: reviewRating,
-      author: user.name || user.username || 'You',
+      author: trimmedName,
+      authorName: trimmedName,
       createdAt: new Date().toISOString(),
-      userId: user._id || user.id,
+      userId: user?._id || user?.id || null,
     };
 
     try {
       const res = await api.post(`/courses/${courseData._id}/reviews`, {
         text: reviewText,
         rating: reviewRating,
+        authorName: trimmedName,
       });
 
       const created = res?.data?.review || res?.data || optimisticReview;
@@ -704,6 +832,7 @@ export default function CourseLandingPage() {
 
       setReviewText('');
       setReviewRating(5);
+      if (!user) setReviewAuthorName('');
       setShowReviewForm(false);
       alert('Review submitted successfully!');
 
@@ -729,6 +858,7 @@ export default function CourseLandingPage() {
       setLocalNewReviews(prev => [optimisticReview, ...prev]);
       setReviewText('');
       setReviewRating(5);
+      if (!user) setReviewAuthorName('');
       setShowReviewForm(false);
       const msg = err?.response?.data?.message || 'Could not reach the server — your review is shown locally and will sync once you retry.';
       alert(msg);
@@ -804,8 +934,6 @@ export default function CourseLandingPage() {
     // De-dupe by stable key — server _id makes this safe even when both
     // reviews_list and reviews contain the same document.
     .filter((r, idx, arr) => arr.findIndex(x => x.key === r.key) === idx);
-
-  const visibleReviews = showAllReviews ? textReviews : textReviews.slice(0, REVIEWS_PAGE_SIZE);
 
   const imageTestimonials = courseData.imageTestimonials || [];
   const videoTestimonials = courseData.videoTestimonials || [];
@@ -1275,81 +1403,34 @@ export default function CourseLandingPage() {
                     <p className="text-[#9e9789] text-sm md:text-base">Be the first to leave a review for this course.</p>
                   </div>
                 ) : (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-5">
-                      {visibleReviews.map((review) => (
-                        <div key={review.key} className="bg-white rounded-2xl shadow-sm hover:shadow-md transition border border-[#ece6dd] p-5 flex flex-col gap-3">
-                          {/* Header row: avatar + name + stars + date */}
-                          <div className="flex items-start gap-3 md:gap-4">
-                            <div
-                              className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-[#e8540a] text-white flex items-center justify-center font-bold text-lg md:text-xl flex-shrink-0 overflow-hidden"
-                              style={{ fontFamily: "'Playfair Display', serif" }}
-                            >
-                              {review.avatar ? (
-                                <img src={review.avatar} alt={review.author} className="w-full h-full object-cover" />
-                              ) : (
-                                review.author.charAt(0).toUpperCase()
-                              )}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-bold text-[#1a1208] text-base md:text-lg leading-tight truncate">{review.author}</p>
-                              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                <div className="flex gap-0.5">
-                                  {Array.from({ length: 5 }).map((_, i) => (
-                                    <Star
-                                      key={i}
-                                      size={14}
-                                      className="text-[#f9c97a]"
-                                      fill={i < Math.round(review.rating) ? 'currentColor' : 'none'}
-                                    />
-                                  ))}
-                                </div>
-                                <span className="text-xs font-semibold text-[#1a1208]">{review.rating.toFixed(1)}</span>
-                                {review.date && (
-                                  <span className="text-xs md:text-sm text-[#9e9789]">• {review.date}</span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Review text body */}
-                          {review.text ? (
-                            <p className="text-[#3d3020] text-sm md:text-base leading-relaxed">{review.text}</p>
-                          ) : (
-                            <p className="text-[#b0a898] text-sm italic">No written feedback provided.</p>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-
-                    {textReviews.length > REVIEWS_PAGE_SIZE && (
-                      <button
-                        onClick={() => setShowAllReviews(v => !v)}
-                        className="w-full md:w-auto mt-5 px-6 py-3 bg-white hover:bg-[#fdf2ea] text-[#e8540a] font-bold rounded-xl border-2 border-[#e8540a] transition cursor-pointer text-sm md:text-base">
-                        {showAllReviews ? 'Show fewer reviews' : `Show all ${textReviews.length} reviews`}
-                      </button>
-                    )}
-                  </>
+                  <TextReviewsSlider reviews={textReviews} />
                 )}
               </div>
 
               {/* WRITE A REVIEW */}
               <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
                 <button
-                  onClick={() => {
-                    if (!user) {
-                      handleNavigate('/auth/login');
-                      return;
-                    }
-                    setShowReviewForm(!showReviewForm);
-                  }}
+                  onClick={() => setShowReviewForm(!showReviewForm)}
                   className="w-full bg-white hover:bg-[#fdf2ea] text-[#e8540a] font-bold py-3 md:py-3.5 rounded-xl transition text-base md:text-lg border-2 border-[#e8540a] cursor-pointer">
-                  {showReviewForm ? 'Cancel Review' : user ? 'Write a Review' : 'Log in to write a review'}
+                  {showReviewForm ? 'Cancel Review' : 'Write a Review'}
                 </button>
 
-                {showReviewForm && user && (
+                {showReviewForm && (
                   <form onSubmit={handleReviewSubmit} className="mt-4 md:mt-6 bg-[#f8f4ed] rounded-2xl p-4 md:p-6 border border-[#ece6dd]">
                     <h3 className="text-lg md:text-xl font-bold text-[#1a1208] mb-4" style={{ fontFamily: "'Playfair Display', serif" }}>Share Your Experience</h3>
+                    <div className="mb-4">
+                      <label className="block text-sm md:text-base font-semibold text-[#3d3020] mb-2">
+                        Your Name <span className="text-[#e8540a]">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        value={reviewAuthorName}
+                        onChange={(e) => setReviewAuthorName(e.target.value)}
+                        placeholder="Enter your name"
+                        required
+                        className="w-full border border-[#ddd5c4] rounded-xl px-3 md:px-4 py-2 md:py-3 text-sm md:text-base text-[#1a1208] placeholder-[#9e9789] focus:outline-none focus:ring-2 focus:ring-[#e8540a] bg-white"
+                      />
+                    </div>
                     <div className="mb-4">
                       <label className="block text-sm md:text-base font-semibold text-[#3d3020] mb-2">Rating</label>
                       <div className="flex gap-1.5 md:gap-2">
@@ -1364,6 +1445,7 @@ export default function CourseLandingPage() {
                       <label className="block text-sm md:text-base font-semibold text-[#3d3020] mb-2">Your Review</label>
                       <textarea value={reviewText} onChange={(e) => setReviewText(e.target.value)}
                         placeholder="Share your thoughts about this course..." rows={5}
+                        required
                         className="w-full border border-[#ddd5c4] rounded-xl px-3 md:px-4 py-2 md:py-3 text-sm md:text-base text-[#1a1208] placeholder-[#9e9789] focus:outline-none focus:ring-2 focus:ring-[#e8540a] resize-none bg-white" />
                     </div>
                     <button type="submit" disabled={submittingReview}
@@ -1371,7 +1453,7 @@ export default function CourseLandingPage() {
                       {submittingReview ? 'Submitting...' : 'Submit Review'}
                     </button>
                     <p className="text-xs md:text-sm text-[#9e9789] mt-3">
-                      You can submit as many reviews as you like — each one will appear as its own card above.
+                      No account needed — you can submit as many reviews as you like.
                     </p>
                   </form>
                 )}
