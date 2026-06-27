@@ -1305,13 +1305,7 @@ export default function CourseLandingPage() {
             • Perfect vertical + horizontal centering preserved
             • All other attributes (sticky, position, width, height, padding, border-radius) unchanged
       ─────────────────────────────────────────────────────────────────────── */}
-      <div className="fixed bottom-0 left-0 right-0 lg:hidden bg-white border-t-2 border-[#ece6dd] p-3 md:p-4 z-50 flex items-center justify-between gap-3 md:gap-4 w-full shadow-2xl">
-        <div className="flex flex-col min-w-0">
-          <div className="flex items-baseline gap-1.5 md:gap-2">
-            <span className="text-xl md:text-2xl font-bold text-[#1a1208] truncate" style={{ fontFamily: "'Playfair Display', serif" }}>{priceLabel}</span>
-          </div>
-          {discountPct && <span className="text-xs md:text-sm text-[#e8540a] font-semibold">{discountPct}% off</span>}
-        </div>
+      <div className="fixed bottom-0 left-0 right-0 lg:hidden bg-white border-t-2 border-[#ece6dd] p-3 md:p-4 z-50 flex items-center w-full shadow-2xl">
         <button
           onClick={() => handleNavigate('/auth/register')}
           style={{
@@ -1324,8 +1318,9 @@ export default function CourseLandingPage() {
             justifyContent: 'center',
             border: 'none',
             cursor: 'pointer',
+            width: '100%',
           }}
-          className="flex-1 text-white py-2.5 md:py-3 rounded-xl transition text-sm md:text-base whitespace-nowrap"
+          className="text-white py-2.5 md:py-3 rounded-xl transition text-sm md:text-base whitespace-nowrap"
         >
           {discountPct ? (
             // "Enroll Now In PKR X" in white, " • " separator in white, "XX% OFF" in black
