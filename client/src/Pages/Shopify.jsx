@@ -666,6 +666,7 @@ export default function CourseLandingPage() {
   const [expandedSection,       setExpandedSection]       = useState([0]);
   const [showFullDescription,   setShowFullDescription]   = useState(false);
   const [showFullInstructorBio, setShowFullInstructorBio] = useState(false);
+  const [showFullInstructorDescription, setShowFullInstructorDescription] = useState(false);
   const [isPreviewOpen,         setIsPreviewOpen]         = useState(false);
   const [currentVideo,          setCurrentVideo]          = useState('');
   const [fullCourse,            setFullCourse]            = useState(null);
@@ -742,6 +743,8 @@ export default function CourseLandingPage() {
 
   useEffect(() => {
     setLocalNewReviews([]);
+    setShowFullInstructorBio(false);
+    setShowFullInstructorDescription(false);
   }, [courseData?._id]);
 
   const sections = courseData?.sections || [];
@@ -887,31 +890,33 @@ export default function CourseLandingPage() {
 
   // ─── FIX 1: Build instructor object ─────────────────────────────────────
   const instructor = instructorData ? {
-    name:     instructorData.name                || courseData.instructor        || 'Instructor',
-    title:    instructorData.title               || courseData.instructorTitle   || '',
-    location: instructorData.location            || courseData.instructorLocation|| '',
-    website:  instructorData.website             || courseData.instructorWebsite || '',
-    twitter:  instructorData.twitter             || courseData.instructorTwitter || '',
-    linkedin: instructorData.linkedin            || courseData.instructorLinkedin|| '',
-    rating:   instructorData.instructorRating    || instructorData.rating        || courseData.instructorRating  || 0,
-    reviews:  instructorData.instructorReviews   || instructorData.reviewCount   || courseData.instructorReviews || 0,
-    students: instructorData.instructorStudents  || instructorData.studentCount  || courseData.instructorStudents|| 0,
-    courses:  instructorData.instructorCourses   || instructorData.courseCount   || courseData.instructorCourses || 0,
-    bio:      instructorData.bio                 || instructorData.instructorBio || courseData.instructorBio     || '',
-    image:    instructorData.avatar              || instructorData.profileImage  || instructorData.instructorImage || courseData.instructorImage || '👩‍💼',
+    name:        instructorData.name                || courseData.instructor        || 'Instructor',
+    title:       instructorData.title               || courseData.instructorTitle   || '',
+    location:    instructorData.location            || courseData.instructorLocation|| '',
+    website:     instructorData.website             || courseData.instructorWebsite || '',
+    twitter:     instructorData.twitter             || courseData.instructorTwitter || '',
+    linkedin:    instructorData.linkedin            || courseData.instructorLinkedin|| '',
+    rating:      Number(instructorData.totalRatings  ?? courseData.instructorTotalRatings  ?? 0) || 0,
+    reviews:     Number(instructorData.totalReviews  ?? courseData.instructorTotalReviews  ?? 0) || 0,
+    students:    Number(instructorData.totalStudents ?? courseData.instructorTotalStudents ?? 0) || 0,
+    courses:     Number(instructorData.totalCourses  ?? courseData.instructorTotalCourses  ?? 0) || 0,
+    bio:         instructorData.bio                 || courseData.instructorBio     || '',
+    description: instructorData.instructorDescription || courseData.instructorDescription || '',
+    image:       instructorData.avatar              || instructorData.profileImage  || instructorData.instructorImage || courseData.instructorImage || '👩‍💼',
   } : {
-    name:     courseData.instructor        || 'Instructor',
-    title:    courseData.instructorTitle   || '',
-    location: courseData.instructorLocation|| '',
-    website:  courseData.instructorWebsite || '',
-    twitter:  courseData.instructorTwitter || '',
-    linkedin: courseData.instructorLinkedin|| '',
-    rating:   courseData.instructorRating  || 0,
-    reviews:  courseData.instructorReviews || 0,
-    students: courseData.instructorStudents|| 0,
-    courses:  courseData.instructorCourses || 0,
-    bio:      courseData.instructorBio     || '',
-    image:    courseData.instructorImage   || '👩‍💼',
+    name:        courseData.instructor        || 'Instructor',
+    title:       courseData.instructorTitle   || '',
+    location:    courseData.instructorLocation|| '',
+    website:     courseData.instructorWebsite || '',
+    twitter:     courseData.instructorTwitter || '',
+    linkedin:    courseData.instructorLinkedin|| '',
+    rating:      Number(courseData.instructorTotalRatings  ?? 0) || 0,
+    reviews:     Number(courseData.instructorTotalReviews  ?? 0) || 0,
+    students:    Number(courseData.instructorTotalStudents ?? 0) || 0,
+    courses:     Number(courseData.instructorTotalCourses  ?? 0) || 0,
+    bio:         courseData.instructorBio     || '',
+    description: courseData.instructorDescription || '',
+    image:       courseData.instructorImage   || '👩‍💼',
   };
 
   const totalLectures = sections.reduce((a, s) => a + (s.lectures || 0), 0);
@@ -1331,67 +1336,104 @@ export default function CourseLandingPage() {
 
               {/* INSTRUCTOR */}
               <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
-                <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#1a1208] mb-4 md:mb-6" style={{ fontFamily: "'Playfair Display', serif" }}>Instructor</h2>
+                <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#1a1208] mb-6 md:mb-8" style={{ fontFamily: "'Playfair Display', serif" }}>Instructor</h2>
                 {loadingInstructor ? (
                   <p className="text-[#9e9789] text-base md:text-lg">Loading instructor...</p>
                 ) : (
                   <>
-                    <button onClick={() => handleNavigate('/instructor')}
-                      className="text-[#e8540a] hover:text-[#c94708] font-bold text-xl md:text-2xl bg-transparent border-none cursor-pointer p-0 mb-1 block underline"
-                      style={{ fontFamily: "'Playfair Display', serif" }}>
-                      {instructor.name}
-                    </button>
-                    {instructor.title && (
-                      <span className="inline-block mb-4 px-3 py-1 rounded-full bg-[#fdf2ea] text-[#e8540a] text-sm font-semibold border border-[#f5d4bc]">
-                        {instructor.title}
-                      </span>
-                    )}
-                    <div className="flex items-start gap-4 md:gap-6 mb-4 md:mb-6">
-                      <div className="flex-shrink-0 w-24 h-24 md:w-32 md:h-32 rounded-full bg-[#e8540a] flex items-center justify-center text-5xl md:text-6xl shadow-lg overflow-hidden">
-                        {instructor.image && instructor.image.startsWith('http') ? (
-                          <img src={instructor.image} alt={instructor.name} className="w-full h-full object-cover" />
-                        ) : instructor.image && !instructor.image.startsWith('👩') && instructor.image.length === 1 ? (
-                          <span className="text-white font-bold text-3xl">{instructor.image}</span>
-                        ) : instructor.image && instructor.image.startsWith('👩') ? (
-                          <span>{instructor.image}</span>
-                        ) : (
-                          <span className="text-white font-bold text-3xl">{instructor.name?.charAt(0) || 'I'}</span>
-                        )}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 md:gap-4 mb-4">
-                          {instructor.rating > 0 && (
-                            <div className="flex items-center gap-1.5"><Star size={18} className="text-[#f9c97a]" fill="currentColor" /><span className="text-sm md:text-base font-semibold text-[#1a1208]">{instructor.rating} Instructor Rating</span></div>
-                          )}
-                          {instructor.reviews > 0 && (
-                            <div className="flex items-center gap-1.5"><Award size={18} className="text-[#e8540a]" /><span className="text-sm md:text-base text-[#3d3020]">{formatNumber(instructor.reviews)} Reviews</span></div>
-                          )}
-                          {instructor.students > 0 && (
-                            <div className="flex items-center gap-1.5"><Users size={18} className="text-[#e8540a]" /><span className="text-sm md:text-base text-[#3d3020]">{formatNumber(instructor.students)} Students</span></div>
-                          )}
-                          {instructor.courses > 0 && (
-                            <div className="flex items-center gap-1.5"><Play size={18} className="text-[#e8540a]" /><span className="text-sm md:text-base text-[#3d3020]">{instructor.courses} Courses</span></div>
+                    {/* Profile + stats row */}
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-6 md:gap-10 mb-6 md:mb-8">
+                      {/* Left — photo + name */}
+                      <div className="flex flex-col items-center sm:items-start text-center sm:text-left flex-shrink-0">
+                        <div className="w-[110px] h-[110px] md:w-[120px] md:h-[120px] rounded-full bg-[#e8540a] flex items-center justify-center shadow-lg overflow-hidden ring-4 ring-[#fdf2ea]">
+                          {instructor.image && instructor.image.startsWith('http') ? (
+                            <img src={instructor.image} alt={instructor.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-white font-bold text-4xl">{instructor.name?.charAt(0) || 'I'}</span>
                           )}
                         </div>
+                        <p className="mt-4 font-bold text-[#1a1208] text-lg md:text-xl leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>
+                          {instructor.name}
+                        </p>
+                        {instructor.title && (
+                          <p className="mt-1 text-sm text-[#9e9789] font-medium">{instructor.title}</p>
+                        )}
+                      </div>
+
+                      {/* Right — stat cards */}
+                      <div className="flex-1 grid grid-cols-2 gap-3 md:gap-4 w-full">
+                        {[
+                          { icon: '⭐', value: instructor.rating > 0 ? instructor.rating.toFixed(1) : '0', label: 'Total Ratings' },
+                          { icon: '📝', value: formatNumber(instructor.reviews), label: 'Reviews' },
+                          { icon: '👥', value: formatNumber(instructor.students), label: 'Students' },
+                          { icon: '🎓', value: formatNumber(instructor.courses), label: 'Courses' },
+                        ].map((stat) => (
+                          <div
+                            key={stat.label}
+                            className="bg-white border border-[#ece6dd] rounded-xl px-4 py-3 md:px-5 md:py-4 shadow-sm flex flex-col gap-0.5"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="text-lg md:text-xl" aria-hidden="true">{stat.icon}</span>
+                              <span className="text-xl md:text-2xl font-bold text-[#1a1208] leading-none">{stat.value}</span>
+                            </div>
+                            <span className="text-xs md:text-sm text-[#9e9789] font-medium pl-7 md:pl-8">{stat.label}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
+
+                    {/* Bio */}
                     {instructor.bio && (
-                      <>
+                      <div className="mb-6 md:mb-8">
                         <div className="relative">
                           <div className={`text-[#3d3020] leading-relaxed text-sm md:text-base ${!showFullInstructorBio ? 'max-h-20 overflow-hidden' : ''}`}>
                             <p>{instructor.bio}</p>
                           </div>
-                          {!showFullInstructorBio && <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white via-white/90 to-transparent pointer-events-none" />}
+                          {!showFullInstructorBio && <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[#FDFAF6] via-[#FDFAF6]/90 to-transparent pointer-events-none" />}
                         </div>
-                        <button onClick={() => setShowFullInstructorBio(!showFullInstructorBio)}
-                          className="text-[#e8540a] hover:text-[#c94708] mt-3 text-sm md:text-base font-bold transition flex items-center gap-1 bg-transparent border-none cursor-pointer p-0">
-                          <span>{showFullInstructorBio ? 'Show less' : 'Show more'}</span>
-                          <ChevronDown size={16} className={`transition-transform ${showFullInstructorBio ? 'rotate-180' : ''}`} />
-                        </button>
-                      </>
+                        {instructor.bio.length > 120 && (
+                          <button onClick={() => setShowFullInstructorBio(!showFullInstructorBio)}
+                            className="text-[#e8540a] hover:text-[#c94708] mt-3 text-sm md:text-base font-bold transition flex items-center gap-1 bg-transparent border-none cursor-pointer p-0">
+                            <span>{showFullInstructorBio ? 'Show less' : 'Show more'}</span>
+                            <ChevronDown size={16} className={`transition-transform ${showFullInstructorBio ? 'rotate-180' : ''}`} />
+                          </button>
+                        )}
+                      </div>
                     )}
+
+                    {/* Description */}
+                    {instructor.description && (
+                      <div className="mb-6 md:mb-8 pt-2 border-t border-[#f0ebe3]">
+                        <h3 className="text-xl md:text-2xl font-bold text-[#1a1208] mb-3 md:mb-4" style={{ fontFamily: "'Playfair Display', serif" }}>Description</h3>
+                        <div className="relative">
+                          {/<[a-z][\s\S]*>/i.test(instructor.description) ? (
+                            <div
+                              className={`text-[#3d3020] leading-relaxed text-sm md:text-base prose prose-sm md:prose-base max-w-none ${!showFullInstructorDescription ? 'max-h-40 overflow-hidden' : ''}`}
+                              dangerouslySetInnerHTML={{ __html: instructor.description }}
+                            />
+                          ) : (
+                            <div
+                              className={`text-[#3d3020] leading-relaxed text-sm md:text-base whitespace-pre-wrap ${!showFullInstructorDescription ? 'max-h-40 overflow-hidden' : ''}`}
+                            >
+                              {instructor.description}
+                            </div>
+                          )}
+                          {!showFullInstructorDescription && (
+                            <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#FDFAF6] via-[#FDFAF6]/90 to-transparent pointer-events-none" />
+                          )}
+                        </div>
+                        {instructor.description.length > 200 && (
+                          <button onClick={() => setShowFullInstructorDescription(!showFullInstructorDescription)}
+                            className="text-[#e8540a] hover:text-[#c94708] mt-3 text-sm md:text-base font-bold transition flex items-center gap-1 bg-transparent border-none cursor-pointer p-0">
+                            <span>{showFullInstructorDescription ? 'Show less' : 'Show more'}</span>
+                            <ChevronDown size={16} className={`transition-transform ${showFullInstructorDescription ? 'rotate-180' : ''}`} />
+                          </button>
+                        )}
+                      </div>
+                    )}
+
                     {(instructor.location || instructor.website || instructor.twitter || instructor.linkedin) && (
-                      <div className="mt-4 flex flex-wrap gap-3 text-sm text-[#9e9789]">
+                      <div className="flex flex-wrap gap-3 text-sm text-[#9e9789]">
                         {instructor.location && (
                           <span className="flex items-center gap-1.5"><Globe size={14} className="text-[#e8540a]" />{instructor.location}</span>
                         )}

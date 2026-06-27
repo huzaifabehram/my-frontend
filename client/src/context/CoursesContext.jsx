@@ -69,6 +69,11 @@ export function normalizeCourse(raw, index) {
   const instructorWebsite  = inst && typeof inst === "object" ? (inst.website || "") : "";
   const instructorTwitter  = inst && typeof inst === "object" ? (inst.twitter || "") : "";
   const instructorLinkedin = inst && typeof inst === "object" ? (inst.linkedin || "") : "";
+  const instructorTotalRatings  = inst && typeof inst === "object" ? (Number(inst.totalRatings)  || 0) : 0;
+  const instructorTotalReviews  = inst && typeof inst === "object" ? (Number(inst.totalReviews)  || 0) : 0;
+  const instructorTotalStudents = inst && typeof inst === "object" ? (Number(inst.totalStudents) || 0) : 0;
+  const instructorTotalCourses  = inst && typeof inst === "object" ? (Number(inst.totalCourses)  || 0) : 0;
+  const instructorDescription   = inst && typeof inst === "object" ? (inst.instructorDescription || "") : "";
   const instructorId =
     inst && typeof inst === "object" && inst._id != null
       ? String(inst._id)
@@ -155,10 +160,15 @@ export function normalizeCourse(raw, index) {
     instructorWebsite,
     instructorTwitter,
     instructorLinkedin,
-    instructorRating:   0,
-    instructorReviews:  0,
-    instructorStudents: 0,
-    instructorCourses:  0,
+    instructorTotalRatings,
+    instructorTotalReviews,
+    instructorTotalStudents,
+    instructorTotalCourses,
+    instructorDescription,
+    instructorRating:   instructorTotalRatings,
+    instructorReviews:  instructorTotalReviews,
+    instructorStudents: instructorTotalStudents,
+    instructorCourses:  instructorTotalCourses,
 
     rating:           Number(source.rating)       || 0,
     reviews:          reviewCount,

@@ -1440,6 +1440,11 @@ function ProfilePage({ toast }) {
     twitter:  user?.twitter  || "",
     linkedin: user?.linkedin || "",
     avatar:   user?.avatar   || "",
+    totalRatings:          user?.totalRatings != null && user.totalRatings !== "" ? String(user.totalRatings) : "",
+    totalReviews:          user?.totalReviews != null && user.totalReviews !== "" ? String(user.totalReviews) : "",
+    totalStudents:         user?.totalStudents != null && user.totalStudents !== "" ? String(user.totalStudents) : "",
+    totalCourses:          user?.totalCourses != null && user.totalCourses !== "" ? String(user.totalCourses) : "",
+    instructorDescription: user?.instructorDescription || "",
   });
   const [saving,          setSaving]          = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -1458,6 +1463,11 @@ function ProfilePage({ toast }) {
       twitter:  user.twitter  || "",
       linkedin: user.linkedin || "",
       avatar:   user.avatar   || "",
+      totalRatings:          user.totalRatings != null && user.totalRatings !== "" ? String(user.totalRatings) : "",
+      totalReviews:          user.totalReviews != null && user.totalReviews !== "" ? String(user.totalReviews) : "",
+      totalStudents:         user.totalStudents != null && user.totalStudents !== "" ? String(user.totalStudents) : "",
+      totalCourses:          user.totalCourses != null && user.totalCourses !== "" ? String(user.totalCourses) : "",
+      instructorDescription: user.instructorDescription || "",
     });
   }, [user]);
 
@@ -1503,6 +1513,25 @@ function ProfilePage({ toast }) {
       toast("Please wait for the photo upload to finish.", "error");
       return;
     }
+
+    if (form.totalRatings !== "") {
+      const r = parseFloat(form.totalRatings);
+      if (isNaN(r) || r < 0 || r > 5) {
+        toast("Total Ratings must be a number between 0 and 5 (e.g. 4.9).", "error");
+        return;
+      }
+    }
+    for (const [field, label] of [
+      ["totalReviews", "Total Reviews"],
+      ["totalStudents", "Total Students"],
+      ["totalCourses", "Total Courses"],
+    ]) {
+      if (form[field] !== "" && (isNaN(parseInt(form[field], 10)) || parseInt(form[field], 10) < 0)) {
+        toast(`${label} must be a whole number of 0 or greater.`, "error");
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       const avatarUrl = form.avatar?.startsWith("http") ? form.avatar : (user?.avatar || "");
@@ -1515,6 +1544,11 @@ function ProfilePage({ toast }) {
         twitter:  form.twitter.trim(),
         linkedin: form.linkedin.trim(),
         avatar:   avatarUrl,
+        totalRatings:          form.totalRatings === "" ? 0 : parseFloat(form.totalRatings),
+        totalReviews:          form.totalReviews === "" ? 0 : parseInt(form.totalReviews, 10),
+        totalStudents:         form.totalStudents === "" ? 0 : parseInt(form.totalStudents, 10),
+        totalCourses:          form.totalCourses === "" ? 0 : parseInt(form.totalCourses, 10),
+        instructorDescription: form.instructorDescription.trim(),
       };
 
       await updateProfile(payload);
@@ -1613,8 +1647,66 @@ function ProfilePage({ toast }) {
           rows={5}
         />
         <p className="text-xs text-gray-400">
-          Your bio is displayed on every course landing page under the Instructor section.
+          Short summary shown at the top of the Instructor section on course pages.
         </p>
+      </div>
+
+      {/* ── Display Statistics (manual) ── */}
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm space-y-5">
+        <div>
+          <h3 className="font-bold text-gray-800">Public Statistics</h3>
+          <p className="text-xs sm:text-sm text-gray-500 mt-1">
+            These numbers are displayed on your course landing pages. Set them manually — they are not calculated automatically.
+          </p>
+        </div>
+        <div className="grid sm:grid-cols-2 gap-4">
+          <Input
+            label="Total Ratings"
+            value={form.totalRatings}
+            onChange={v => update("totalRatings", v)}
+            placeholder="e.g. 4.9"
+            type="number"
+          />
+          <Input
+            label="Total Reviews"
+            value={form.totalReviews}
+            onChange={v => update("totalReviews", v)}
+            placeholder="e.g. 8500"
+            type="number"
+          />
+          <Input
+            label="Total Students"
+            value={form.totalStudents}
+            onChange={v => update("totalStudents", v)}
+            placeholder="e.g. 123000"
+            type="number"
+          />
+          <Input
+            label="Total Courses"
+            value={form.totalCourses}
+            onChange={v => update("totalCourses", v)}
+            placeholder="e.g. 18"
+            type="number"
+          />
+        </div>
+        <p className="text-xs text-gray-400">
+          Leave blank to show 0 on course pages. Ratings must be between 0 and 5.
+        </p>
+      </div>
+
+      {/* ── Detailed Description ── */}
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm space-y-4">
+        <h3 className="font-bold text-gray-800">Description</h3>
+        <p className="text-xs sm:text-sm text-gray-500">
+          A longer profile description shown below your bio on course landing pages. Supports multiple paragraphs and basic HTML.
+        </p>
+        <Textarea
+          label="Instructor Description"
+          value={form.instructorDescription}
+          onChange={v => update("instructorDescription", v)}
+          placeholder={"Write a detailed description about your teaching experience, expertise, and background...\n\nYou can use paragraphs and basic HTML tags like <p>, <strong>, <ul>."}
+          rows={8}
+        />
       </div>
 
       {/* ── Links & Social ── */}
