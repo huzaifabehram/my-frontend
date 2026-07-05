@@ -19,9 +19,15 @@
 // ─── FIX 5: Review text content now always shows — broadened normalizeReview to catch
 //            every possible backend field, removed the typeof guard that silently dropped
 //            valid reviews arrays, and added a debug-friendly console.warn for empty text.
+// ─── FIX 6: Show All Reviews now routes to a dedicated Reviews Page (see
+//            src/pages/ReviewsPage.jsx). Hero rating is now a clickable link into that
+//            page. "Created by <Instructor>" now smooth-scrolls to the Instructor section
+//            instead of navigating away. Course Content free-lecture rows are now fully
+//            clickable (not just the badge). Instructor section is redesigned with a
+//            large banner image and the long bio/description copy removed.
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Share2, Bookmark, ThumbsUp, Volume2, VolumeX } from 'lucide-react';
+import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Share2, Bookmark, ThumbsUp, Volume2, VolumeX, ArrowLeft } from 'lucide-react';
 import { useCourses } from '../context/CoursesContext';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -30,6 +36,130 @@ import {
   setPendingCourse,
 } from '../utils/facebookPixel';
 import FreeLectureVideoTracker, { FreeLectureIframeTracker } from '../components/FreeLectureVideoTracker';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REVIEW NORMALIZATION — broadened to catch every possible backend shape
+// ─────────────────────────────────────────────────────────────────────────────
+function normalizeReview(raw, idx) {
+  // Accept anything that is a non-null object
+  if (!raw || typeof raw !== 'object') return null;
+
+  // ── Author: try every known field name ──────────────────────────────────
+  const author =
+    raw.authorName ||
+    raw.author ||
+    raw.userName ||
+    raw.username ||
+    raw.studentName ||
+    raw.name ||
+    raw.fullName ||
+    raw.full_name ||
+    raw.displayName ||
+    raw.display_name ||
+    raw.user?.name ||
+    raw.user?.username ||
+    raw.user?.fullName ||
+    raw.student?.name ||
+    'Student';
+
+  // ── Review text: try every known field name ──────────────────────────────
+  const text =
+    raw.text      != null ? String(raw.text)      :
+    raw.comment   != null ? String(raw.comment)   :
+    raw.content   != null ? String(raw.content)   :
+    raw.message   != null ? String(raw.message)   :
+    raw.body      != null ? String(raw.body)       :
+    raw.review    != null ? String(raw.review)     :
+    raw.feedback  != null ? String(raw.feedback)   :
+    raw.description != null ? String(raw.description) :
+    raw.reviewText != null ? String(raw.reviewText) :
+    raw.review_text != null ? String(raw.review_text) :
+    raw.commentText != null ? String(raw.commentText) :
+    raw.details   != null ? String(raw.details)   :
+    raw.note      != null ? String(raw.note)       :
+    raw.notes     != null ? String(raw.notes)      :
+    '';
+
+  if (!text && process.env.NODE_ENV === 'development') {
+    console.warn('[normalizeReview] Could not find review text in object. Keys available:', Object.keys(raw));
+  }
+
+  // ── Rating ───────────────────────────────────────────────────────────────
+  const rating = Number(
+    raw.rating ?? raw.stars ?? raw.score ?? raw.value ?? raw.ratingValue ?? 5
+  ) || 5;
+
+  // ── Date ─────────────────────────────────────────────────────────────────
+  const dateRaw = raw.date || raw.createdAt || raw.created_at || raw.timestamp || raw.postedAt || raw.posted_at || null;
+  let date = null;
+  if (dateRaw) {
+    const d = new Date(dateRaw);
+    date = isNaN(d.getTime()) ? String(dateRaw) : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  // ── Avatar ───────────────────────────────────────────────────────────────
+  const avatar =
+    raw.avatar ||
+    raw.profileImage ||
+    raw.profile_image ||
+    raw.userImage ||
+    raw.user_image ||
+    raw.photo ||
+    raw.picture ||
+    raw.user?.avatar ||
+    raw.user?.profileImage ||
+    null;
+
+  // ── Stable key ───────────────────────────────────────────────────────────
+  const textSnippet = text.slice(0, 30).replace(/\s+/g, '-');
+  const tsSnippet   = dateRaw ? String(dateRaw).slice(0, 24) : String(idx);
+  const key = raw._id || raw.id || raw.reviewId || raw.review_id
+    || `review-${author}-${textSnippet}-${tsSnippet}`;
+
+  return { key, author, text, rating, date, avatar, userId: raw.userId || raw.user_id || raw.user?._id || null };
+}
+
+function formatNumber(num) {
+  if (!num) return '0';
+  if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M';
+  if (num >= 1_000)     return (num / 1_000).toFixed(1) + 'K';
+  return String(num);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RATING DISTRIBUTION — animated 5→1 star progress bars (used on ReviewsPage)
+// ─────────────────────────────────────────────────────────────────────────────
+function RatingDistribution({ distribution }) {
+  const [animated, setAnimated] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setAnimated(true), 50);
+    return () => clearTimeout(t);
+  }, []);
+
+  return (
+    <div className="space-y-3" role="list" aria-label="Rating distribution">
+      {distribution.map(({ star, count, percentage }) => (
+        <div key={star} role="listitem" className="flex items-center gap-3">
+          <span className="flex items-center gap-1 text-sm font-semibold text-[#1a1208] w-10 flex-shrink-0">
+            {star}
+            <Star size={13} className="text-[#f9c97a]" fill="currentColor" />
+          </span>
+          <div className="flex-1 h-2.5 md:h-3 rounded-full bg-[#f0ebe3] overflow-hidden">
+            <div
+              className="h-full rounded-full bg-[#f9c97a] transition-all duration-1000 ease-out"
+              style={{ width: animated ? `${percentage}%` : '0%' }}
+              aria-hidden="true"
+            />
+          </div>
+          <span className="text-sm text-[#9e9789] w-20 text-right flex-shrink-0">
+            {percentage}% ({count})
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 // ── YouTube embed helper ───────────────────────────────────────────────────
 function getYouTubeId(url) {
@@ -448,100 +578,6 @@ function CourseThumbnail({ course }) {
   );
 }
 
-function formatNumber(num) {
-  if (!num) return '0';
-  if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M';
-  if (num >= 1_000)     return (num / 1_000).toFixed(1) + 'K';
-  return String(num);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// FIX 5: REVIEW NORMALIZATION — broadened to catch every possible backend shape
-// ─────────────────────────────────────────────────────────────────────────────
-function normalizeReview(raw, idx) {
-  // Accept anything that is a non-null object
-  if (!raw || typeof raw !== 'object') return null;
-
-  // ── Author: try every known field name ──────────────────────────────────
-  const author =
-    raw.authorName ||
-    raw.author ||
-    raw.userName ||
-    raw.username ||
-    raw.studentName ||
-    raw.name ||
-    raw.fullName ||
-    raw.full_name ||
-    raw.displayName ||
-    raw.display_name ||
-    raw.user?.name ||
-    raw.user?.username ||
-    raw.user?.fullName ||
-    raw.student?.name ||
-    'Student';
-
-  // ── Review text: try every known field name ──────────────────────────────
-  // This is the field that was silently missing before.
-  const text =
-    raw.text      != null ? String(raw.text)      :
-    raw.comment   != null ? String(raw.comment)   :
-    raw.content   != null ? String(raw.content)   :
-    raw.message   != null ? String(raw.message)   :
-    raw.body      != null ? String(raw.body)       :
-    raw.review    != null ? String(raw.review)     :
-    raw.feedback  != null ? String(raw.feedback)   :
-    raw.description != null ? String(raw.description) :
-    raw.reviewText != null ? String(raw.reviewText) :
-    raw.review_text != null ? String(raw.review_text) :
-    raw.commentText != null ? String(raw.commentText) :
-    raw.details   != null ? String(raw.details)   :
-    raw.note      != null ? String(raw.note)       :
-    raw.notes     != null ? String(raw.notes)      :
-    '';
-
-  // Warn in dev if we still ended up with nothing, so the backend field can be identified
-  if (!text && process.env.NODE_ENV === 'development') {
-    console.warn('[normalizeReview] Could not find review text in object. Keys available:', Object.keys(raw));
-  }
-
-  // ── Rating ───────────────────────────────────────────────────────────────
-  const rating = Number(
-    raw.rating ?? raw.stars ?? raw.score ?? raw.value ?? raw.ratingValue ?? 5
-  ) || 5;
-
-  // ── Date ─────────────────────────────────────────────────────────────────
-  const dateRaw = raw.date || raw.createdAt || raw.created_at || raw.timestamp || raw.postedAt || raw.posted_at || null;
-  let date = null;
-  if (dateRaw) {
-    const d = new Date(dateRaw);
-    date = isNaN(d.getTime()) ? String(dateRaw) : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-  }
-
-  // ── Avatar ───────────────────────────────────────────────────────────────
-  const avatar =
-    raw.avatar ||
-    raw.profileImage ||
-    raw.profile_image ||
-    raw.userImage ||
-    raw.user_image ||
-    raw.photo ||
-    raw.picture ||
-    raw.user?.avatar ||
-    raw.user?.profileImage ||
-    null;
-
-  // ── Stable key ───────────────────────────────────────────────────────────
-  // Server _id is always unique and preferred. When absent (e.g. optimistic
-  // local reviews), combine author + text snippet + createdAt timestamp so
-  // the same person can submit multiple reviews and each gets its own card.
-  const textSnippet = text.slice(0, 30).replace(/\s+/g, '-');
-  const tsSnippet   = dateRaw ? String(dateRaw).slice(0, 24) : String(idx);
-  const key = raw._id || raw.id || raw.reviewId || raw.review_id
-    || `review-${author}-${textSnippet}-${tsSnippet}`;
-
-  return { key, author, text, rating, date, avatar, userId: raw.userId || raw.user_id || raw.user?._id || null };
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // TEXT REVIEWS SLIDER — Udemy-style horizontal cards
 // ─────────────────────────────────────────────────────────────────────────────
@@ -710,11 +746,6 @@ export default function CourseLandingPage() {
   const [fullCourseLoading,     setFullCourseLoading]     = useState(false);
   const [instructorData,        setInstructorData]        = useState(null);
   const [loadingInstructor,     setLoadingInstructor]     = useState(false);
-  const [showReviewForm,        setShowReviewForm]        = useState(false);
-  const [reviewText,            setReviewText]            = useState('');
-  const [reviewAuthorName,      setReviewAuthorName]      = useState('');
-  const [reviewRating,          setReviewRating]          = useState(5);
-  const [submittingReview,      setSubmittingReview]      = useState(false);
   const [videoReelsOpen,        setVideoReelsOpen]        = useState(false);
   const [videoReelsStartIndex,  setVideoReelsStartIndex]  = useState(0);
   const [imageSliderOpen,       setImageSliderOpen]       = useState(false);
@@ -724,7 +755,14 @@ export default function CourseLandingPage() {
   const [fetchedReviews,    setFetchedReviews]    = useState([]);
 
   const descriptionRef = useRef(null);
+  const instructorSectionRef = useRef(null);
   const viewContentFiredRef = useRef(null);
+
+  // Requirement 3: "Created by <Instructor>" smooth-scrolls to the Instructor
+  // section on this same page instead of navigating away.
+  const scrollToInstructor = useCallback(() => {
+    instructorSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
 
   const [videoLikes, setVideoLikes] = useState({});
   const handleVideoLike = useCallback((idx) => {
@@ -751,12 +789,6 @@ export default function CourseLandingPage() {
       })
       .catch(() => setFetchedReviews([]));
   }, [id, api]);
-
-  useEffect(() => {
-    if (user?.name && !reviewAuthorName) {
-      setReviewAuthorName(user.name);
-    }
-  }, [user?.name]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const courseData = useMemo(() => {
     if (id) return fullCourse || getCourse(id);
@@ -866,80 +898,6 @@ export default function CourseLandingPage() {
       setShowFullDescription(false);
     } else {
       setShowFullDescription(true);
-    }
-  };
-
-  // ─── FIX 3: Review submission ─────────────────────────────────────────────
-  const handleReviewSubmit = async (e) => {
-    e.preventDefault();
-
-    const trimmedName = reviewAuthorName.trim();
-    if (!trimmedName) {
-      alert('Please enter your name');
-      return;
-    }
-
-    if (!reviewText.trim()) {
-      alert('Please write a review');
-      return;
-    }
-
-    setSubmittingReview(true);
-
-    const optimisticReview = {
-      _id: `local-${Date.now()}`,
-      text: reviewText,
-      rating: reviewRating,
-      author: trimmedName,
-      authorName: trimmedName,
-      createdAt: new Date().toISOString(),
-      userId: user?._id || user?.id || null,
-    };
-
-    try {
-      const res = await api.post(`/courses/${courseData._id}/reviews`, {
-        text: reviewText,
-        rating: reviewRating,
-        authorName: trimmedName,
-      });
-
-      const created = res?.data?.review || res?.data || optimisticReview;
-      setLocalNewReviews(prev => [created, ...prev]);
-
-      setReviewText('');
-      setReviewRating(5);
-      if (!user) setReviewAuthorName('');
-      setShowReviewForm(false);
-      alert('Review submitted successfully!');
-
-      // Re-fetch in the background. Only drop the optimistic local copy once
-      // the server actually echoes reviews back — some backends are eventually
-      // consistent and the re-fetch may arrive before the write is visible,
-      // which would make the card vanish until the next hard refresh.
-      fetchCourseById(courseData._id).then(updatedCourse => {
-        if (!updatedCourse) return;
-        setFullCourse(updatedCourse);
-        const serverReviewCount =
-          (Array.isArray(updatedCourse.reviews_list) ? updatedCourse.reviews_list.filter(r => r && typeof r === 'object').length : 0) +
-          (Array.isArray(updatedCourse.reviews) ? updatedCourse.reviews.filter(r => r && typeof r === 'object').length : 0);
-        // Only clear optimistic list once server confirms reviews exist
-        if (serverReviewCount > 0) setLocalNewReviews([]);
-      }).catch(() => { /* network error — keep local copy visible */ });
-
-      api.get(`/courses/${courseData._id}/reviews`)
-        .then((res) => setFetchedReviews(Array.isArray(res.data) ? res.data : []))
-        .catch(() => {});
-    } catch (err) {
-      console.error('Failed to submit review:', err);
-      setLocalNewReviews(prev => [optimisticReview, ...prev]);
-      setReviewText('');
-      setReviewRating(5);
-      if (!user) setReviewAuthorName('');
-      setShowReviewForm(false);
-      const msg = err?.response?.data?.message || 'Could not reach the server — your review is shown locally and will sync once you retry.';
-      alert(msg);
-    } finally {
-      setSubmittingReview(false);
     }
   };
 
@@ -1201,14 +1159,26 @@ export default function CourseLandingPage() {
               </div>
               <div className="flex flex-wrap items-center gap-3 md:gap-4 mb-4 md:mb-6">
                 {courseData.rating > 0 && (
-                  <div className="flex items-center gap-2">
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => navigate(`/course/${courseData._id}/reviews`)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        navigate(`/course/${courseData._id}/reviews`);
+                      }
+                    }}
+                    aria-label="View all course reviews"
+                    className="flex items-center gap-2 cursor-pointer rounded-md hover:opacity-80 transition focus:outline-none focus:ring-2 focus:ring-[#e8540a] focus:ring-offset-2 focus:ring-offset-[#1a1208]"
+                  >
                     <span className="text-[#f9c97a] font-bold text-sm md:text-base">{courseData.rating}</span>
                     <div className="flex gap-0.5">
                       {Array.from({ length: 5 }).map((_, i) => (
                         <Star key={i} size={16} className="text-[#f9c97a] md:w-5 md:h-5" fill={i < Math.floor(courseData.rating) ? 'currentColor' : 'none'} />
                       ))}
                     </div>
-                    <span className="text-[#c8bfaf] text-sm md:text-base">({courseData.reviews?.toLocaleString?.() || textReviews.length} ratings)</span>
+                    <span className="text-[#c8bfaf] text-sm md:text-base underline decoration-[#c8bfaf]/40">({courseData.reviews?.toLocaleString?.() || textReviews.length} ratings)</span>
                   </div>
                 )}
                 {courseData.students > 0 && (
@@ -1220,7 +1190,7 @@ export default function CourseLandingPage() {
               <div className="mb-4 md:mb-6">
                 <p className="text-[#9e8e7a] text-sm md:text-base">
                   Created by{' '}
-                  <button onClick={() => handleNavigate('/instructor')}
+                  <button onClick={scrollToInstructor}
                     className="text-[#e87040] hover:text-[#f0a070] font-semibold bg-transparent border-none cursor-pointer p-0 underline">
                     {instructor.name}
                   </button>
@@ -1325,28 +1295,42 @@ export default function CourseLandingPage() {
                           </button>
                           {isExpanded && section.lectures_list?.length > 0 && (
                             <div className="border-t border-[#ece6dd] bg-white">
-                              {section.lectures_list.map((lecture, lectureIdx) => (
-                                <div key={lectureIdx} className="px-4 md:px-6 py-3 md:py-3.5 border-b border-[#f0ebe3] last:border-b-0 flex items-center justify-between hover:bg-[#fbf8f3] transition">
-                                  <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
-                                    <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-[#f0ebe3] flex items-center justify-center flex-shrink-0">
-                                      {lecture.type === 'video'
-                                        ? <Play size={12} className="text-[#6b5e4e] ml-0.5" />
-                                        : <BookOpen size={12} className="text-[#6b5e4e]" />}
+                              {section.lectures_list.map((lecture, lectureIdx) => {
+                                const isClickable = Boolean(lecture.preview && lecture.videoUrl);
+                                return (
+                                  <div
+                                    key={lectureIdx}
+                                    onClick={isClickable ? () => handleLectureClick(lecture) : undefined}
+                                    onKeyDown={isClickable ? (e) => {
+                                      if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        handleLectureClick(lecture);
+                                      }
+                                    } : undefined}
+                                    role={isClickable ? 'button' : undefined}
+                                    tabIndex={isClickable ? 0 : undefined}
+                                    aria-label={isClickable ? `Play free lecture: ${lecture.title}` : undefined}
+                                    className={`px-4 md:px-6 py-3 md:py-3.5 border-b border-[#f0ebe3] last:border-b-0 flex items-center justify-between transition ${isClickable ? 'cursor-pointer hover:bg-[#fbf8f3] focus:outline-none focus:bg-[#fbf8f3]' : ''}`}
+                                  >
+                                    <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
+                                      <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-[#f0ebe3] flex items-center justify-center flex-shrink-0">
+                                        {lecture.type === 'video'
+                                          ? <Play size={12} className="text-[#6b5e4e] ml-0.5" />
+                                          : <BookOpen size={12} className="text-[#6b5e4e]" />}
+                                      </div>
+                                      <p className="text-[#1a1208] text-sm md:text-base font-medium truncate">{lecture.title}</p>
                                     </div>
-                                    <p className="text-[#1a1208] text-sm md:text-base font-medium truncate">{lecture.title}</p>
+                                    <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
+                                      {lecture.duration && <span className="text-sm text-[#9e9789]">{lecture.duration}</span>}
+                                      {isClickable && (
+                                        <span className="flex items-center bg-[#fde8d8] text-[#9a3c0e] font-bold text-xs md:text-sm whitespace-nowrap px-2.5 py-1.5 rounded-full">
+                                          Free Lecture
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
-                                  <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
-                                    {lecture.duration && <span className="text-sm text-[#9e9789]">{lecture.duration}</span>}
-                                    {lecture.preview && lecture.videoUrl && (
-                                      <button
-                                        onClick={(e) => { e.stopPropagation(); handleLectureClick(lecture); }}
-                                        className="flex items-center bg-[#fde8d8] hover:bg-[#fbdcc3] text-[#9a3c0e] font-bold text-xs md:text-sm cursor-pointer border-none whitespace-nowrap transition px-2.5 py-1.5 rounded-full">
-                                        Free Lecture
-                                      </button>
-                                    )}
-                                  </div>
-                                </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           )}
                         </div>
@@ -1408,102 +1392,53 @@ export default function CourseLandingPage() {
               )}
 
               {/* INSTRUCTOR */}
-              <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
+              <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full" ref={instructorSectionRef} id="instructor-section">
                 <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#1a1208] mb-6 md:mb-8" style={{ fontFamily: "'Playfair Display', serif" }}>Instructor</h2>
                 {loadingInstructor ? (
                   <p className="text-[#9e9789] text-base md:text-lg">Loading instructor...</p>
                 ) : (
                   <>
-                    {/* Profile + stats row */}
-                    <div className="flex flex-col sm:flex-row sm:items-center gap-6 md:gap-10 mb-6 md:mb-8">
-                      {/* Left — photo + name */}
-                      <div className="flex flex-col items-center sm:items-start text-center sm:text-left flex-shrink-0">
-                        <div className="w-[110px] h-[110px] md:w-[120px] md:h-[120px] rounded-full bg-[#e8540a] flex items-center justify-center shadow-lg overflow-hidden ring-4 ring-[#fdf2ea]">
-                          {instructor.image && instructor.image.startsWith('http') ? (
-                            <img src={instructor.image} alt={instructor.name} className="w-full h-full object-cover" />
-                          ) : (
-                            <span className="text-white font-bold text-4xl">{instructor.name?.charAt(0) || 'I'}</span>
-                          )}
+                    {/* Large banner image */}
+                    <div className="w-full rounded-2xl overflow-hidden mb-6 md:mb-8 bg-[#f0ebe3]" style={{ aspectRatio: '16 / 6' }}>
+                      {instructor.image && instructor.image.startsWith('http') ? (
+                        <img src={instructor.image} alt={instructor.name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-[#e8540a]">
+                          <span className="text-white font-bold text-5xl md:text-7xl">{instructor.name?.charAt(0) || 'I'}</span>
                         </div>
-                        <p className="mt-4 font-bold text-[#1a1208] text-lg md:text-xl leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>
-                          {instructor.name}
-                        </p>
-                        {instructor.title && (
-                          <p className="mt-1 text-sm text-[#9e9789] font-medium">{instructor.title}</p>
-                        )}
-                      </div>
-
-                      {/* Right — stat cards */}
-                      <div className="flex-1 grid grid-cols-2 gap-3 md:gap-4 w-full">
-                        {[
-                          { icon: '⭐', value: instructor.rating > 0 ? instructor.rating.toFixed(1) : '0', label: 'Total Ratings' },
-                          { icon: '📝', value: formatNumber(instructor.reviews), label: 'Reviews' },
-                          { icon: '👥', value: formatNumber(instructor.students), label: 'Students' },
-                          { icon: '🎓', value: formatNumber(instructor.courses), label: 'Courses' },
-                        ].map((stat) => (
-                          <div
-                            key={stat.label}
-                            className="bg-white border border-[#ece6dd] rounded-xl px-4 py-3 md:px-5 md:py-4 shadow-sm flex flex-col gap-0.5"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="text-lg md:text-xl" aria-hidden="true">{stat.icon}</span>
-                              <span className="text-xl md:text-2xl font-bold text-[#1a1208] leading-none">{stat.value}</span>
-                            </div>
-                            <span className="text-xs md:text-sm text-[#9e9789] font-medium pl-7 md:pl-8">{stat.label}</span>
-                          </div>
-                        ))}
-                      </div>
+                      )}
                     </div>
 
-                    {/* Bio */}
-                    {instructor.bio && (
-                      <div className="mb-6 md:mb-8">
-                        <div className="relative">
-                          <div className={`text-[#3d3020] leading-relaxed text-sm md:text-base ${!showFullInstructorBio ? 'max-h-20 overflow-hidden' : ''}`}>
-                            <p>{instructor.bio}</p>
-                          </div>
-                          {!showFullInstructorBio && <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[#FDFAF6] via-[#FDFAF6]/90 to-transparent pointer-events-none" />}
-                        </div>
-                        {instructor.bio.length > 120 && (
-                          <button onClick={() => setShowFullInstructorBio(!showFullInstructorBio)}
-                            className="text-[#e8540a] hover:text-[#c94708] mt-3 text-sm md:text-base font-bold transition flex items-center gap-1 bg-transparent border-none cursor-pointer p-0">
-                            <span>{showFullInstructorBio ? 'Show less' : 'Show more'}</span>
-                            <ChevronDown size={16} className={`transition-transform ${showFullInstructorBio ? 'rotate-180' : ''}`} />
-                          </button>
-                        )}
-                      </div>
-                    )}
+                    {/* Name + title */}
+                    <div className="mb-6 md:mb-8">
+                      <p className="font-bold text-[#1a1208] text-xl md:text-2xl leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>
+                        {instructor.name}
+                      </p>
+                      {instructor.title && (
+                        <p className="mt-1 text-sm md:text-base text-[#9e9789] font-medium">{instructor.title}</p>
+                      )}
+                    </div>
 
-                    {/* Description */}
-                    {instructor.description && (
-                      <div className="mb-6 md:mb-8 pt-2 border-t border-[#f0ebe3]">
-                        <h3 className="text-xl md:text-2xl font-bold text-[#1a1208] mb-3 md:mb-4" style={{ fontFamily: "'Playfair Display', serif" }}>Description</h3>
-                        <div className="relative">
-                          {/<[a-z][\s\S]*>/i.test(instructor.description) ? (
-                            <div
-                              className={`text-[#3d3020] leading-relaxed text-sm md:text-base prose prose-sm md:prose-base max-w-none ${!showFullInstructorDescription ? 'max-h-40 overflow-hidden' : ''}`}
-                              dangerouslySetInnerHTML={{ __html: instructor.description }}
-                            />
-                          ) : (
-                            <div
-                              className={`text-[#3d3020] leading-relaxed text-sm md:text-base whitespace-pre-wrap ${!showFullInstructorDescription ? 'max-h-40 overflow-hidden' : ''}`}
-                            >
-                              {instructor.description}
-                            </div>
-                          )}
-                          {!showFullInstructorDescription && (
-                            <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#FDFAF6] via-[#FDFAF6]/90 to-transparent pointer-events-none" />
-                          )}
+                    {/* Stat cards */}
+                    <div className="grid grid-cols-2 gap-3 md:gap-4 mb-6 md:mb-8">
+                      {[
+                        { icon: '⭐', value: instructor.rating > 0 ? instructor.rating.toFixed(1) : '0', label: 'Total Ratings' },
+                        { icon: '📝', value: formatNumber(instructor.reviews), label: 'Reviews' },
+                        { icon: '👥', value: formatNumber(instructor.students), label: 'Students' },
+                        { icon: '🎓', value: formatNumber(instructor.courses), label: 'Courses' },
+                      ].map((stat) => (
+                        <div
+                          key={stat.label}
+                          className="bg-white border border-[#ece6dd] rounded-xl px-4 py-3 md:px-5 md:py-4 shadow-sm flex flex-col gap-0.5"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg md:text-xl" aria-hidden="true">{stat.icon}</span>
+                            <span className="text-xl md:text-2xl font-bold text-[#1a1208] leading-none">{stat.value}</span>
+                          </div>
+                          <span className="text-xs md:text-sm text-[#9e9789] font-medium pl-7 md:pl-8">{stat.label}</span>
                         </div>
-                        {instructor.description.length > 200 && (
-                          <button onClick={() => setShowFullInstructorDescription(!showFullInstructorDescription)}
-                            className="text-[#e8540a] hover:text-[#c94708] mt-3 text-sm md:text-base font-bold transition flex items-center gap-1 bg-transparent border-none cursor-pointer p-0">
-                            <span>{showFullInstructorDescription ? 'Show less' : 'Show more'}</span>
-                            <ChevronDown size={16} className={`transition-transform ${showFullInstructorDescription ? 'rotate-180' : ''}`} />
-                          </button>
-                        )}
-                      </div>
-                    )}
+                      ))}
+                    </div>
 
                     {(instructor.location || instructor.website || instructor.twitter || instructor.linkedin) && (
                       <div className="flex flex-wrap gap-3 text-sm text-[#9e9789]">
@@ -1558,56 +1493,13 @@ export default function CourseLandingPage() {
                 )}
               </div>
 
-              {/* WRITE A REVIEW */}
+              {/* SHOW ALL REVIEWS — opens the dedicated Reviews Page */}
               <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
                 <button
-                  onClick={() => setShowReviewForm(!showReviewForm)}
+                  onClick={() => navigate(`/course/${courseData._id}/reviews`)}
                   className="w-full bg-white hover:bg-[#fdf2ea] text-[#e8540a] font-bold py-3 md:py-3.5 rounded-xl transition text-base md:text-lg border-2 border-[#e8540a] cursor-pointer">
-                  {showReviewForm ? 'Cancel Review' : 'Write a Review'}
+                  Show All Reviews
                 </button>
-
-                {showReviewForm && (
-                  <form onSubmit={handleReviewSubmit} className="mt-4 md:mt-6 bg-[#f8f4ed] rounded-2xl p-4 md:p-6 border border-[#ece6dd]">
-                    <h3 className="text-lg md:text-xl font-bold text-[#1a1208] mb-4" style={{ fontFamily: "'Playfair Display', serif" }}>Share Your Experience</h3>
-                    <div className="mb-4">
-                      <label className="block text-sm md:text-base font-semibold text-[#3d3020] mb-2">
-                        Your Name <span className="text-[#e8540a]">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        value={reviewAuthorName}
-                        onChange={(e) => setReviewAuthorName(e.target.value)}
-                        placeholder="Enter your name"
-                        required
-                        className="w-full border border-[#ddd5c4] rounded-xl px-3 md:px-4 py-2 md:py-3 text-sm md:text-base text-[#1a1208] placeholder-[#9e9789] focus:outline-none focus:ring-2 focus:ring-[#e8540a] bg-white"
-                      />
-                    </div>
-                    <div className="mb-4">
-                      <label className="block text-sm md:text-base font-semibold text-[#3d3020] mb-2">Rating</label>
-                      <div className="flex gap-1.5 md:gap-2">
-                        {[1, 2, 3, 4, 5].map((star) => (
-                          <button key={star} type="button" onClick={() => setReviewRating(star)} className="bg-transparent border-none cursor-pointer p-0">
-                            <Star size={32} className={`${star <= reviewRating ? 'text-[#f9c97a]' : 'text-[#ddd5c4]'} hover:text-[#f9c97a] transition`} fill={star <= reviewRating ? 'currentColor' : 'none'} />
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="mb-4">
-                      <label className="block text-sm md:text-base font-semibold text-[#3d3020] mb-2">Your Review</label>
-                      <textarea value={reviewText} onChange={(e) => setReviewText(e.target.value)}
-                        placeholder="Share your thoughts about this course..." rows={5}
-                        required
-                        className="w-full border border-[#ddd5c4] rounded-xl px-3 md:px-4 py-2 md:py-3 text-sm md:text-base text-[#1a1208] placeholder-[#9e9789] focus:outline-none focus:ring-2 focus:ring-[#e8540a] resize-none bg-white" />
-                    </div>
-                    <button type="submit" disabled={submittingReview}
-                      className="w-full bg-[#e8540a] hover:bg-[#c94708] text-white font-bold py-3 md:py-3.5 rounded-xl transition border-none cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed text-base md:text-lg">
-                      {submittingReview ? 'Submitting...' : 'Submit Review'}
-                    </button>
-                    <p className="text-xs md:text-sm text-[#9e9789] mt-3">
-                      No account needed — you can submit as many reviews as you like.
-                    </p>
-                  </form>
-                )}
               </div>
 
               {/* IMAGE TESTIMONIALS */}
