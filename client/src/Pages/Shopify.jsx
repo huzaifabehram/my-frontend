@@ -25,6 +25,12 @@
 //            instead of navigating away. Course Content free-lecture rows are now fully
 //            clickable (not just the badge). Instructor section is redesigned with a
 //            large banner image and the long bio/description copy removed.
+// ─── FIX 7: normalizeReview, formatNumber, and RatingDistribution are now exported so the
+//            dedicated Reviews Page (src/pages/ReviewsPage.jsx) can reuse the exact same
+//            review-parsing logic and distribution UI instead of duplicating it.
+// ─── FIX 8: Instructor image now displays the FULL uploaded picture, uncropped, inside an
+//            edge-to-edge SQUARE frame (aspect-ratio 1 / 1, object-contain, no rounding),
+//            instead of the previous cropped 16:6 banner crop.
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Share2, Bookmark, ThumbsUp, Volume2, VolumeX, ArrowLeft } from 'lucide-react';
@@ -39,8 +45,9 @@ import FreeLectureVideoTracker, { FreeLectureIframeTracker } from '../components
 
 // ─────────────────────────────────────────────────────────────────────────────
 // REVIEW NORMALIZATION — broadened to catch every possible backend shape
+// Exported (FIX 7) so ReviewsPage.jsx can reuse identical parsing logic.
 // ─────────────────────────────────────────────────────────────────────────────
-function normalizeReview(raw, idx) {
+export function normalizeReview(raw, idx) {
   // Accept anything that is a non-null object
   if (!raw || typeof raw !== 'object') return null;
 
@@ -119,7 +126,7 @@ function normalizeReview(raw, idx) {
   return { key, author, text, rating, date, avatar, userId: raw.userId || raw.user_id || raw.user?._id || null };
 }
 
-function formatNumber(num) {
+export function formatNumber(num) {
   if (!num) return '0';
   if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M';
   if (num >= 1_000)     return (num / 1_000).toFixed(1) + 'K';
@@ -128,8 +135,9 @@ function formatNumber(num) {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RATING DISTRIBUTION — animated 5→1 star progress bars (used on ReviewsPage)
+// Exported (FIX 7) so ReviewsPage.jsx can render the exact same distribution UI.
 // ─────────────────────────────────────────────────────────────────────────────
-function RatingDistribution({ distribution }) {
+export function RatingDistribution({ distribution }) {
   const [animated, setAnimated] = useState(false);
 
   useEffect(() => {
@@ -901,6 +909,12 @@ export default function CourseLandingPage() {
     }
   };
 
+  // Navigate to the dedicated Reviews Page (FIX 6 / requirement 1 & 2).
+  const goToReviewsPage = useCallback(() => {
+    if (!courseData?._id) return;
+    navigate(`/course/${courseData._id}/reviews`);
+  }, [courseData?._id, navigate]);
+
   if (loading || fullCourseLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#FDFAF6]">
@@ -1011,6 +1025,37 @@ export default function CourseLandingPage() {
           <div className="w-full bg-black">
             <div className="max-w-7xl mx-auto"><PreviewVideoWithTracking url={currentVideo} course={courseData} lecture={activePreviewLecture} /></div>
           </div>
+
+          {/* Clickable rating link below the free lecture video player — opens the
+              dedicated Reviews Page. Keeps hover affordance + full keyboard access. */}
+          {courseData.rating > 0 && (
+            <div className="w-full bg-black border-b border-[#2d2416]">
+              <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 md:py-4">
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={goToReviewsPage}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      goToReviewsPage();
+                    }
+                  }}
+                  aria-label="View all course reviews"
+                  className="inline-flex items-center gap-2 cursor-pointer rounded-md hover:opacity-80 transition focus:outline-none focus:ring-2 focus:ring-[#e8540a] focus:ring-offset-2 focus:ring-offset-black"
+                >
+                  <span className="text-[#f9c97a] font-bold text-sm md:text-base">{courseData.rating}</span>
+                  <div className="flex gap-0.5">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Star key={i} size={16} className="text-[#f9c97a] md:w-5 md:h-5" fill={i < Math.floor(courseData.rating) ? 'currentColor' : 'none'} />
+                    ))}
+                  </div>
+                  <span className="text-[#c8bfaf] text-sm md:text-base underline decoration-[#c8bfaf]/40">({courseData.reviews?.toLocaleString?.() || textReviews.length} ratings)</span>
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="flex-1 overflow-y-auto bg-gradient-to-b from-black to-[#1a1208]">
             <div className="max-w-7xl mx-auto px-4 md:px-6 py-6 md:py-8">
               <h3 className="text-lg md:text-xl lg:text-2xl font-bold text-white mb-4 md:mb-6" style={{ fontFamily: "'Playfair Display', serif" }}>Free Preview Lectures</h3>
@@ -1157,16 +1202,18 @@ export default function CourseLandingPage() {
                   <CourseThumbnail course={courseData} />
                 </div>
               </div>
+              {/* Rating link below the free lecture video player — the entire area is
+                  clickable and routes to the dedicated Reviews Page (requirement 2). */}
               <div className="flex flex-wrap items-center gap-3 md:gap-4 mb-4 md:mb-6">
                 {courseData.rating > 0 && (
                   <div
                     role="button"
                     tabIndex={0}
-                    onClick={() => navigate(`/course/${courseData._id}/reviews`)}
+                    onClick={goToReviewsPage}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
-                        navigate(`/course/${courseData._id}/reviews`);
+                        goToReviewsPage();
                       }
                     }}
                     aria-label="View all course reviews"
@@ -1398,13 +1445,15 @@ export default function CourseLandingPage() {
                   <p className="text-[#9e9789] text-base md:text-lg">Loading instructor...</p>
                 ) : (
                   <>
-                    {/* Large banner image */}
-                    <div className="w-full rounded-2xl overflow-hidden mb-6 md:mb-8 bg-[#f0ebe3]" style={{ aspectRatio: '16 / 6' }}>
+                    {/* FIX 8: Full uploaded picture, uncropped, edge-to-edge SQUARE frame.
+                        aspectRatio 1/1 + object-contain shows the entire image without
+                        cutting any part of it off (previous 16:6 banner cropped it). */}
+                    <div className="w-full overflow-hidden mb-6 md:mb-8 bg-[#f0ebe3]" style={{ aspectRatio: '1 / 1' }}>
                       {instructor.image && instructor.image.startsWith('http') ? (
-                        <img src={instructor.image} alt={instructor.name} className="w-full h-full object-cover" />
+                        <img src={instructor.image} alt={instructor.name} className="w-full h-full object-contain" />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-[#e8540a]">
-                          <span className="text-white font-bold text-5xl md:text-7xl">{instructor.name?.charAt(0) || 'I'}</span>
+                          <span className="text-white font-bold text-6xl md:text-8xl">{instructor.name?.charAt(0) || 'I'}</span>
                         </div>
                       )}
                     </div>
@@ -1496,7 +1545,7 @@ export default function CourseLandingPage() {
               {/* SHOW ALL REVIEWS — opens the dedicated Reviews Page */}
               <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
                 <button
-                  onClick={() => navigate(`/course/${courseData._id}/reviews`)}
+                  onClick={goToReviewsPage}
                   className="w-full bg-white hover:bg-[#fdf2ea] text-[#e8540a] font-bold py-3 md:py-3.5 rounded-xl transition text-base md:text-lg border-2 border-[#e8540a] cursor-pointer">
                   Show All Reviews
                 </button>
