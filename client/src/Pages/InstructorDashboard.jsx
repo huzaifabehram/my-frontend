@@ -6,6 +6,10 @@
 // UPDATED: Project Gallery management with Cloudinary image upload
 // UPDATED: "Students Also Bought" course picker (choose from published courses)
 // UPDATED: Profile save now persists all fields (avatar, title, bio, location, social links)
+// UPDATED: Custom Content Blocks — reusable, draggable, duplicable sections
+//          (heading, sub heading, video URL, image upload/URL) that render on
+//          the course landing page. All video-URL previews are now compact,
+//          corner-anchored thumbnails instead of a full-width player.
 // All dummy data is replaced with real API calls via useInstructorCourses hook.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -205,6 +209,57 @@ function VideoPlayer({ url, className = "" }) {
     return <video src={url} className={`w-full aspect-video bg-black rounded-xl ${className}`} controls preload="metadata"/>;
   }
   return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COMPACT VIDEO PREVIEW — small, corner-anchored, professional thumbnail
+// Used everywhere a pasted video URL needs a quick preview without taking
+// over the editor UI (course preview video, lecture rows, testimonials,
+// custom content blocks). Fixed small size instead of full-width aspect-video.
+// ─────────────────────────────────────────────────────────────────────────────
+function CompactVideoPreview({ url, width = 160, height = 90 }) {
+  if (!url) return null;
+  const ytId = getYouTubeId(url);
+  const bunnyEmbed = !ytId && isBunnyUrl(url) ? getBunnyEmbedUrl(url) : null;
+  const badge = ytId
+    ? { text: "YouTube", color: "bg-red-600/90" }
+    : bunnyEmbed
+    ? { text: "Bunny.net", color: "bg-orange-600/90" }
+    : { text: "Video", color: "bg-gray-800/90" };
+
+  return (
+    <div
+      className="relative rounded-lg overflow-hidden border border-gray-200 shadow-md bg-black flex-shrink-0"
+      style={{ width, height }}
+      title="Video preview"
+    >
+      {ytId ? (
+        <iframe
+          src={`https://www.youtube.com/embed/${ytId}?controls=0&modestbranding=1`}
+          className="absolute inset-0 w-full h-full pointer-events-none"
+          allow="accelerometer; encrypted-media"
+          title="Preview"
+          loading="lazy"
+          style={{ border: "none" }}
+        />
+      ) : bunnyEmbed ? (
+        <iframe
+          src={bunnyEmbed}
+          className="absolute inset-0 w-full h-full pointer-events-none"
+          allow="accelerometer; encrypted-media"
+          title="Preview"
+          loading="lazy"
+          style={{ border: "none" }}
+        />
+      ) : (
+        <video src={url} className="absolute inset-0 w-full h-full object-cover" muted preload="metadata" />
+      )}
+      <div className={`absolute bottom-0 left-0 right-0 px-1.5 py-0.5 text-[9px] font-bold text-white ${badge.color} flex items-center gap-1`}>
+        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 flex-shrink-0" />
+        {badge.text}
+      </div>
+    </div>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -705,6 +760,13 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
   const [uploadingGalleryItem, setUploadingGalleryItem] = useState(false);
   const galleryRef = useRef();
 
+  // ── Custom Content Blocks — reusable, draggable, duplicable sections ────
+  // Each block: { id, heading, subheading, videoUrl, imageUrl, imagePreview }
+  const [customBlocks,        setCustomBlocks]        = useState(existing?.customBlocks || []);
+  const [uploadingBlockImage, setUploadingBlockImage]  = useState({});   // keyed by block id
+  const [draggedBlockId,      setDraggedBlockId]       = useState(null);
+  const blockImageRefs = useRef({});
+
   const [alsoBoughtIds, setAlsoBoughtIds] = useState(existing?.alsoBoughtCourseIds || []);
   const [coursePicker,   setCoursePicker]  = useState('');
 
@@ -846,6 +908,75 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
     toast("Removed from gallery", "success");
   };
 
+  // ── Custom Content Block handlers ────────────────────────────────────────
+  const addCustomBlock = () => {
+    const block = { id: uid(), heading: '', subheading: '', videoUrl: '', imageUrl: '', imagePreview: '' };
+    setCustomBlocks(p => [...p, block]);
+  };
+
+  const duplicateCustomBlock = (blockId) => {
+    setCustomBlocks(p => {
+      const idx = p.findIndex(b => (b.id || b._id) === blockId);
+      if (idx === -1) return p;
+      const source = p[idx];
+      const copy = { ...source, id: uid() };
+      delete copy._id;
+      const next = [...p];
+      next.splice(idx + 1, 0, copy);
+      return next;
+    });
+    toast("Block duplicated — reorder or edit it below.", "success");
+  };
+
+  const updateCustomBlock = (blockId, field, val) => {
+    setCustomBlocks(p => p.map(b => (b.id || b._id) === blockId ? { ...b, [field]: val } : b));
+  };
+
+  const deleteCustomBlock = (blockId) => {
+    setCustomBlocks(p => p.filter(b => (b.id || b._id) !== blockId));
+    toast("Block removed", "success");
+  };
+
+  const handleCustomBlockImageFile = async (e, blockId) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => updateCustomBlock(blockId, 'imagePreview', ev.target.result);
+    reader.readAsDataURL(file);
+    setUploadingBlockImage(p => ({ ...p, [blockId]: true }));
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      const res = await api.post("/upload/image", formData);
+      const url = res.data?.url ?? res.data?.secure_url ?? res.data?.imageUrl;
+      if (!url) { toast("Upload succeeded but no URL returned.", "error"); return; }
+      updateCustomBlock(blockId, 'imageUrl', url);
+      updateCustomBlock(blockId, 'imagePreview', url);
+      toast("Image uploaded ✓", "success");
+    } catch { toast("Upload failed.", "error"); }
+    finally {
+      setUploadingBlockImage(p => ({ ...p, [blockId]: false }));
+      if (e.target) e.target.value = "";
+    }
+  };
+
+  // Native HTML5 drag & drop reordering — no external library required.
+  const handleBlockDragStart = (blockId) => setDraggedBlockId(blockId);
+  const handleBlockDragOver = (e, overId) => {
+    e.preventDefault();
+    if (!draggedBlockId || draggedBlockId === overId) return;
+    setCustomBlocks(prev => {
+      const from = prev.findIndex(b => (b.id || b._id) === draggedBlockId);
+      const to   = prev.findIndex(b => (b.id || b._id) === overId);
+      if (from === -1 || to === -1 || from === to) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  };
+  const handleBlockDragEnd = () => setDraggedBlockId(null);
+
   const addAlsoBought = () => {
     if (!coursePicker) return;
     if (alsoBoughtIds.includes(coursePicker)) { toast("Already added", "info"); return; }
@@ -900,6 +1031,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
       imageTestimonials,
       videoTestimonials,
       projectGallery,
+      customBlocks: customBlocks.map(({ imagePreview, ...rest }) => rest),
       alsoBoughtCourseIds: alsoBoughtIds,
     };
     try {
@@ -962,8 +1094,8 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
         <h3 className="font-bold text-gray-800 text-base mb-1">Course Preview Video</h3>
         <p className="text-xs sm:text-sm text-gray-500 mb-4">YouTube, Bunny.net Stream URL, or direct MP4. Free preview shown to non-enrolled visitors.</p>
-        <div className="grid sm:grid-cols-2 gap-4 items-start">
-          <div>
+        <div className="flex flex-col sm:flex-row gap-4 items-start">
+          <div className="flex-1 w-full">
             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Video URL</label>
             <input value={previewVideoUrl} onChange={e => setPreviewVideoUrl(e.target.value)}
               placeholder="https://www.youtube.com/watch?v=... or iframe.mediadelivery.net/embed/..."
@@ -971,16 +1103,9 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
             <p className="text-xs text-gray-400 mt-1">YouTube • Bunny Stream • Cloudinary • MP4</p>
           </div>
           {previewVideoUrl && (
-            <div>
-              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Preview</label>
-              <div className="mt-1.5 rounded-xl overflow-hidden border border-gray-200">
-                <VideoPlayer url={previewVideoUrl}/>
-                <div className={`px-3 py-1.5 flex items-center gap-2 ${ytId ? "bg-red-600" : isBunny ? "bg-orange-600" : "bg-gray-700"}`}>
-                  {ytId   && <span className="text-white text-xs font-bold">▶ YouTube detected ✓</span>}
-                  {isBunny && !ytId && <span className="text-white text-xs font-bold">🐰 Bunny.net video linked ✓</span>}
-                  {!ytId && !isBunny && <span className="text-white text-xs font-bold">🎬 Direct video ✓</span>}
-                </div>
-              </div>
+            <div className="flex flex-col items-end gap-1 flex-shrink-0 sm:ml-auto">
+              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Preview</span>
+              <CompactVideoPreview url={previewVideoUrl} width={168} height={94}/>
             </div>
           )}
         </div>
@@ -1055,13 +1180,8 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                                   className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400"/>
                               </div>
                               {hasVideo && (
-                                <div className="rounded-lg overflow-hidden border border-gray-200">
-                                  <VideoPlayer url={lec.videoUrl}/>
-                                  <div className={`px-3 py-1 flex items-center gap-1.5 ${ytLecId ? "bg-red-600" : isBunnyLec ? "bg-orange-600" : "bg-gray-700"}`}>
-                                    {ytLecId   && <span className="text-white text-xs font-semibold">YouTube ✓</span>}
-                                    {isBunnyLec && !ytLecId && <span className="text-white text-xs font-semibold">🐰 Bunny.net ✓</span>}
-                                    {isDirLec  && !ytLecId && !isBunnyLec && <span className="text-white text-xs font-semibold">🎬 Direct video ✓</span>}
-                                  </div>
+                                <div className="flex justify-end">
+                                  <CompactVideoPreview url={lec.videoUrl} width={140} height={80}/>
                                 </div>
                               )}
                             </div>
@@ -1135,8 +1255,8 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                   </div>
                   <button onClick={() => deleteVideoTestimonial(t.id || t._id)} className="text-red-400 hover:text-red-600 text-sm ml-2 flex-shrink-0">✕</button>
                 </div>
-                <div className="rounded-lg overflow-hidden border border-gray-100">
-                  <VideoPlayer url={t.videoUrl}/>
+                <div className="flex justify-end">
+                  <CompactVideoPreview url={t.videoUrl} width={140} height={80}/>
                 </div>
               </div>
             ))}
@@ -1201,8 +1321,8 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
             </div>
           )}
           {videoInputMode === 'url' && videoPreviewUrl && (
-            <div className="rounded-lg overflow-hidden border border-gray-200">
-              <VideoPlayer url={videoPreviewUrl}/>
+            <div className="flex justify-end">
+              <CompactVideoPreview url={videoPreviewUrl} width={168} height={94}/>
             </div>
           )}
           <Btn onClick={addVideoTestimonial} size="sm" disabled={uploadingVideoTestimonial}>
@@ -1260,6 +1380,98 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* ─────────────────────────────────────────────────────────────────
+          CUSTOM CONTENT BLOCKS — flexible, reusable, draggable sections.
+          Each block: Heading, Sub Heading, Video URL (YouTube/Bunny/MP4),
+          and an Image (upload or URL, used as a fallback if no video is
+          set). Duplicate a block to reuse the same layout elsewhere on the
+          page; drag the ☰ handle to reorder. These render directly on the
+          course landing page in this exact order.
+      ───────────────────────────────────────────────────────────────── */}
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
+        <SectionHeader title="🧩 Custom Content Blocks" action={<Btn size="sm" onClick={addCustomBlock}>+ Add Block</Btn>}/>
+        <p className="text-sm text-gray-500 mb-4">
+          Flexible sections — heading, sub heading, and a video or image. Drag the ☰ handle to reorder,
+          duplicate a block to reuse it again elsewhere. These render directly on the course landing page.
+        </p>
+        {customBlocks.length === 0 ? (
+          <EmptyState
+            icon="🧩"
+            title="No custom blocks yet"
+            body="Add a block to feature extra media, announcements, or bonus content on the course page."
+            action={<Btn size="sm" onClick={addCustomBlock}>+ Add Block</Btn>}
+          />
+        ) : (
+          <div className="space-y-3">
+            {customBlocks.map((block) => {
+              const bId = block.id || block._id;
+              const uploading = uploadingBlockImage[bId];
+              const imgPreview = block.imagePreview || block.imageUrl;
+              const isDragging = draggedBlockId === bId;
+              return (
+                <div
+                  key={bId}
+                  draggable
+                  onDragStart={() => handleBlockDragStart(bId)}
+                  onDragOver={(e) => handleBlockDragOver(e, bId)}
+                  onDrop={(e) => e.preventDefault()}
+                  onDragEnd={handleBlockDragEnd}
+                  className={`border rounded-xl p-4 transition ${isDragging ? "border-purple-400 bg-purple-50/60 opacity-60" : "border-gray-200 bg-gray-50"}`}
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 text-sm select-none" title="Drag to reorder">☰</span>
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex-1">Content Block</span>
+                    <button onClick={() => duplicateCustomBlock(bId)} className="text-xs font-semibold text-purple-600 hover:text-purple-800 transition px-2 py-1 rounded hover:bg-purple-100">⧉ Duplicate</button>
+                    <button onClick={() => deleteCustomBlock(bId)} className="text-red-400 hover:text-red-600 transition text-xs px-2 py-1 rounded hover:bg-red-50">✕ Remove</button>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-3 mb-3">
+                    <Input label="Heading" value={block.heading || ""} onChange={v => updateCustomBlock(bId, "heading", v)} placeholder="e.g. Meet Your Mentors"/>
+                    <Input label="Sub Heading" value={block.subheading || ""} onChange={v => updateCustomBlock(bId, "subheading", v)} placeholder="e.g. A quick word before you enroll"/>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-4 items-start">
+                    <div>
+                      <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">
+                        Video URL <span className="text-gray-400 font-normal">(optional)</span>
+                      </label>
+                      <input value={block.videoUrl || ""} onChange={e => updateCustomBlock(bId, "videoUrl", e.target.value)}
+                        placeholder="YouTube, Bunny.net, or direct MP4 URL"
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"/>
+                      {block.videoUrl && (
+                        <div className="flex justify-end mt-2">
+                          <CompactVideoPreview url={block.videoUrl} width={150} height={84}/>
+                        </div>
+                      )}
+                    </div>
+                    <div>
+                      <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">
+                        Image <span className="text-gray-400 font-normal">(used if no video)</span>
+                      </label>
+                      <div className="flex items-start gap-3">
+                        <div className="w-20 h-20 flex-shrink-0 relative">
+                          <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-purple-400 transition cursor-pointer group"
+                            onClick={() => blockImageRefs.current[bId]?.click()}>
+                            {imgPreview
+                              ? <img src={imgPreview} alt="Preview" className="w-full h-full object-cover"/>
+                              : <div className="w-full h-full flex items-center justify-center"><span className="text-xl">🖼️</span></div>}
+                            <UploadOverlay uploading={uploading}/>
+                          </div>
+                          <input ref={el => (blockImageRefs.current[bId] = el)} type="file" accept="image/*" className="hidden" onChange={e => handleCustomBlockImageFile(e, bId)}/>
+                        </div>
+                        <input value={block.imageUrl || ""} onChange={e => updateCustomBlock(bId, "imageUrl", e.target.value)}
+                          placeholder="Or paste image URL"
+                          className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"/>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
