@@ -1,7 +1,8 @@
 import axios from "axios";
+import { API_BASE_URL } from "../config/apiBase";
 
 const API = axios.create({
-  baseURL: (process.env.REACT_APP_API_URL || "https://my-course-backend-8u69.onrender.com/api").replace(/\/$/, ""),
+  baseURL: API_BASE_URL,
 });
 
 API.interceptors.request.use((config) => {

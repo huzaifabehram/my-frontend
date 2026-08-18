@@ -1,9 +1,9 @@
 // src/context/CoursesContext.jsx
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 import axios from "axios";
+import { API_BASE_URL } from "../config/apiBase";
 
-// ⚠️ USES SAME BASE URL AS AuthContext
-const BASE_URL = process.env.REACT_APP_API_URL || "https://my-course-backend-8u69.onrender.com/api";
+const BASE_URL = API_BASE_URL;
 
 const API = axios.create({
   baseURL: BASE_URL,

@@ -2,9 +2,10 @@
 // ─── Central Axios instance — automatically attaches JWT token ────────────────
 
 import axios from "axios";
+import { API_BASE_URL } from "../config/apiBase";
 
 const api = axios.create({
-  baseURL: "REACT_APP_API_URL=https://api.motiviam.com/api", // your backend URL
+  baseURL: API_BASE_URL,
   headers: { "Content-Type": "application/json" },
 });
 
