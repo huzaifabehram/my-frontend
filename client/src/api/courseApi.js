@@ -2,7 +2,7 @@
 import axios from "axios";
 
 // Use your deployed backend URL
-const API = axios.create({ baseURL: "https://my-course-backend-8u69.onrender.com/api" });
+const API = axios.create({ baseURL: "REACT_APP_API_URL=https://api.motiviam.com/api" });
 
 // Attach JWT token automatically
 API.interceptors.request.use((req) => {
