@@ -45,6 +45,7 @@ import {
 import { useAuth } from "../context/AuthContext";
 import { useInstructorCourses } from "../hooks/useInstructorCourses";
 import { useCourses } from '../context/CoursesContext';
+import ThemeEditor from './ThemeEditor';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STATIC CHART DATA
@@ -435,9 +436,10 @@ const NAV_ITEMS = [
   { to: "/instructor/create",    label: "Create Course", icon: "＋" },
   { to: "/instructor/analytics", label: "Analytics",     icon: "↗" },
   { to: "/instructor/profile",   label: "Profile",       icon: "◉" },
+  { to: "/instructor/theme-editor", label: "Theme Editor", icon: "🎨", themeEditorOnly: true },
 ];
 
-function Sidebar({ instructor, collapsed, setCollapsed, isMobile }) {
+function Sidebar({ instructor, collapsed, setCollapsed, isMobile, hasThemeAccess }) {
   const navigate = useNavigate();
   const { logout } = useAuth();
   return (
@@ -469,7 +471,7 @@ function Sidebar({ instructor, collapsed, setCollapsed, isMobile }) {
         </div>
       )}
       <nav className="flex-1 overflow-y-auto py-3 px-2 flex flex-col gap-1">
-        {NAV_ITEMS.map((item) => (
+        {NAV_ITEMS.filter((item) => !item.themeEditorOnly || hasThemeAccess).map((item) => (
           <NavLink key={item.to} to={item.to} end={item.exact} onClick={() => isMobile && setCollapsed(true)}
             className={({ isActive }) =>
               `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 ${isActive ? "bg-purple-600 text-white" : "text-gray-400 hover:bg-white/10 hover:text-white"}`}>
@@ -1985,9 +1987,10 @@ function Layout({ children, sidebarWidth, isMobile }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function InstructorDashboard() {
-  const { user } = useAuth();
+  const { user, API: api } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [isMobile,  setIsMobile]  = useState(window.innerWidth < 768);
+  const [hasThemeAccess, setHasThemeAccess] = useState(false);
   const { toasts, add: toast }    = useToast();
   const { courses, loading, createCourse, updateCourse, deleteCourse, togglePublish } = useInstructorCourses();
   const { syncCreated, syncUpdated, syncDeleted } = useCourses();
@@ -2001,6 +2004,10 @@ export default function InstructorDashboard() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
+  useEffect(() => {
+    api.get("/theme/access").then((r) => setHasThemeAccess(r.data?.hasAccess === true)).catch(() => setHasThemeAccess(false));
+  }, [api]);
+
   const sidebarWidth = isMobile ? 0 : collapsed ? 64 : 230;
 
   return (
@@ -2013,7 +2020,7 @@ export default function InstructorDashboard() {
         main { will-change: margin-left; }
       `}</style>
 
-      <Sidebar  instructor={user} collapsed={collapsed} setCollapsed={setCollapsed} isMobile={isMobile}/>
+      <Sidebar  instructor={user} collapsed={collapsed} setCollapsed={setCollapsed} isMobile={isMobile} hasThemeAccess={hasThemeAccess}/>
       <TopBar   instructor={user} sidebarWidth={sidebarWidth} isMobile={isMobile} onMenuClick={() => setCollapsed(false)}/>
 
       <Layout sidebarWidth={sidebarWidth} isMobile={isMobile}>
