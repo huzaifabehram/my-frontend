@@ -1438,9 +1438,10 @@ export default function CourseLandingPage() {
                   <p className="text-[#9e9789] text-base md:text-lg">Loading instructor...</p>
                 ) : (
                   <div className="border border-[#ece6dd] rounded-2xl p-5 md:p-8 bg-[#f8f4ed] w-full">
-                    {/* Photo left, stats beside it */}
-                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 md:gap-10">
-                      <div className="w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden bg-[#f0ebe3] border-4 border-white shadow-md flex-shrink-0">
+                    {/* PROFILE ROW: circular photo (left) + statistics (immediately beside it, NOT
+                        stretched to the far edge and NOT stacked underneath on desktop) */}
+                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 md:gap-8">
+                      <div className="w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden bg-[#f0ebe3] border-4 border-white shadow-md flex-shrink-0" style={{ aspectRatio: '1 / 1' }}>
                         {instructor.image && instructor.image.startsWith('http') ? (
                           <img src={instructor.image} alt={instructor.name} className="w-full h-full object-cover" />
                         ) : (
@@ -1450,22 +1451,29 @@ export default function CourseLandingPage() {
                         )}
                       </div>
 
-                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 flex-1 w-full">
+                      {/* Statistics — compact, auto-width, anchored right next to the photo */}
+                      <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:pt-1 flex-shrink-0">
                         {[
-                          { label: 'Total Rating', value: instructor.rating > 0 ? instructor.rating.toFixed(1) : '0' },
-                          { label: 'Reviews', value: formatNumber(instructor.reviews) },
-                          { label: 'Students', value: formatNumber(instructor.students) },
-                          { label: 'Courses', value: formatNumber(instructor.courses) },
-                        ].map((stat) => (
-                          <div key={stat.label} className="bg-white rounded-xl border border-[#ece6dd] px-3 md:px-4 py-3 text-center sm:text-left">
-                            <p className="text-lg md:text-2xl font-bold text-[#1a1208]" style={{ fontFamily: "'Playfair Display', serif" }}>{stat.value}</p>
-                            <p className="text-xs md:text-sm text-[#9e9789] font-medium mt-0.5">{stat.label}</p>
-                          </div>
-                        ))}
+                          { label: 'Total Rating', value: instructor.rating > 0 ? instructor.rating.toFixed(1) : '0', Icon: Star },
+                          { label: 'Reviews', value: formatNumber(instructor.reviews), Icon: MessageCircle },
+                          { label: 'Students', value: formatNumber(instructor.students), Icon: Users },
+                          { label: 'Courses', value: formatNumber(instructor.courses), Icon: BookOpen },
+                        ].map((stat) => {
+                          const StatIcon = stat.Icon;
+                          return (
+                            <div key={stat.label} className="text-center sm:text-left">
+                              <p className="text-xs md:text-sm text-[#9e9789] font-medium">{stat.label}</p>
+                              <p className="flex items-center justify-center sm:justify-start gap-1.5 text-lg md:text-xl font-bold text-[#1a1208] mt-0.5" style={{ fontFamily: "'Playfair Display', serif" }}>
+                                <StatIcon size={16} className="text-[#e8540a] flex-shrink-0" fill={StatIcon === Star ? 'currentColor' : 'none'} />
+                                {stat.value}
+                              </p>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
 
-                    {/* Name, title, bio/description below */}
+                    {/* INSTRUCTOR INFORMATION: name, title, description — below the profile row */}
                     <div className="mt-6 md:mt-8 pt-6 md:pt-8 border-t border-[#ece6dd] text-center sm:text-left">
                       <p className="font-bold text-[#1a1208] text-xl md:text-2xl leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>
                         {instructor.name}
