@@ -1438,17 +1438,15 @@ export default function CourseLandingPage() {
                   <p className="text-[#9e9789] text-base md:text-lg">Loading instructor...</p>
                 ) : (
                   <div className="border border-[#ece6dd] rounded-2xl p-5 md:p-8 bg-[#f8f4ed] w-full">
-                    {/* PROFILE ROW: circular photo (left) + statistics (immediately beside it, NOT
-                        stretched to the far edge and NOT stacked underneath on desktop) */}
                     {/* PROFILE ROW — two columns side by side at ALL breakpoints (never stacks
                         the photo above the stats, even on mobile):
                           LEFT column  = circular photo, with Name + Title directly beneath it
                           RIGHT column = Total Rating / Reviews / Students / Courses, icons
                                          aligned in a straight sequence with each other */}
-                    <div className="flex flex-row items-start gap-4 sm:gap-6 md:gap-10">
+                    <div className="flex flex-row items-start gap-8 sm:gap-12 md:gap-16">
                       {/* LEFT: photo + name + title, stacked as one column */}
-                      <div className="flex flex-col items-center flex-shrink-0 w-24 sm:w-32 md:w-40">
-                        <div className="w-24 h-24 sm:w-32 sm:h-32 md:w-40 md:h-40 rounded-full overflow-hidden bg-[#f0ebe3] border-4 border-white shadow-md flex-shrink-0" style={{ aspectRatio: '1 / 1' }}>
+                      <div className="flex flex-col items-center flex-shrink-0 w-28 sm:w-36 md:w-44">
+                        <div className="w-28 h-28 sm:w-36 sm:h-36 md:w-44 md:h-44 rounded-full overflow-hidden bg-[#f0ebe3] border-4 border-white shadow-md flex-shrink-0" style={{ aspectRatio: '1 / 1' }}>
                           {instructor.image && instructor.image.startsWith('http') ? (
                             <img src={instructor.image} alt={instructor.name} className="w-full h-full object-cover" />
                           ) : (
@@ -1457,11 +1455,11 @@ export default function CourseLandingPage() {
                             </div>
                           )}
                         </div>
-                        <p className="mt-3 font-bold text-[#1a1208] text-sm sm:text-lg md:text-xl leading-tight text-center break-words" style={{ fontFamily: "'Playfair Display', serif" }}>
+                        <p className="mt-3 font-bold text-[#1a1208] text-base sm:text-xl md:text-2xl leading-tight text-center break-words" style={{ fontFamily: "'Playfair Display', serif" }}>
                           {instructor.name}
                         </p>
                         {instructor.title && (
-                          <p className="mt-1 text-xs sm:text-sm md:text-base text-[#9e9789] font-medium text-center break-words">{instructor.title}</p>
+                          <p className="mt-1 text-sm sm:text-base md:text-lg text-[#9e9789] font-medium text-center break-words">{instructor.title}</p>
                         )}
                       </div>
 
@@ -1477,7 +1475,7 @@ export default function CourseLandingPage() {
                           return (
                             <div key={stat.label} className="flex items-center gap-3">
                               <StatIcon size={16} className="text-[#e8540a] flex-shrink-0" fill={StatIcon === Star ? 'currentColor' : 'none'} />
-                              <span className="text-xs sm:text-sm md:text-base text-[#6b5e4e] w-16 sm:w-20 md:w-24 flex-shrink-0">{stat.label}</span>
+                              <span className="text-xs sm:text-sm md:text-base text-[#6b5e4e] w-20 sm:w-24 md:w-28 flex-shrink-0 whitespace-nowrap">{stat.label}</span>
                               <span className="text-xs sm:text-sm md:text-base font-semibold text-[#1a1208]">{stat.value}</span>
                             </div>
                           );
