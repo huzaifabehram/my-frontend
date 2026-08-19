@@ -31,6 +31,18 @@
 // ─── FIX 8: Instructor image now displays the FULL uploaded picture, uncropped, inside an
 //            edge-to-edge SQUARE frame (aspect-ratio 1 / 1, object-contain, no rounding),
 //            instead of the previous cropped 16:6 banner crop.
+// ─── UX FIX 9: Removed ellipsis/truncation from course content titles, section titles and
+//            the breadcrumb — long text now wraps naturally with consistent spacing instead
+//            of being clipped. Free Lecture badge stays top-aligned regardless of how many
+//            lines the title wraps to.
+// ─── UX FIX 10: Header mobile menu trigger is now a real 3-line hamburger icon (was a
+//            rotated chevron that looked like an arrow).
+// ─── UX FIX 11: Instructor section rebuilt to a circular photo + stat-grid layout (photo
+//            left / stats beside it on desktop, stacked on mobile), with the instructor's
+//            bio/description now actually rendered underneath.
+// ─── UX FIX 12: Reviews header now reads "★ rating • X ratings". Review cards are equal
+//            height (a long review no longer stretches its card — it scrolls internally via
+//            "Show more") and are laid out as an arrow-free horizontal swipe/scroll slider.
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Share2, Bookmark, ThumbsUp, Volume2, VolumeX, ArrowLeft } from 'lucide-react';
@@ -587,57 +599,96 @@ function CourseThumbnail({ course }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TEXT REVIEWS LIST — Udemy-style vertical cards (no slider/arrow controls)
+// SINGLE REVIEW CARD — fixed height so every visible card lines up. Longer
+// reviews never stretch the card: the text is clamped, and "Show more" reveals
+// the rest inside an internal scroll area instead of growing the card itself.
+// ─────────────────────────────────────────────────────────────────────────────
+function ReviewCard({ review }) {
+  const [expanded, setExpanded] = useState(false);
+  const isLong = review.text && review.text.length > 140;
+
+  return (
+    <div
+      className="flex-shrink-0 w-[280px] sm:w-[320px] h-[300px] bg-white rounded-2xl shadow-sm hover:shadow-md transition border border-[#ece6dd] p-5 flex flex-col"
+      style={{ scrollSnapAlign: 'start' }}
+    >
+      <div className="flex items-start gap-3 mb-3 flex-shrink-0">
+        <div
+          className="w-11 h-11 rounded-full bg-[#e8540a] text-white flex items-center justify-center font-bold text-lg flex-shrink-0 overflow-hidden"
+          style={{ fontFamily: "'Playfair Display', serif" }}
+        >
+          {review.avatar ? (
+            <img src={review.avatar} alt={review.author} className="w-full h-full object-cover" />
+          ) : (
+            review.author.charAt(0).toUpperCase()
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-bold text-[#1a1208] text-sm leading-snug break-words">{review.author}</p>
+          <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+            <div className="flex gap-0.5">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Star
+                  key={i}
+                  size={12}
+                  className="text-[#f9c97a]"
+                  fill={i < Math.round(review.rating) ? 'currentColor' : 'none'}
+                />
+              ))}
+            </div>
+            {review.date && <span className="text-xs text-[#9e9789]">{review.date}</span>}
+          </div>
+        </div>
+      </div>
+
+      <div className={`flex-1 min-h-0 ${expanded ? 'overflow-y-auto pr-1' : 'overflow-hidden'}`}>
+        {review.text ? (
+          <p className={`text-[#3d3020] text-sm leading-relaxed break-words ${expanded ? '' : 'line-clamp-5'}`}>
+            {review.text}
+          </p>
+        ) : (
+          <p className="text-[#b0a898] text-sm italic">No written feedback provided.</p>
+        )}
+      </div>
+
+      {isLong && (
+        <button
+          onClick={() => setExpanded((e) => !e)}
+          className="text-[#e8540a] hover:text-[#c94708] font-semibold text-xs mt-2 flex-shrink-0 bg-transparent border-none cursor-pointer p-0 self-start"
+        >
+          {expanded ? 'Show less' : 'Show more'}
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TEXT REVIEWS SLIDER — horizontal swipe/scroll carousel, no arrow controls.
+// Cards are equal height (see ReviewCard). Scrollbar hidden via .reviews-scroll.
 // ─────────────────────────────────────────────────────────────────────────────
 function TextReviewsList({ reviews }) {
   if (!reviews.length) return null;
 
   return (
-    <div className="flex flex-col gap-4">
-      {reviews.map((review) => (
-        <div
-          key={review.key}
-          className="w-full bg-white rounded-2xl shadow-sm hover:shadow-md transition border border-[#ece6dd] p-5 flex flex-col gap-3"
-        >
-          <div className="flex items-start gap-3 md:gap-4">
-            <div
-              className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-[#e8540a] text-white flex items-center justify-center font-bold text-lg md:text-xl flex-shrink-0 overflow-hidden"
-              style={{ fontFamily: "'Playfair Display', serif" }}
-            >
-              {review.avatar ? (
-                <img src={review.avatar} alt={review.author} className="w-full h-full object-cover" />
-              ) : (
-                review.author.charAt(0).toUpperCase()
-              )}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="font-bold text-[#1a1208] text-base md:text-lg leading-tight truncate">{review.author}</p>
-              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                <div className="flex gap-0.5">
-                  {Array.from({ length: 5 }).map((_, i) => (
-                    <Star
-                      key={i}
-                      size={14}
-                      className="text-[#f9c97a]"
-                      fill={i < Math.round(review.rating) ? 'currentColor' : 'none'}
-                    />
-                  ))}
-                </div>
-                <span className="text-xs font-semibold text-[#1a1208]">{review.rating.toFixed(1)}</span>
-                {review.date && (
-                  <span className="text-xs md:text-sm text-[#9e9789]">• {review.date}</span>
-                )}
-              </div>
-            </div>
-          </div>
-          {review.text ? (
-            <p className="text-[#3d3020] text-sm md:text-base leading-relaxed">{review.text}</p>
-          ) : (
-            <p className="text-[#b0a898] text-sm italic">No written feedback provided.</p>
-          )}
-        </div>
-      ))}
-    </div>
+    <>
+      <style>{`
+        .reviews-scroll::-webkit-scrollbar { display: none; }
+      `}</style>
+      <div
+        className="reviews-scroll flex gap-4 overflow-x-auto pb-2"
+        style={{
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+          scrollSnapType: 'x proximity',
+          WebkitOverflowScrolling: 'touch',
+        }}
+      >
+        {reviews.map((review) => (
+          <ReviewCard key={review.key} review={review} />
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -944,6 +995,10 @@ export default function CourseLandingPage() {
     : null;
   const priceLabel = `PKR ${(courseData.price * 280).toLocaleString()}`;
 
+  const displayRating = courseData.rating
+    || (textReviews.length ? (textReviews.reduce((s, r) => s + r.rating, 0) / textReviews.length) : 0);
+  const displayRatingCount = courseData.reviews || textReviews.length;
+
   return (
     <div className="min-h-screen bg-[#FDFAF6] overflow-x-hidden w-full" style={{ fontFamily: "'DM Sans', sans-serif" }}>
 
@@ -1004,12 +1059,12 @@ export default function CourseLandingPage() {
                     <div key={`${lecture.sectionIdx}-${lecture.lectureIdx}`}
                       onClick={() => handleLectureClick(lecture)}
                       className="bg-white bg-opacity-5 hover:bg-opacity-10 border border-[#3d3020] rounded-lg p-3 md:p-4 cursor-pointer transition group">
-                      <div className="flex items-center gap-3 md:gap-4">
-                        <div className="flex-shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-full bg-[#e8540a] group-hover:bg-[#c94708] flex items-center justify-center transition">
+                      <div className="flex items-start gap-3 md:gap-4">
+                        <div className="flex-shrink-0 w-8 h-8 md:w-10 md:h-10 rounded-full bg-[#e8540a] group-hover:bg-[#c94708] flex items-center justify-center transition mt-0.5">
                           <Play size={14} className="text-white ml-0.5" fill="currentColor" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="font-medium text-sm md:text-base text-white group-hover:text-[#f0a070] transition truncate">{lecture.title}</p>
+                          <p className="font-medium text-sm md:text-base text-white group-hover:text-[#f0a070] transition leading-relaxed break-words">{lecture.title}</p>
                           <p className="text-xs md:text-sm text-[#9e8e7a] mt-1">{lecture.sectionTitle}</p>
                         </div>
                       </div>
@@ -1069,8 +1124,12 @@ export default function CourseLandingPage() {
       {/* HEADER */}
       <header className="sticky top-0 z-40 bg-white shadow-sm w-full border-b border-[#ece6dd]">
         <div className="max-w-7xl mx-auto px-4 lg:px-6 py-3 md:py-4 flex items-center justify-between">
-          <button className="lg:hidden p-2" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
-            {mobileMenuOpen ? <X size={24} /> : <ChevronDown size={24} className="rotate-[-90deg]" />}
+          <button
+            className="lg:hidden p-2 -ml-2 bg-transparent border-none cursor-pointer text-[#1a1208]"
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle navigation menu"
+          >
+            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
           <div className="absolute left-1/2 transform -translate-x-1/2 lg:relative lg:left-auto lg:transform-none">
             <button onClick={() => handleNavigate('/')}
@@ -1106,14 +1165,14 @@ export default function CourseLandingPage() {
         )}
       </header>
 
-      {/* BREADCRUMB */}
+      {/* BREADCRUMB — wraps naturally instead of truncating on narrow screens */}
       <div className="bg-white border-b border-[#ece6dd]">
-        <div className="max-w-7xl mx-auto px-4 lg:px-6 py-2 md:py-3 text-sm md:text-base text-[#9e9789] w-full flex items-center gap-2 overflow-x-auto">
-          <button onClick={() => handleNavigate('/')} className="hover:text-[#e8540a] bg-transparent border-none cursor-pointer text-[#9e9789] p-0 transition whitespace-nowrap">Development</button>
+        <div className="max-w-7xl mx-auto px-4 lg:px-6 py-2 md:py-3 text-sm md:text-base text-[#9e9789] w-full flex flex-wrap items-center gap-x-2 gap-y-1">
+          <button onClick={() => handleNavigate('/')} className="hover:text-[#e8540a] bg-transparent border-none cursor-pointer text-[#9e9789] p-0 transition">Development</button>
           <ChevronDown size={16} className="rotate-[-90deg] text-[#ccc5b8] flex-shrink-0" />
-          <button onClick={() => handleNavigate('/courses')} className="hover:text-[#e8540a] bg-transparent border-none cursor-pointer text-[#9e9789] p-0 transition whitespace-nowrap">{courseData.category || 'Courses'}</button>
+          <button onClick={() => handleNavigate('/courses')} className="hover:text-[#e8540a] bg-transparent border-none cursor-pointer text-[#9e9789] p-0 transition">{courseData.category || 'Courses'}</button>
           <ChevronDown size={16} className="rotate-[-90deg] text-[#ccc5b8] flex-shrink-0" />
-          <span className="text-[#1a1208] font-semibold truncate">{courseData.title}</span>
+          <span className="text-[#1a1208] font-semibold break-words">{courseData.title}</span>
         </div>
       </div>
 
@@ -1246,7 +1305,7 @@ export default function CourseLandingPage() {
                 </div>
               )}
 
-              {/* COURSE CONTENT */}
+              {/* COURSE CONTENT — titles wrap naturally, no ellipsis/truncation */}
               {sections.length > 0 && (
                 <>
                   <div className="mb-4 md:mb-6">
@@ -1265,11 +1324,11 @@ export default function CourseLandingPage() {
                         <div key={idx} className="border border-[#ece6dd] rounded-xl overflow-hidden hover:border-[#ddd5c4] transition w-full">
                           <button
                             onClick={() => setExpandedSection(isExpanded ? expandedSection.filter(i => i !== idx) : [...expandedSection, idx])}
-                            className="w-full px-4 md:px-5 py-3 md:py-4 flex items-center justify-between bg-[#f8f4ed] hover:bg-[#f0ebe3] transition border-none cursor-pointer">
-                            <div className="flex items-center gap-2 md:gap-3 flex-1 text-left min-w-0">
-                              <ChevronDown size={18} className={`text-[#9e9789] transition-transform flex-shrink-0 ${isExpanded ? 'rotate-180' : ''}`} />
+                            className="w-full px-4 md:px-5 py-3 md:py-4 flex items-start justify-between bg-[#f8f4ed] hover:bg-[#f0ebe3] transition border-none cursor-pointer text-left">
+                            <div className="flex items-start gap-2 md:gap-3 flex-1 text-left min-w-0">
+                              <ChevronDown size={18} className={`text-[#9e9789] transition-transform flex-shrink-0 mt-0.5 ${isExpanded ? 'rotate-180' : ''}`} />
                               <div className="flex-1 min-w-0">
-                                <h3 className="font-bold text-[#1a1208] text-base md:text-lg truncate">{section.title}</h3>
+                                <h3 className="font-bold text-[#1a1208] text-base md:text-lg leading-snug break-words">{section.title}</h3>
                                 <p className="text-sm text-[#9e9789] mt-1">{section.lectures || 0} lectures{section.duration ? ` • ${section.duration}` : ''}</p>
                               </div>
                             </div>
@@ -1291,18 +1350,18 @@ export default function CourseLandingPage() {
                                     role={isClickable ? 'button' : undefined}
                                     tabIndex={isClickable ? 0 : undefined}
                                     aria-label={isClickable ? `Play free lecture: ${lecture.title}` : undefined}
-                                    className={`px-4 md:px-6 py-3 md:py-3.5 border-b border-[#f0ebe3] last:border-b-0 flex items-center justify-between transition ${isClickable ? 'cursor-pointer hover:bg-[#fbf8f3] focus:outline-none focus:bg-[#fbf8f3]' : ''}`}
+                                    className={`px-4 md:px-6 py-3 md:py-3.5 border-b border-[#f0ebe3] last:border-b-0 flex items-start justify-between gap-3 transition ${isClickable ? 'cursor-pointer hover:bg-[#fbf8f3] focus:outline-none focus:bg-[#fbf8f3]' : ''}`}
                                   >
-                                    <div className="flex items-center gap-2 md:gap-3 flex-1 min-w-0">
-                                      <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-[#f0ebe3] flex items-center justify-center flex-shrink-0">
+                                    <div className="flex items-start gap-2 md:gap-3 flex-1 min-w-0">
+                                      <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-[#f0ebe3] flex items-center justify-center flex-shrink-0 mt-0.5">
                                         {lecture.type === 'video'
                                           ? <Play size={12} className="text-[#6b5e4e] ml-0.5" />
                                           : <BookOpen size={12} className="text-[#6b5e4e]" />}
                                       </div>
-                                      <p className="text-[#1a1208] text-sm md:text-base font-medium truncate">{lecture.title}</p>
+                                      <p className="text-[#1a1208] text-sm md:text-base font-medium leading-relaxed break-words">{lecture.title}</p>
                                     </div>
-                                    <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
-                                      {lecture.duration && <span className="text-sm text-[#9e9789]">{lecture.duration}</span>}
+                                    <div className="flex items-center gap-2 md:gap-3 flex-shrink-0 mt-0.5">
+                                      {lecture.duration && <span className="text-sm text-[#9e9789] whitespace-nowrap">{lecture.duration}</span>}
                                       {isClickable && (
                                         <span className="flex items-center bg-[#e8540a] text-white font-semibold text-xs md:text-sm whitespace-nowrap px-2.5 py-1.5 rounded-full">
                                           Free Lecture
@@ -1372,16 +1431,16 @@ export default function CourseLandingPage() {
                 </div>
               )}
 
-              {/* INSTRUCTOR */}
+              {/* INSTRUCTOR — circular photo + stat grid beside it (desktop), stacked (mobile) */}
               <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full" ref={instructorSectionRef} id="instructor-section">
                 <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#1a1208] mb-6 md:mb-8" style={{ fontFamily: "'Playfair Display', serif" }}>Instructor</h2>
                 {loadingInstructor ? (
                   <p className="text-[#9e9789] text-base md:text-lg">Loading instructor...</p>
                 ) : (
-                  <>
-                    {/* Circular profile image on the left, stats to the right */}
-                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 md:gap-8 mb-6 md:mb-8">
-                      <div className="w-28 h-28 md:w-36 md:h-36 rounded-full overflow-hidden bg-[#f0ebe3] border border-[#ece6dd] flex-shrink-0">
+                  <div className="border border-[#ece6dd] rounded-2xl p-5 md:p-8 bg-[#f8f4ed] w-full">
+                    {/* Photo left, stats beside it */}
+                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 md:gap-10">
+                      <div className="w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden bg-[#f0ebe3] border-4 border-white shadow-md flex-shrink-0">
                         {instructor.image && instructor.image.startsWith('http') ? (
                           <img src={instructor.image} alt={instructor.name} className="w-full h-full object-cover" />
                         ) : (
@@ -1391,72 +1450,77 @@ export default function CourseLandingPage() {
                         )}
                       </div>
 
-                      <div className="flex-1 min-w-0 text-center sm:text-left">
-                        <p className="font-bold text-[#1a1208] text-xl md:text-2xl leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>
-                          {instructor.name}
-                        </p>
-                        {instructor.title && (
-                          <p className="mt-1 mb-3 md:mb-4 text-sm md:text-base text-[#9e9789] font-medium">{instructor.title}</p>
-                        )}
-                        <div className="flex flex-col gap-2 items-center sm:items-start">
-                          {[
-                            { icon: '⭐', text: `${instructor.rating > 0 ? instructor.rating.toFixed(1) : '0'} Total Rating` },
-                            { icon: '📝', text: `${formatNumber(instructor.reviews)} Reviews` },
-                            { icon: '👨‍🎓', text: `${formatNumber(instructor.students)} Students` },
-                            { icon: '📚', text: `${formatNumber(instructor.courses)} Courses` },
-                          ].map((stat) => (
-                            <div key={stat.text} className="flex items-center gap-2 text-sm md:text-base text-[#3d3020]">
-                              <span className="text-base md:text-lg" aria-hidden="true">{stat.icon}</span>
-                              <span className="font-semibold">{stat.text}</span>
-                            </div>
-                          ))}
-                        </div>
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4 flex-1 w-full">
+                        {[
+                          { label: 'Total Rating', value: instructor.rating > 0 ? instructor.rating.toFixed(1) : '0' },
+                          { label: 'Reviews', value: formatNumber(instructor.reviews) },
+                          { label: 'Students', value: formatNumber(instructor.students) },
+                          { label: 'Courses', value: formatNumber(instructor.courses) },
+                        ].map((stat) => (
+                          <div key={stat.label} className="bg-white rounded-xl border border-[#ece6dd] px-3 md:px-4 py-3 text-center sm:text-left">
+                            <p className="text-lg md:text-2xl font-bold text-[#1a1208]" style={{ fontFamily: "'Playfair Display', serif" }}>{stat.value}</p>
+                            <p className="text-xs md:text-sm text-[#9e9789] font-medium mt-0.5">{stat.label}</p>
+                          </div>
+                        ))}
                       </div>
                     </div>
 
-                    {(instructor.location || instructor.website || instructor.twitter || instructor.linkedin) && (
-                      <div className="flex flex-wrap gap-3 text-sm text-[#9e9789]">
-                        {instructor.location && (
-                          <span className="flex items-center gap-1.5"><Globe size={14} className="text-[#e8540a]" />{instructor.location}</span>
-                        )}
-                        {instructor.website && (
-                          <a href={instructor.website.startsWith('http') ? instructor.website : `https://${instructor.website}`}
-                            target="_blank" rel="noopener noreferrer"
-                            className="text-[#e8540a] hover:underline">Website</a>
-                        )}
-                        {instructor.twitter && <span>Twitter: {instructor.twitter}</span>}
-                        {instructor.linkedin && (
-                          <a href={instructor.linkedin.startsWith('http') ? instructor.linkedin : `https://${instructor.linkedin}`}
-                            target="_blank" rel="noopener noreferrer"
-                            className="text-[#e8540a] hover:underline">LinkedIn</a>
-                        )}
-                      </div>
-                    )}
-                  </>
+                    {/* Name, title, bio/description below */}
+                    <div className="mt-6 md:mt-8 pt-6 md:pt-8 border-t border-[#ece6dd] text-center sm:text-left">
+                      <p className="font-bold text-[#1a1208] text-xl md:text-2xl leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>
+                        {instructor.name}
+                      </p>
+                      {instructor.title && (
+                        <p className="mt-1 text-sm md:text-base text-[#9e9789] font-medium">{instructor.title}</p>
+                      )}
+                      {(instructor.description || instructor.bio) && (
+                        <p className="mt-4 text-[#3d3020] text-sm md:text-base leading-relaxed break-words whitespace-pre-line">
+                          {instructor.description || instructor.bio}
+                        </p>
+                      )}
+                      {(instructor.location || instructor.website || instructor.twitter || instructor.linkedin) && (
+                        <div className="flex flex-wrap justify-center sm:justify-start gap-3 text-sm text-[#9e9789] mt-4">
+                          {instructor.location && (
+                            <span className="flex items-center gap-1.5"><Globe size={14} className="text-[#e8540a]" />{instructor.location}</span>
+                          )}
+                          {instructor.website && (
+                            <a href={instructor.website.startsWith('http') ? instructor.website : `https://${instructor.website}`}
+                              target="_blank" rel="noopener noreferrer"
+                              className="text-[#e8540a] hover:underline">Website</a>
+                          )}
+                          {instructor.twitter && <span>Twitter: {instructor.twitter}</span>}
+                          {instructor.linkedin && (
+                            <a href={instructor.linkedin.startsWith('http') ? instructor.linkedin : `https://${instructor.linkedin}`}
+                              target="_blank" rel="noopener noreferrer"
+                              className="text-[#e8540a] hover:underline">LinkedIn</a>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
 
               {/* ─────────────────────────────────────────────────────────────
-                  TEXT REVIEWS — UDEMY-STYLE CARDS (FIX 5)
-                  Every review card now always shows:
-                    • Author initial avatar (orange circle) or profile image
-                    • Author name + star rating + date
-                    • Review text body — previously missing due to narrow field
-                      matching in normalizeReview; now catches 15+ field names
-                  The "already reviewed" gate is removed; anyone can post again.
-                  Displayed as a natural vertical list (no slider arrows).
+                  TEXT REVIEWS — equal-height horizontal slider (no arrows).
+                  Header reads "★ rating • X ratings". Every review card is the
+                  same size; long reviews scroll internally via "Show more"
+                  instead of stretching the card.
               ───────────────────────────────────────────────────────────── */}
               <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
-                <div className="mb-6 md:mb-8 flex items-center gap-3 md:gap-4">
-                  <Star size={36} className="text-[#f9c97a] md:w-12 md:h-12" fill="currentColor" />
-                  <div>
-                    <p className="text-3xl md:text-4xl font-bold text-[#1a1208]" style={{ fontFamily: "'Playfair Display', serif" }}>
-                      {courseData.rating || (textReviews.length ? (textReviews.reduce((s, r) => s + r.rating, 0) / textReviews.length).toFixed(1) : '—')}
-                    </p>
-                    <p className="text-sm md:text-base text-[#9e9789]">
-                      {textReviews.length > 0 ? `${formatNumber(textReviews.length)} course ${textReviews.length === 1 ? 'rating' : 'ratings'}` : 'No ratings yet'}
-                    </p>
-                  </div>
+                <div className="mb-6 md:mb-8 flex items-center gap-2">
+                  <Star size={28} className="text-[#f9c97a] flex-shrink-0" fill="currentColor" />
+                  <span className="text-2xl md:text-3xl font-bold text-[#1a1208]" style={{ fontFamily: "'Playfair Display', serif" }}>
+                    {displayRating ? displayRating.toFixed(1) : '—'}
+                  </span>
+                  {displayRatingCount > 0 && (
+                    <>
+                      <span className="text-[#9e9789] text-lg md:text-xl">•</span>
+                      <span className="text-sm md:text-base text-[#9e9789] font-medium">
+                        {formatNumber(displayRatingCount)} {displayRatingCount === 1 ? 'rating' : 'ratings'}
+                      </span>
+                    </>
+                  )}
                 </div>
 
                 {textReviews.length === 0 ? (
