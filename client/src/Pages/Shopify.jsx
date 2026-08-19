@@ -1440,7 +1440,7 @@ export default function CourseLandingPage() {
                   <div className="border border-[#ece6dd] rounded-2xl p-5 md:p-8 bg-[#f8f4ed] w-full">
                     {/* PROFILE ROW: circular photo (left) + statistics (immediately beside it, NOT
                         stretched to the far edge and NOT stacked underneath on desktop) */}
-                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 md:gap-8">
+                    <div className="flex flex-col sm:flex-row items-center sm:items-center gap-5 md:gap-8">
                       <div className="w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden bg-[#f0ebe3] border-4 border-white shadow-md flex-shrink-0" style={{ aspectRatio: '1 / 1' }}>
                         {instructor.image && instructor.image.startsWith('http') ? (
                           <img src={instructor.image} alt={instructor.name} className="w-full h-full object-cover" />
@@ -1451,8 +1451,9 @@ export default function CourseLandingPage() {
                         )}
                       </div>
 
-                      {/* Statistics — compact, auto-width, anchored right next to the photo */}
-                      <div className="grid grid-cols-2 gap-x-8 gap-y-4 sm:pt-1 flex-shrink-0">
+                      {/* Statistics — standard single-column list, vertically centered directly
+                          opposite the photo (front of the picture), plain professional typography */}
+                      <div className="flex flex-col justify-center gap-2.5 md:gap-3 flex-shrink-0">
                         {[
                           { label: 'Total Rating', value: instructor.rating > 0 ? instructor.rating.toFixed(1) : '0', Icon: Star },
                           { label: 'Reviews', value: formatNumber(instructor.reviews), Icon: MessageCircle },
@@ -1461,12 +1462,10 @@ export default function CourseLandingPage() {
                         ].map((stat) => {
                           const StatIcon = stat.Icon;
                           return (
-                            <div key={stat.label} className="text-center sm:text-left">
-                              <p className="text-xs md:text-sm text-[#9e9789] font-medium">{stat.label}</p>
-                              <p className="flex items-center justify-center sm:justify-start gap-1.5 text-lg md:text-xl font-bold text-[#1a1208] mt-0.5" style={{ fontFamily: "'Playfair Display', serif" }}>
-                                <StatIcon size={16} className="text-[#e8540a] flex-shrink-0" fill={StatIcon === Star ? 'currentColor' : 'none'} />
-                                {stat.value}
-                              </p>
+                            <div key={stat.label} className="flex items-center justify-center sm:justify-start gap-3">
+                              <StatIcon size={16} className="text-[#e8540a] flex-shrink-0" fill={StatIcon === Star ? 'currentColor' : 'none'} />
+                              <span className="text-sm md:text-base text-[#6b5e4e]">{stat.label}</span>
+                              <span className="text-sm md:text-base font-semibold text-[#1a1208]">{stat.value}</span>
                             </div>
                           );
                         })}
