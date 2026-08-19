@@ -1440,20 +1440,33 @@ export default function CourseLandingPage() {
                   <div className="border border-[#ece6dd] rounded-2xl p-5 md:p-8 bg-[#f8f4ed] w-full">
                     {/* PROFILE ROW: circular photo (left) + statistics (immediately beside it, NOT
                         stretched to the far edge and NOT stacked underneath on desktop) */}
-                    <div className="flex flex-col sm:flex-row items-center sm:items-center gap-5 md:gap-8">
-                      <div className="w-32 h-32 md:w-40 md:h-40 rounded-full overflow-hidden bg-[#f0ebe3] border-4 border-white shadow-md flex-shrink-0" style={{ aspectRatio: '1 / 1' }}>
-                        {instructor.image && instructor.image.startsWith('http') ? (
-                          <img src={instructor.image} alt={instructor.name} className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-[#e8540a]">
-                            <span className="text-white font-bold text-4xl md:text-5xl">{instructor.name?.charAt(0) || 'I'}</span>
-                          </div>
+                    {/* PROFILE ROW — two columns side by side at ALL breakpoints (never stacks
+                        the photo above the stats, even on mobile):
+                          LEFT column  = circular photo, with Name + Title directly beneath it
+                          RIGHT column = Total Rating / Reviews / Students / Courses, icons
+                                         aligned in a straight sequence with each other */}
+                    <div className="flex flex-row items-start gap-4 sm:gap-6 md:gap-10">
+                      {/* LEFT: photo + name + title, stacked as one column */}
+                      <div className="flex flex-col items-center flex-shrink-0 w-24 sm:w-32 md:w-40">
+                        <div className="w-24 h-24 sm:w-32 sm:h-32 md:w-40 md:h-40 rounded-full overflow-hidden bg-[#f0ebe3] border-4 border-white shadow-md flex-shrink-0" style={{ aspectRatio: '1 / 1' }}>
+                          {instructor.image && instructor.image.startsWith('http') ? (
+                            <img src={instructor.image} alt={instructor.name} className="w-full h-full object-cover" />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-[#e8540a]">
+                              <span className="text-white font-bold text-3xl sm:text-4xl md:text-5xl">{instructor.name?.charAt(0) || 'I'}</span>
+                            </div>
+                          )}
+                        </div>
+                        <p className="mt-3 font-bold text-[#1a1208] text-sm sm:text-lg md:text-xl leading-tight text-center break-words" style={{ fontFamily: "'Playfair Display', serif" }}>
+                          {instructor.name}
+                        </p>
+                        {instructor.title && (
+                          <p className="mt-1 text-xs sm:text-sm md:text-base text-[#9e9789] font-medium text-center break-words">{instructor.title}</p>
                         )}
                       </div>
 
-                      {/* Statistics — standard single-column list, vertically centered directly
-                          opposite the photo (front of the picture), plain professional typography */}
-                      <div className="flex flex-col justify-center gap-2.5 md:gap-3 flex-shrink-0">
+                      {/* RIGHT: statistics list — icons line up in sequence with each other */}
+                      <div className="flex flex-col justify-center gap-2.5 md:gap-3.5 flex-1 min-w-0 pt-1 sm:pt-4 md:pt-8">
                         {[
                           { label: 'Total Rating', value: instructor.rating > 0 ? instructor.rating.toFixed(1) : '0', Icon: Star },
                           { label: 'Reviews', value: formatNumber(instructor.reviews), Icon: MessageCircle },
@@ -1462,24 +1475,18 @@ export default function CourseLandingPage() {
                         ].map((stat) => {
                           const StatIcon = stat.Icon;
                           return (
-                            <div key={stat.label} className="flex items-center justify-center sm:justify-start gap-3">
+                            <div key={stat.label} className="flex items-center gap-3">
                               <StatIcon size={16} className="text-[#e8540a] flex-shrink-0" fill={StatIcon === Star ? 'currentColor' : 'none'} />
-                              <span className="text-sm md:text-base text-[#6b5e4e]">{stat.label}</span>
-                              <span className="text-sm md:text-base font-semibold text-[#1a1208]">{stat.value}</span>
+                              <span className="text-xs sm:text-sm md:text-base text-[#6b5e4e] w-16 sm:w-20 md:w-24 flex-shrink-0">{stat.label}</span>
+                              <span className="text-xs sm:text-sm md:text-base font-semibold text-[#1a1208]">{stat.value}</span>
                             </div>
                           );
                         })}
                       </div>
                     </div>
 
-                    {/* INSTRUCTOR INFORMATION: name, title, description — below the profile row */}
+                    {/* INSTRUCTOR DESCRIPTION — below the whole profile row */}
                     <div className="mt-6 md:mt-8 pt-6 md:pt-8 border-t border-[#ece6dd] text-center sm:text-left">
-                      <p className="font-bold text-[#1a1208] text-xl md:text-2xl leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>
-                        {instructor.name}
-                      </p>
-                      {instructor.title && (
-                        <p className="mt-1 text-sm md:text-base text-[#9e9789] font-medium">{instructor.title}</p>
-                      )}
                       {(instructor.description || instructor.bio) && (
                         <p className="mt-4 text-[#3d3020] text-sm md:text-base leading-relaxed break-words whitespace-pre-line">
                           {instructor.description || instructor.bio}
