@@ -587,121 +587,56 @@ function CourseThumbnail({ course }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// TEXT REVIEWS SLIDER — Udemy-style horizontal cards
+// TEXT REVIEWS LIST — Udemy-style vertical cards (no slider/arrow controls)
 // ─────────────────────────────────────────────────────────────────────────────
-function TextReviewsSlider({ reviews }) {
-  const sliderRef = useRef(null);
-  const [canScrollLeft,  setCanScrollLeft]  = useState(false);
-  const [canScrollRight, setCanScrollRight] = useState(false);
-
-  const updateScrollButtons = useCallback(() => {
-    const el = sliderRef.current;
-    if (!el) return;
-    setCanScrollLeft(el.scrollLeft > 4);
-    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 4);
-  }, []);
-
-  useEffect(() => {
-    updateScrollButtons();
-    const el = sliderRef.current;
-    if (!el) return;
-    el.addEventListener('scroll', updateScrollButtons, { passive: true });
-    window.addEventListener('resize', updateScrollButtons);
-    return () => {
-      el.removeEventListener('scroll', updateScrollButtons);
-      window.removeEventListener('resize', updateScrollButtons);
-    };
-  }, [reviews.length, updateScrollButtons]);
-
-  const scroll = (dir) => {
-    const el = sliderRef.current;
-    if (!el) return;
-    const card = el.querySelector('[data-review-card]');
-    const step = card ? card.offsetWidth + 16 : 360;
-    el.scrollBy({ left: dir * step, behavior: 'smooth' });
-  };
-
+function TextReviewsList({ reviews }) {
   if (!reviews.length) return null;
 
   return (
-    <div className="relative group">
-      {canScrollLeft && (
-        <button
-          type="button"
-          onClick={() => scroll(-1)}
-          aria-label="Previous reviews"
-          className="absolute left-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 md:w-12 md:h-12 rounded-full bg-white shadow-lg border border-[#ece6dd] flex items-center justify-center text-[#1a1208] hover:bg-[#fdf2ea] hover:text-[#e8540a] transition cursor-pointer"
+    <div className="flex flex-col gap-4">
+      {reviews.map((review) => (
+        <div
+          key={review.key}
+          className="w-full bg-white rounded-2xl shadow-sm hover:shadow-md transition border border-[#ece6dd] p-5 flex flex-col gap-3"
         >
-          <ChevronLeft size={22} />
-        </button>
-      )}
-      {canScrollRight && (
-        <button
-          type="button"
-          onClick={() => scroll(1)}
-          aria-label="Next reviews"
-          className="absolute right-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 md:w-12 md:h-12 rounded-full bg-white shadow-lg border border-[#ece6dd] flex items-center justify-center text-[#1a1208] hover:bg-[#fdf2ea] hover:text-[#e8540a] transition cursor-pointer"
-        >
-          <ChevronRight size={22} />
-        </button>
-      )}
-
-      <div
-        ref={sliderRef}
-        className="flex gap-4 overflow-x-auto px-1 py-1 scroll-smooth"
-        style={{
-          scrollSnapType: 'x mandatory',
-          WebkitOverflowScrolling: 'touch',
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-        }}
-      >
-        {reviews.map((review) => (
-          <div
-            key={review.key}
-            data-review-card
-            className="flex-shrink-0 w-[min(88vw,340px)] md:w-[380px] bg-white rounded-2xl shadow-sm hover:shadow-md transition border border-[#ece6dd] p-5 flex flex-col gap-3"
-            style={{ scrollSnapAlign: 'start' }}
-          >
-            <div className="flex items-start gap-3 md:gap-4">
-              <div
-                className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-[#e8540a] text-white flex items-center justify-center font-bold text-lg md:text-xl flex-shrink-0 overflow-hidden"
-                style={{ fontFamily: "'Playfair Display', serif" }}
-              >
-                {review.avatar ? (
-                  <img src={review.avatar} alt={review.author} className="w-full h-full object-cover" />
-                ) : (
-                  review.author.charAt(0).toUpperCase()
+          <div className="flex items-start gap-3 md:gap-4">
+            <div
+              className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-[#e8540a] text-white flex items-center justify-center font-bold text-lg md:text-xl flex-shrink-0 overflow-hidden"
+              style={{ fontFamily: "'Playfair Display', serif" }}
+            >
+              {review.avatar ? (
+                <img src={review.avatar} alt={review.author} className="w-full h-full object-cover" />
+              ) : (
+                review.author.charAt(0).toUpperCase()
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-bold text-[#1a1208] text-base md:text-lg leading-tight truncate">{review.author}</p>
+              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                <div className="flex gap-0.5">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Star
+                      key={i}
+                      size={14}
+                      className="text-[#f9c97a]"
+                      fill={i < Math.round(review.rating) ? 'currentColor' : 'none'}
+                    />
+                  ))}
+                </div>
+                <span className="text-xs font-semibold text-[#1a1208]">{review.rating.toFixed(1)}</span>
+                {review.date && (
+                  <span className="text-xs md:text-sm text-[#9e9789]">• {review.date}</span>
                 )}
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-bold text-[#1a1208] text-base md:text-lg leading-tight truncate">{review.author}</p>
-                <div className="flex items-center gap-2 mt-1 flex-wrap">
-                  <div className="flex gap-0.5">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <Star
-                        key={i}
-                        size={14}
-                        className="text-[#f9c97a]"
-                        fill={i < Math.round(review.rating) ? 'currentColor' : 'none'}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-xs font-semibold text-[#1a1208]">{review.rating.toFixed(1)}</span>
-                  {review.date && (
-                    <span className="text-xs md:text-sm text-[#9e9789]">• {review.date}</span>
-                  )}
-                </div>
-              </div>
             </div>
-            {review.text ? (
-              <p className="text-[#3d3020] text-sm md:text-base leading-relaxed line-clamp-6">{review.text}</p>
-            ) : (
-              <p className="text-[#b0a898] text-sm italic">No written feedback provided.</p>
-            )}
           </div>
-        ))}
-      </div>
+          {review.text ? (
+            <p className="text-[#3d3020] text-sm md:text-base leading-relaxed">{review.text}</p>
+          ) : (
+            <p className="text-[#b0a898] text-sm italic">No written feedback provided.</p>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
@@ -909,10 +844,15 @@ export default function CourseLandingPage() {
     }
   };
 
-  // Navigate to the dedicated Reviews Page (FIX 6 / requirement 1 & 2).
+  // Navigate to the dedicated Reviews Page for THIS course only (FIX: Show All
+  // Reviews previously could resolve to a stale/incorrect course id — this now
+  // always reads courseData._id directly at click-time, which is derived from
+  // the current route's :id via useMemo above, so it can never point at a
+  // different course.
   const goToReviewsPage = useCallback(() => {
-    if (!courseData?._id) return;
-    navigate(`/course/${courseData._id}/reviews`);
+    const currentCourseId = courseData?._id;
+    if (!currentCourseId) return;
+    navigate(`/course/${currentCourseId}/reviews`);
   }, [courseData?._id, navigate]);
 
   if (loading || fullCourseLoading) {
@@ -1042,15 +982,12 @@ export default function CourseLandingPage() {
                     }
                   }}
                   aria-label="View all course reviews"
-                  className="inline-flex items-center gap-2 cursor-pointer rounded-md hover:opacity-80 transition focus:outline-none focus:ring-2 focus:ring-[#e8540a] focus:ring-offset-2 focus:ring-offset-black"
+                  className="inline-flex items-center gap-1.5 cursor-pointer rounded-md hover:opacity-80 transition focus:outline-none focus:ring-2 focus:ring-[#e8540a] focus:ring-offset-2 focus:ring-offset-black"
                 >
+                  <Star size={16} className="text-[#f9c97a] md:w-[18px] md:h-[18px]" fill="currentColor" />
                   <span className="text-[#f9c97a] font-bold text-sm md:text-base">{courseData.rating}</span>
-                  <div className="flex gap-0.5">
-                    {Array.from({ length: 5 }).map((_, i) => (
-                      <Star key={i} size={16} className="text-[#f9c97a] md:w-5 md:h-5" fill={i < Math.floor(courseData.rating) ? 'currentColor' : 'none'} />
-                    ))}
-                  </div>
-                  <span className="text-[#c8bfaf] text-sm md:text-base underline decoration-[#c8bfaf]/40">({courseData.reviews?.toLocaleString?.() || textReviews.length} ratings)</span>
+                  <span className="text-[#c8bfaf] text-sm md:text-base">·</span>
+                  <span className="text-[#c8bfaf] text-sm md:text-base underline decoration-[#c8bfaf]/40">{formatNumber(courseData.reviews || textReviews.length)} reviews</span>
                 </div>
               </div>
             </div>
@@ -1217,15 +1154,12 @@ export default function CourseLandingPage() {
                       }
                     }}
                     aria-label="View all course reviews"
-                    className="flex items-center gap-2 cursor-pointer rounded-md hover:opacity-80 transition focus:outline-none focus:ring-2 focus:ring-[#e8540a] focus:ring-offset-2 focus:ring-offset-[#1a1208]"
+                    className="flex items-center gap-1.5 cursor-pointer rounded-md hover:opacity-80 transition focus:outline-none focus:ring-2 focus:ring-[#e8540a] focus:ring-offset-2 focus:ring-offset-[#1a1208]"
                   >
+                    <Star size={16} className="text-[#f9c97a] md:w-[18px] md:h-[18px]" fill="currentColor" />
                     <span className="text-[#f9c97a] font-bold text-sm md:text-base">{courseData.rating}</span>
-                    <div className="flex gap-0.5">
-                      {Array.from({ length: 5 }).map((_, i) => (
-                        <Star key={i} size={16} className="text-[#f9c97a] md:w-5 md:h-5" fill={i < Math.floor(courseData.rating) ? 'currentColor' : 'none'} />
-                      ))}
-                    </div>
-                    <span className="text-[#c8bfaf] text-sm md:text-base underline decoration-[#c8bfaf]/40">({courseData.reviews?.toLocaleString?.() || textReviews.length} ratings)</span>
+                    <span className="text-[#c8bfaf] text-sm md:text-base">·</span>
+                    <span className="text-[#c8bfaf] text-sm md:text-base underline decoration-[#c8bfaf]/40">{formatNumber(courseData.reviews || textReviews.length)} reviews</span>
                   </div>
                 )}
                 {courseData.students > 0 && (
@@ -1248,7 +1182,7 @@ export default function CourseLandingPage() {
               </div>
               <div className="flex flex-wrap gap-3 md:gap-4 text-[#7a6e62] text-sm md:text-base">
                 <div className="flex items-center gap-1.5"><Clock size={16} /><span>Last updated {courseData.lastUpdated || 'Recently'}</span></div>
-                <div className="flex items-center gap-1.5"><Globe size={16} /><span>{courseData.language || 'English'}</span></div>
+                <div className="flex items-center gap-1.5"><Globe size={16} /><span>Urdu</span></div>
               </div>
             </div>
 
@@ -1370,7 +1304,7 @@ export default function CourseLandingPage() {
                                     <div className="flex items-center gap-2 md:gap-3 flex-shrink-0">
                                       {lecture.duration && <span className="text-sm text-[#9e9789]">{lecture.duration}</span>}
                                       {isClickable && (
-                                        <span className="flex items-center bg-[#fde8d8] text-[#9a3c0e] font-bold text-xs md:text-sm whitespace-nowrap px-2.5 py-1.5 rounded-full">
+                                        <span className="flex items-center bg-[#e8540a] text-white font-semibold text-xs md:text-sm whitespace-nowrap px-2.5 py-1.5 rounded-full">
                                           Free Lecture
                                         </span>
                                       )}
@@ -1445,48 +1379,39 @@ export default function CourseLandingPage() {
                   <p className="text-[#9e9789] text-base md:text-lg">Loading instructor...</p>
                 ) : (
                   <>
-                    {/* FIX 8: Full uploaded picture, uncropped, edge-to-edge SQUARE frame.
-                        aspectRatio 1/1 + object-contain shows the entire image without
-                        cutting any part of it off (previous 16:6 banner cropped it). */}
-                    <div className="w-full overflow-hidden mb-6 md:mb-8 bg-[#f0ebe3]" style={{ aspectRatio: '1 / 1' }}>
-                      {instructor.image && instructor.image.startsWith('http') ? (
-                        <img src={instructor.image} alt={instructor.name} className="w-full h-full object-contain" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-[#e8540a]">
-                          <span className="text-white font-bold text-6xl md:text-8xl">{instructor.name?.charAt(0) || 'I'}</span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Name + title */}
-                    <div className="mb-6 md:mb-8">
-                      <p className="font-bold text-[#1a1208] text-xl md:text-2xl leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>
-                        {instructor.name}
-                      </p>
-                      {instructor.title && (
-                        <p className="mt-1 text-sm md:text-base text-[#9e9789] font-medium">{instructor.title}</p>
-                      )}
-                    </div>
-
-                    {/* Stat cards */}
-                    <div className="grid grid-cols-2 gap-3 md:gap-4 mb-6 md:mb-8">
-                      {[
-                        { icon: '⭐', value: instructor.rating > 0 ? instructor.rating.toFixed(1) : '0', label: 'Total Ratings' },
-                        { icon: '📝', value: formatNumber(instructor.reviews), label: 'Reviews' },
-                        { icon: '👥', value: formatNumber(instructor.students), label: 'Students' },
-                        { icon: '🎓', value: formatNumber(instructor.courses), label: 'Courses' },
-                      ].map((stat) => (
-                        <div
-                          key={stat.label}
-                          className="bg-white border border-[#ece6dd] rounded-xl px-4 py-3 md:px-5 md:py-4 shadow-sm flex flex-col gap-0.5"
-                        >
-                          <div className="flex items-center gap-2">
-                            <span className="text-lg md:text-xl" aria-hidden="true">{stat.icon}</span>
-                            <span className="text-xl md:text-2xl font-bold text-[#1a1208] leading-none">{stat.value}</span>
+                    {/* Circular profile image on the left, stats to the right */}
+                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5 md:gap-8 mb-6 md:mb-8">
+                      <div className="w-28 h-28 md:w-36 md:h-36 rounded-full overflow-hidden bg-[#f0ebe3] border border-[#ece6dd] flex-shrink-0">
+                        {instructor.image && instructor.image.startsWith('http') ? (
+                          <img src={instructor.image} alt={instructor.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-[#e8540a]">
+                            <span className="text-white font-bold text-4xl md:text-5xl">{instructor.name?.charAt(0) || 'I'}</span>
                           </div>
-                          <span className="text-xs md:text-sm text-[#9e9789] font-medium pl-7 md:pl-8">{stat.label}</span>
+                        )}
+                      </div>
+
+                      <div className="flex-1 min-w-0 text-center sm:text-left">
+                        <p className="font-bold text-[#1a1208] text-xl md:text-2xl leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>
+                          {instructor.name}
+                        </p>
+                        {instructor.title && (
+                          <p className="mt-1 mb-3 md:mb-4 text-sm md:text-base text-[#9e9789] font-medium">{instructor.title}</p>
+                        )}
+                        <div className="flex flex-col gap-2 items-center sm:items-start">
+                          {[
+                            { icon: '⭐', text: `${instructor.rating > 0 ? instructor.rating.toFixed(1) : '0'} Total Rating` },
+                            { icon: '📝', text: `${formatNumber(instructor.reviews)} Reviews` },
+                            { icon: '👨‍🎓', text: `${formatNumber(instructor.students)} Students` },
+                            { icon: '📚', text: `${formatNumber(instructor.courses)} Courses` },
+                          ].map((stat) => (
+                            <div key={stat.text} className="flex items-center gap-2 text-sm md:text-base text-[#3d3020]">
+                              <span className="text-base md:text-lg" aria-hidden="true">{stat.icon}</span>
+                              <span className="font-semibold">{stat.text}</span>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      </div>
                     </div>
 
                     {(instructor.location || instructor.website || instructor.twitter || instructor.linkedin) && (
@@ -1519,6 +1444,7 @@ export default function CourseLandingPage() {
                     • Review text body — previously missing due to narrow field
                       matching in normalizeReview; now catches 15+ field names
                   The "already reviewed" gate is removed; anyone can post again.
+                  Displayed as a natural vertical list (no slider arrows).
               ───────────────────────────────────────────────────────────── */}
               <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
                 <div className="mb-6 md:mb-8 flex items-center gap-3 md:gap-4">
@@ -1538,11 +1464,11 @@ export default function CourseLandingPage() {
                     <p className="text-[#9e9789] text-sm md:text-base">Be the first to leave a review for this course.</p>
                   </div>
                 ) : (
-                  <TextReviewsSlider reviews={textReviews} />
+                  <TextReviewsList reviews={textReviews} />
                 )}
               </div>
 
-              {/* SHOW ALL REVIEWS — opens the dedicated Reviews Page */}
+              {/* SHOW ALL REVIEWS — opens the dedicated Reviews Page for THIS course */}
               <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
                 <button
                   onClick={goToReviewsPage}
