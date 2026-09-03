@@ -84,9 +84,19 @@ export default function AuthPage({ mode = "login" }) {
       const pending = getPendingCourse();
       if (courseId && pending && String(pending._id || pending.id) === courseId) {
         try {
-          await enrollCourse(courseId);
+          // If the visitor went through the Enrollment page first (name /
+          // email / WhatsApp + payment method), pick those answers back up
+          // here and send them along with the enrollment.
+          let intake = null;
+          try {
+            const raw = localStorage.getItem("lerni_enroll_intake");
+            if (raw) intake = JSON.parse(raw);
+          } catch { /* ignore malformed/blocked storage */ }
+
+          await enrollCourse(courseId, intake || undefined);
           trackPurchase(pending);
           clearPendingCourse();
+          localStorage.removeItem("lerni_enroll_intake");
         } catch (enrollErr) {
           console.warn("[Meta Pixel] Post-auth enrollment failed:", enrollErr?.message);
         }

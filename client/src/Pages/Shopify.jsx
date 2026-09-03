@@ -1022,7 +1022,10 @@ export default function CourseLandingPage() {
     trackAddToCart(courseData);
     setPendingCourse(courseData);
     const courseId = courseData._id || courseData.id;
-    navigate(`/auth/register?redirect=${encodeURIComponent('/portal')}&courseId=${courseId}`);
+    // Goes to the new two-step Enrollment page (name/email/WhatsApp, then
+    // payment method) instead of straight to sign-up. That page itself sends
+    // guests on to /auth/register once both steps are filled in.
+    navigate(`/course/${courseId}/enroll`);
     setMobileMenuOpen(false);
   }, [courseData, navigate]);
 
