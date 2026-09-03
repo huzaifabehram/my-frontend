@@ -84,6 +84,17 @@
 //            edges and stays sharp in the middle. Testimonial images are now clickable and
 //            open in a full-size lightbox (reusing the existing, previously-unwired
 //            imageSliderOpen state) without affecting the auto-scroll animation.
+// ─── NEW CHANGE L: Reviews overlay header now reads "{rating} Rating • {count} Reviews" in
+//            the exact same typography (size/weight/color, tabular-nums) as the clickable
+//            rating line on the main course page, instead of the page-heading serif style.
+// ─── NEW CHANGE M: Both waterfall columns (Testimonials + Video Reviews) are now always
+//            built to the exact same length (cycling the item list if the count is odd), so
+//            their loop distance is always identical and the two columns can never drift out
+//            of sync, regardless of how many items are passed in. Added a real progressive
+//            blur at the top/bottom edges (a masked backdrop-filter layer, tapering from full
+//            blur at the boundary to none toward the center) layered with the existing
+//            opacity fade, so content sharpens in the middle and blurs+fades out completely
+//            at the edges instead of a hard cutoff.
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Volume2, VolumeX, ArrowLeft } from 'lucide-react';
@@ -392,15 +403,29 @@ function VideoPlayer({ url, className = "", isReelsStyle = false, autoPlay = fal
 // Reviews. Always renders exactly 2 columns; each column loops its items in a
 // continuous, seamless downward scroll. The viewport is fixed to exactly 2
 // item-heights tall, so 4 items (2 columns × 2 rows) are visible at once.
+// Both columns are built to the SAME length (cycling through the item list if
+// needed) so their loop distance is always identical — with the same duration
+// this guarantees the two columns move at exactly the same speed and never
+// drift apart, however many items are passed in.
 // ─────────────────────────────────────────────────────────────────────────────
 function TwoColumnWaterfall({ items, itemHeight = 260, gap = 12, renderItem, baseDuration = 26 }) {
   const columns = useMemo(() => {
-    const cols = [[], []];
-    items.forEach((item, idx) => cols[idx % 2].push({ item, originalIndex: idx }));
-    return cols;
+    if (items.length === 0) return [[], []];
+    const colLen = Math.ceil(items.length / 2);
+    const colA = [];
+    const colB = [];
+    for (let i = 0; i < colLen; i++) {
+      colA.push({ item: items[i % items.length], originalIndex: i % items.length });
+      colB.push({ item: items[(i + colLen) % items.length], originalIndex: (i + colLen) % items.length });
+    }
+    return [colA, colB];
   }, [items]);
 
   const viewportHeight = itemHeight * 2 + gap;
+  // Height of the progressive blur/fade cap at each edge — content sharpens as
+  // it clears this band and blurs+fades as it enters it, disappearing exactly
+  // at the boundary.
+  const capHeight = Math.round(viewportHeight * 0.24);
 
   return (
     <div className="relative">
@@ -411,25 +436,26 @@ function TwoColumnWaterfall({ items, itemHeight = 260, gap = 12, renderItem, bas
         }
       `}</style>
       <div
-        className="grid grid-cols-2 gap-3 overflow-hidden rounded-2xl"
+        className="relative grid grid-cols-2 gap-3 overflow-hidden rounded-2xl"
         style={{
           height: `${viewportHeight}px`,
-          // Fades the top/bottom edges of the scrolling grid to transparent while
-          // the middle stays fully sharp — a subtle "premium" scroll mask. Applied
-          // to the whole grid so both columns fade together, and used as a mask
-          // (not a color overlay) so it works correctly over any section background.
-          WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 14%, black 86%, transparent 100%)',
-          maskImage: 'linear-gradient(to bottom, transparent 0%, black 14%, black 86%, transparent 100%)',
+          // Fades the top/bottom edges of the scrolling grid to fully transparent
+          // (so content truly disappears at the boundary, not just blurs) while
+          // the middle stays fully opaque/sharp. Combined with the two blur caps
+          // below for a soft, gradual transition rather than a harsh cutoff.
+          WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%)',
+          maskImage: 'linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%)',
         }}
       >
         {columns.map((colEntries, colIdx) => {
           if (colEntries.length === 0) return null;
           const looped = [...colEntries, ...colEntries];
-          // Both columns share the same duration so they move at the same speed,
-          // in sync — no per-column stagger. The scroll distance is set to the
-          // exact pixel height of ONE (un-doubled) copy of this column's items,
-          // rather than a flat -50%, so the loop restarts on an exact, seamless
-          // boundary instead of drifting by half a gap and causing a visible jump.
+          // Same duration AND same per-column scroll distance (both columns are
+          // built to equal length above) — the two columns move at exactly the
+          // same speed, start together, and loop together with no drift. The
+          // scroll distance is the exact pixel height of one (un-doubled) copy
+          // of the column, so the loop restarts on an exact boundary instead of
+          // a flat -50% that can drift by half a gap and cause a visible jump.
           const oneCopyHeight = colEntries.length * itemHeight + Math.max(0, colEntries.length - 1) * gap;
           return (
             <div key={colIdx} className="relative h-full overflow-hidden">
@@ -455,6 +481,34 @@ function TwoColumnWaterfall({ items, itemHeight = 260, gap = 12, renderItem, bas
             </div>
           );
         })}
+
+        {/* PROGRESSIVE BLUR CAPS — a real blur (not just opacity) that fades in as
+            content approaches each edge and fades back out toward the center, so
+            content genuinely transitions sharp → blurred → gone, not a hard cut.
+            Implemented as a backdrop-blur layer whose own alpha is masked by a
+            gradient, so the blur strength itself tapers smoothly with distance
+            from the edge instead of applying uniformly. Sits above the columns
+            but is pointer-events-none so clicks still reach the tiles underneath. */}
+        <div
+          className="absolute top-0 left-0 right-0 pointer-events-none"
+          style={{
+            height: `${capHeight}px`,
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            WebkitMaskImage: 'linear-gradient(to bottom, black 0%, transparent 100%)',
+            maskImage: 'linear-gradient(to bottom, black 0%, transparent 100%)',
+          }}
+        />
+        <div
+          className="absolute bottom-0 left-0 right-0 pointer-events-none"
+          style={{
+            height: `${capHeight}px`,
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
+            WebkitMaskImage: 'linear-gradient(to top, black 0%, transparent 100%)',
+            maskImage: 'linear-gradient(to top, black 0%, transparent 100%)',
+          }}
+        />
       </div>
     </div>
   );
@@ -1221,12 +1275,19 @@ export default function CourseLandingPage() {
               >
                 <ArrowLeft size={22} />
               </button>
-              {/* Compact dynamic summary instead of a static "Ratings & Reviews" label —
-                  values come from the same displayRating/displayRatingCount used
-                  everywhere else on the page, never hardcoded. */}
-              <h2 className="text-lg md:text-xl font-bold text-[#1a1208]" style={{ fontFamily: "'Playfair Display', serif" }}>
-                {displayRating ? displayRating.toFixed(1) : '—'} Total Rating · {formatNumber(displayRatingCount)} Reviews
-              </h2>
+              {/* Compact dynamic summary, in the exact same typography as the
+                  clickable rating line on the main course page (same size,
+                  weight, color, tabular-nums number) — not the page-heading
+                  serif font used elsewhere. */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-2xl md:text-3xl font-bold text-[#1a1208]" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {displayRating ? displayRating.toFixed(1) : '—'} Rating
+                </span>
+                <span className="text-[#9e9789] text-lg md:text-xl">•</span>
+                <span className="text-sm md:text-base text-[#9e9789] font-medium">
+                  {formatNumber(displayRatingCount)} Reviews
+                </span>
+              </div>
             </div>
           </div>
 
