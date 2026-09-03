@@ -43,9 +43,29 @@
 // ─── UX FIX 12: Reviews header now reads "★ rating • X ratings". Review cards are equal
 //            height (a long review no longer stretches its card — it scrolls internally via
 //            "Show more") and are laid out as an arrow-free horizontal swipe/scroll slider.
+// ─── NEW CHANGE D: Course + instructor descriptions now run through richTextToHtml() —
+//            real HTML from the dashboard's editor renders as-is; plain text with **bold**
+//            markers and line breaks is converted into proper <strong>/<p>/<br /> so
+//            formatting done in the instructor dashboard always shows correctly here.
+// ─── NEW CHANGE E: Instructor section rebuilt to a cleaner, Udemy-style layout — circular
+//            photo + name/title on the left, a 2x2 grid of stat cards (Total Rating /
+//            Reviews / Students / Courses) lined up beside it, and the instructor's bio now
+//            renders as rich text with its own "Show more/less" toggle.
+// ─── NEW CHANGE F: Reviews header rating number now uses the standard body font instead of
+//            the decorative serif, and a fallback rating (4.8 / 5,676 reviews) with sample
+//            Urdu/Roman-Urdu reviews is shown whenever the course has no real reviews yet.
+// ─── NEW CHANGE G: "Show All Reviews", both rating links (hero + free preview), and every
+//            review card now open a Ratings & Reviews view INSIDE this same page (no route
+//            change) — same pattern as the free-lecture preview popup — showing the overall
+//            rating, distribution, and full review list.
+// ─── NEW CHANGE H: Student testimonials and video reviews are now a 2-column "waterfall"
+//            grid (4 items visible: 2 rows × 2 columns) that scrolls continuously downward.
+//            Video tiles autoplay muted while scrolling; tapping one opens a plain native
+//            video player (default browser controls, sound on) instead of a custom
+//            reels-style viewer.
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Share2, Bookmark, ThumbsUp, Volume2, VolumeX, ArrowLeft } from 'lucide-react';
+import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Volume2, VolumeX, ArrowLeft } from 'lucide-react';
 import { useCourses } from '../context/CoursesContext';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -181,6 +201,89 @@ export function RatingDistribution({ distribution }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// RICH TEXT RENDERING — course/instructor descriptions are written with a rich
+// text editor in the instructor dashboard. If the saved content already
+// contains real HTML tags (from a WYSIWYG editor) it is trusted and rendered
+// as-is via .lerni-prose. If it's plain text (e.g. **bold** markers and plain
+// line breaks), the same formatting is converted into real HTML so bold text
+// and paragraph/line spacing always show correctly here — regardless of how
+// the dashboard happened to save it.
+// ─────────────────────────────────────────────────────────────────────────────
+function escapeHtml(str) {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+export function richTextToHtml(raw) {
+  if (!raw) return '';
+  const text = String(raw);
+
+  // Already real HTML (from a WYSIWYG editor) — trust it as-is.
+  if (/<\/?(p|div|br|ul|ol|li|h[1-6]|strong|b|em|i|u|blockquote|a|span)[\s>]/i.test(text)) {
+    return text;
+  }
+
+  // Plain text: escape it, then re-introduce the formatting.
+  let html = escapeHtml(text.trim());
+
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/__(.+?)__/g, '<strong>$1</strong>');
+  html = html.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  html = html.replace(/_(.+?)_/g, '<em>$1</em>');
+
+  html = html
+    .split(/\n{2,}/)
+    .map((block) => `<p>${block.replace(/\n/g, '<br />')}</p>`)
+    .join('');
+
+  return html;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FALLBACK REVIEW DATA — shown only when the course has no real reviews yet.
+// Real fetched/submitted reviews always take priority; this is placeholder
+// content for this digital marketing & e-commerce course so the page never
+// looks empty while real reviews are still coming in.
+// ─────────────────────────────────────────────────────────────────────────────
+const FALLBACK_RATING = 4.8;
+const FALLBACK_REVIEW_COUNT = 5676;
+const FALLBACK_RATING_DISTRIBUTION = [
+  { star: 5, count: 4427, percentage: 78 },
+  { star: 4, count: 851,  percentage: 15 },
+  { star: 3, count: 227,  percentage: 4 },
+  { star: 2, count: 114,  percentage: 2 },
+  { star: 1, count: 57,   percentage: 1 },
+];
+const FALLBACK_REVIEWS = [
+  { key: 'fb-1', author: 'Ayesha Siddiqui', rating: 5, date: 'Aug 12, 2026', avatar: null,
+    text: "Yeh course mera business dekhne ka tareeqa hi badal gaya. Facebook Ads aur Shopify wali videos bohat practical thi. Highly recommended for beginners!" },
+  { key: 'fb-2', author: 'Muhammad Bilal', rating: 4, date: 'Aug 3, 2026', avatar: null,
+    text: "Content is solid, especially the e-commerce dropshipping module. Kuch sections thori lambi lagti hain lekin overall bohat value hai." },
+  { key: 'fb-3', author: 'Zainab Fatima', rating: 5, date: 'Jul 27, 2026', avatar: null,
+    text: "Sir ne har concept itni acchi tarhan explain kiya keh mujhe apna Instagram store shuru karne ka confidence mil gaya. Best marketing course in Urdu!" },
+  { key: 'fb-4', author: 'Usman Tariq', rating: 5, date: 'Jul 19, 2026', avatar: null,
+    text: "I run a small clothing brand and this course helped me set up my first proper ad campaign. Roman Urdu explanation makes everything very easy to follow." },
+  { key: 'fb-5', author: 'Hina Rafiq', rating: 4, date: 'Jul 10, 2026', avatar: null,
+    text: "SEO wala section thora aur detailed ho sakta tha, but overall the course is amazing for e-commerce beginners." },
+  { key: 'fb-6', author: 'Ahmed Raza', rating: 5, date: 'Jun 30, 2026', avatar: null,
+    text: "Bohat zabardast course hai! Google Ads aur email marketing dono clearly samajh aa gaye. Worth every rupee." },
+  { key: 'fb-7', author: 'Sana Malik', rating: 5, date: 'Jun 22, 2026', avatar: null,
+    text: "Great mix of theory and hands-on practice. Mujhe apni Daraz store ki sales double karne mein madad mili." },
+  { key: 'fb-8', author: 'Fahad Iqbal', rating: 4, date: 'Jun 15, 2026', avatar: null,
+    text: "Acha course hai, beginners ke liye perfect starting point digital marketing seekhne ka." },
+];
+
+function computeRatingDistribution(reviews) {
+  const total = reviews.length || 1;
+  return [5, 4, 3, 2, 1].map((star) => {
+    const count = reviews.filter((r) => Math.round(r.rating) === star).length;
+    return { star, count, percentage: Math.round((count / total) * 100) };
+  });
+}
+
 // ── YouTube embed helper ───────────────────────────────────────────────────
 function getYouTubeId(url) {
   if (!url) return null;
@@ -246,7 +349,7 @@ function VideoPlayer({ url, className = "", isReelsStyle = false, autoPlay = fal
     const ytSrc = `https://www.youtube.com/embed/${ytId}?autoplay=${autoPlay ? 1 : 0}&mute=${muted ? 1 : 0}&loop=${loop ? 1 : 0}&controls=${controls ? 1 : 0}&playsinline=1`;
     return (
       <div className={`relative w-full ${aspectClass} bg-black ${className}`}>
-        <iframe src={ytSrc} className="absolute inset-0 w-full h-full object-cover"
+        <iframe src={ytSrc} className="absolute inset-0 w-full h-full"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen title="YouTube Video" loading="lazy" style={{ border: 'none' }} />
       </div>
@@ -264,120 +367,118 @@ function VideoPlayer({ url, className = "", isReelsStyle = false, autoPlay = fal
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// VIDEO SLIDER CARD
+// TWO-COLUMN "WATERFALL" GRID — shared by Student Testimonials and Video
+// Reviews. Always renders exactly 2 columns; each column loops its items in a
+// continuous, seamless downward scroll. The viewport is fixed to exactly 2
+// item-heights tall, so 4 items (2 columns × 2 rows) are visible at once.
 // ─────────────────────────────────────────────────────────────────────────────
-const VideoSliderCard = React.forwardRef(function VideoSliderCard({ videoUrl, onClick, index, isActive }, ref) {
-  const ytId = getYouTubeId(videoUrl);
+function TwoColumnWaterfall({ items, itemHeight = 260, gap = 12, renderItem, baseDuration = 26 }) {
+  const columns = useMemo(() => {
+    const cols = [[], []];
+    items.forEach((item, idx) => cols[idx % 2].push({ item, originalIndex: idx }));
+    return cols;
+  }, [items]);
+
+  const viewportHeight = itemHeight * 2 + gap;
 
   return (
-    <div
-      className="flex-shrink-0 rounded-xl overflow-hidden relative cursor-pointer shadow-lg hover:shadow-2xl transition-all duration-300"
-      style={{ width: '200px', height: '390px' }}
-      onClick={onClick}
-    >
-      {ytId ? (
-        <img
-          src={`https://img.youtube.com/vi/${ytId}/maxresdefault.jpg`}
-          alt="Video thumbnail"
-          className="w-full h-full object-cover"
-        />
-      ) : (
-        <video
-          ref={ref}
-          src={videoUrl}
-          className="w-full h-full object-cover"
-          muted
-          loop
-          playsInline
-          preload="metadata"
-        />
-      )}
-      <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
-    </div>
-  );
-});
-
-function VideoReviewsSlider({ videoTestimonials, onCardClick }) {
-  const sliderRef  = useRef(null);
-  const cardRefs   = useRef([]);
-  const [activeIndex, setActiveIndex] = useState(0);
-
-  const getCardRef = (idx) => (el) => { cardRefs.current[idx] = el; };
-
-  useEffect(() => {
-    cardRefs.current.forEach((videoEl, idx) => {
-      if (!videoEl) return;
-      if (idx === activeIndex) {
-        videoEl.muted = true;
-        videoEl.play().catch(() => {});
-      } else {
-        videoEl.pause();
-      }
-    });
-  }, [activeIndex]);
-
-  useEffect(() => {
-    const cards = sliderRef.current?.querySelectorAll('[data-video-card]');
-    if (!cards || cards.length === 0) return;
-
-    const ratios = new Array(videoTestimonials.length).fill(0);
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          const idx = Number(entry.target.dataset.videoCard);
-          ratios[idx] = entry.intersectionRatio;
-        });
-        let best = 0;
-        ratios.forEach((r, i) => { if (r > ratios[best]) best = i; });
-        setActiveIndex(best);
-      },
-      {
-        root: sliderRef.current,
-        threshold: Array.from({ length: 21 }, (_, i) => i / 20),
-      }
-    );
-
-    cards.forEach((card) => observer.observe(card));
-    return () => observer.disconnect();
-  }, [videoTestimonials.length]);
-
-  return (
-    <div
-      ref={sliderRef}
-      className="flex gap-3 overflow-x-auto px-1 pb-4"
-      style={{
-        scrollbarWidth: 'none',
-        msOverflowStyle: 'none',
-        scrollSnapType: 'x mandatory',
-        WebkitOverflowScrolling: 'touch',
-      }}
-    >
-      {videoTestimonials.map((testimonial, idx) => {
-        const ytId = getYouTubeId(testimonial.videoUrl);
-        return (
-          <div
-            key={idx}
-            data-video-card={idx}
-            style={{ scrollSnapAlign: 'center', flexShrink: 0 }}
-          >
-            <VideoSliderCard
-              ref={ytId ? null : getCardRef(idx)}
-              videoUrl={testimonial.videoUrl}
-              index={idx}
-              isActive={idx === activeIndex}
-              onClick={() => onCardClick(idx)}
-            />
-          </div>
-        );
-      })}
+    <div className="relative">
+      <style>{`
+        @keyframes waterfall-scroll-down {
+          0%   { transform: translateY(-50%); }
+          100% { transform: translateY(0%); }
+        }
+      `}</style>
+      <div
+        className="grid grid-cols-2 gap-3 overflow-hidden rounded-2xl"
+        style={{ height: `${viewportHeight}px` }}
+      >
+        {columns.map((colEntries, colIdx) => {
+          if (colEntries.length === 0) return null;
+          const looped = [...colEntries, ...colEntries];
+          const duration = baseDuration + colIdx * 6;
+          return (
+            <div key={colIdx} className="relative h-full overflow-hidden">
+              <div
+                className="flex flex-col"
+                style={{
+                  gap: `${gap}px`,
+                  animation: `waterfall-scroll-down ${duration}s linear infinite`,
+                  willChange: 'transform',
+                }}
+              >
+                {looped.map((entry, i) => (
+                  <div
+                    key={i}
+                    style={{ height: `${itemHeight}px`, flexShrink: 0 }}
+                    aria-hidden={i >= colEntries.length}
+                  >
+                    {renderItem(entry.item, entry.originalIndex)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-function VideoFullScreenViewer({ isOpen, onClose, videos, startIndex = 0, likes, onLike }) {
+function VideoReviewsSlider({ videoTestimonials, onCardClick }) {
+  return (
+    <TwoColumnWaterfall
+      items={videoTestimonials}
+      itemHeight={260}
+      gap={12}
+      baseDuration={30}
+      renderItem={(testimonial, originalIndex) => {
+        const ytId = getYouTubeId(testimonial.videoUrl);
+        return (
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => onCardClick(originalIndex)}
+            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onCardClick(originalIndex); } }}
+            className="w-full h-full rounded-xl overflow-hidden relative shadow-lg cursor-pointer group"
+          >
+            {ytId ? (
+              <iframe
+                src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&loop=1&playlist=${ytId}&controls=0&playsinline=1`}
+                className="w-full h-full object-cover pointer-events-none"
+                allow="autoplay; encrypted-media"
+                title="Video testimonial"
+                style={{ border: 'none' }}
+              />
+            ) : (
+              <video
+                src={testimonial.videoUrl}
+                className="w-full h-full object-cover"
+                autoPlay
+                muted
+                loop
+                playsInline
+                preload="metadata"
+              />
+            )}
+            <div className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 flex items-center justify-center pointer-events-none">
+              <VolumeX size={14} className="text-white" />
+            </div>
+            <div className="absolute bottom-0 left-0 right-0 h-14 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
+          </div>
+        );
+      }}
+    />
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DEFAULT VIDEO MODAL — the "mobile default" video placement: a plain native
+// <video>/embed with the browser's own controls and sound on, the way tapping
+// a video normally opens on any website. No custom like/comment/share chrome.
+// ─────────────────────────────────────────────────────────────────────────────
+function DefaultVideoModal({ isOpen, onClose, videos, startIndex = 0 }) {
   const [currentIndex, setCurrentIndex] = useState(startIndex);
-  const videoRefs = useRef([]);
 
   useEffect(() => {
     if (isOpen) { document.body.style.overflow = 'hidden'; setCurrentIndex(startIndex); }
@@ -386,18 +487,10 @@ function VideoFullScreenViewer({ isOpen, onClose, videos, startIndex = 0, likes,
   }, [isOpen, startIndex]);
 
   useEffect(() => {
-    videoRefs.current.forEach((video, idx) => {
-      if (!video) return;
-      if (idx === currentIndex) { video.muted = false; video.play().catch(() => {}); }
-      else { video.pause(); video.muted = true; }
-    });
-  }, [currentIndex]);
-
-  useEffect(() => {
     const handleKey = (e) => {
       if (e.key === 'Escape') onClose();
-      if (e.key === 'ArrowDown' && currentIndex < videos.length - 1) setCurrentIndex(i => i + 1);
-      if (e.key === 'ArrowUp' && currentIndex > 0) setCurrentIndex(i => i - 1);
+      if (e.key === 'ArrowRight' && currentIndex < videos.length - 1) setCurrentIndex(i => i + 1);
+      if (e.key === 'ArrowLeft' && currentIndex > 0) setCurrentIndex(i => i - 1);
     };
     if (isOpen) window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
@@ -409,32 +502,28 @@ function VideoFullScreenViewer({ isOpen, onClose, videos, startIndex = 0, likes,
   const ytId = currentVideo ? getYouTubeId(currentVideo.videoUrl) : null;
 
   return (
-    <div className="fixed inset-0 bg-black z-[9999] flex flex-col items-center justify-center">
-      <button onClick={onClose}
-        className="fixed top-4 right-4 z-50 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition border-none cursor-pointer">
-        <X size={24} />
+    <div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-4">
+      <button onClick={onClose} aria-label="Close video"
+        className="fixed top-4 right-4 z-50 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition border-none cursor-pointer">
+        <X size={22} />
       </button>
 
       {currentIndex > 0 && (
-        <button onClick={() => setCurrentIndex(i => i - 1)}
-          className="fixed left-4 top-1/2 -translate-y-1/2 z-50 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition border-none cursor-pointer">
-          <ChevronLeft size={26} />
+        <button onClick={() => setCurrentIndex(i => i - 1)} aria-label="Previous video"
+          className="fixed left-2 md:left-6 top-1/2 -translate-y-1/2 z-50 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition border-none cursor-pointer">
+          <ChevronLeft size={24} />
         </button>
       )}
       {currentIndex < videos.length - 1 && (
-        <button onClick={() => setCurrentIndex(i => i + 1)}
-          className="fixed right-16 top-1/2 -translate-y-1/2 z-50 w-11 h-11 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition border-none cursor-pointer">
-          <ChevronRight size={26} />
+        <button onClick={() => setCurrentIndex(i => i + 1)} aria-label="Next video"
+          className="fixed right-2 md:right-6 top-1/2 -translate-y-1/2 z-50 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition border-none cursor-pointer">
+          <ChevronRight size={24} />
         </button>
       )}
 
-      <div className="fixed top-4 left-1/2 -translate-x-1/2 bg-black/50 text-white text-sm px-3 py-1 rounded-full z-50">
-        {currentIndex + 1} / {videos.length}
-      </div>
-
-      <div className="relative w-full h-full flex items-center justify-center">
+      <div className="w-full max-w-3xl">
         {ytId ? (
-          <div className="w-full max-w-3xl aspect-video">
+          <div className="w-full aspect-video bg-black">
             <iframe
               src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=0&controls=1&playsinline=1`}
               className="w-full h-full"
@@ -443,124 +532,46 @@ function VideoFullScreenViewer({ isOpen, onClose, videos, startIndex = 0, likes,
           </div>
         ) : (
           <video
-            ref={(el) => (videoRefs.current[currentIndex] = el)}
+            key={currentVideo?.videoUrl}
             src={currentVideo?.videoUrl}
-            className="max-h-screen max-w-full object-contain"
-            controls autoPlay playsInline />
+            className="w-full max-h-[85vh] bg-black"
+            controls
+            autoPlay
+            playsInline
+          />
         )}
-
-        <div className="fixed right-3 bottom-28 flex flex-col items-center gap-5 text-white z-50">
-          <button
-            onClick={() => onLike(currentIndex)}
-            className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer">
-            <div className="w-12 h-12 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition">
-              <ThumbsUp size={22} />
-            </div>
-            <span className="text-xs font-semibold">{(likes[currentIndex] || 6690).toLocaleString()}</span>
-          </button>
-          <button className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer">
-            <div className="w-12 h-12 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition">
-              <MessageCircle size={22} />
-            </div>
-            <span className="text-xs">{currentVideo?.comments || 0}</span>
-          </button>
-          <button className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer">
-            <div className="w-12 h-12 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition">
-              <Share2 size={22} />
-            </div>
-            <span className="text-xs">Share</span>
-          </button>
-          <button className="flex flex-col items-center gap-1 bg-transparent border-none cursor-pointer">
-            <div className="w-12 h-12 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center transition">
-              <Bookmark size={22} />
-            </div>
-            <span className="text-xs">Save</span>
-          </button>
-        </div>
-
-        <div className="fixed bottom-8 left-4 max-w-[65%] text-white z-50">
-          {currentVideo?.author && <p className="font-bold text-base mb-1">{currentVideo.author}</p>}
-          {currentVideo?.text && <p className="text-sm leading-relaxed line-clamp-3 text-white/80">{currentVideo.text}</p>}
-        </div>
       </div>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AUTO-SLIDE IMAGE TESTIMONIALS CAROUSEL
+// STUDENT TESTIMONIALS — same 2-column waterfall grid, downward-scrolling.
 // ─────────────────────────────────────────────────────────────────────────────
 function AutoSlideImageTestimonials({ imageTestimonials }) {
-  const sectionRef  = useRef(null);
-  const [isPaused, setIsPaused] = useState(false);
-  const isPausedRef = useRef(false);
-  const CARD_WIDTH = 200;
-  const CARD_GAP   = 12;
-  const totalDuration = imageTestimonials.length * 4;
-
-  const pause  = () => { isPausedRef.current = true;  setIsPaused(true);  };
-  const resume = () => { isPausedRef.current = false; setIsPaused(false); };
-
-  useEffect(() => {
-    const handleSectionWheel = () => pause();
-    const handleSectionTouch = () => pause();
-    const handleWindowWheel  = (e) => { if (isPausedRef.current && sectionRef.current && !sectionRef.current.contains(e.target)) resume(); };
-    const handleWindowTouch  = (e) => { if (isPausedRef.current && sectionRef.current && !sectionRef.current.contains(e.target)) resume(); };
-    const section = sectionRef.current;
-    if (section) {
-      section.addEventListener('wheel',     handleSectionWheel, { passive: true });
-      section.addEventListener('touchmove', handleSectionTouch, { passive: true });
-    }
-    window.addEventListener('wheel',     handleWindowWheel, { passive: true });
-    window.addEventListener('touchmove', handleWindowTouch, { passive: true });
-    return () => {
-      if (section) {
-        section.removeEventListener('wheel',     handleSectionWheel);
-        section.removeEventListener('touchmove', handleSectionTouch);
-      }
-      window.removeEventListener('wheel',     handleWindowWheel);
-      window.removeEventListener('touchmove', handleWindowTouch);
-    };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const doubled = [...imageTestimonials, ...imageTestimonials];
-
   return (
-    <div ref={sectionRef} className="relative select-none">
-      <style>{`
-        @keyframes testimonial-marquee {
-          0%   { transform: translateX(0); }
-          100% { transform: translateX(-50%); }
-        }
-        .testimonial-track {
-          animation: testimonial-marquee ${totalDuration}s linear infinite;
-          will-change: transform;
-        }
-        .testimonial-track.paused { animation-play-state: paused; }
-      `}</style>
-      <div className="overflow-hidden" style={{
-        WebkitMaskImage: 'linear-gradient(to right, transparent 0px, black 40px, black calc(100% - 40px), transparent 100%)',
-        maskImage: 'linear-gradient(to right, transparent 0px, black 40px, black calc(100% - 40px), transparent 100%)',
-      }}>
-        <div className={`testimonial-track flex pb-3${isPaused ? ' paused' : ''}`}
-          style={{ gap: `${CARD_GAP}px`, width: 'max-content' }}>
-          {doubled.map((testimonial, idx) => (
-            <div key={idx} className="flex-shrink-0 rounded-xl overflow-hidden relative shadow-lg"
-              style={{ width: `${CARD_WIDTH}px`, height: '390px', cursor: 'default' }}
-              aria-hidden={idx >= imageTestimonials.length}>
-              <img src={testimonial.imageUrl} alt={testimonial.author || 'Student testimonial'}
-                className="w-full h-full object-cover" draggable={false} />
-              <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-black/75 to-transparent pointer-events-none" />
-              {testimonial.author && (
-                <p className="absolute bottom-3 left-3 right-3 text-white text-sm font-semibold pointer-events-none drop-shadow line-clamp-1">
-                  {testimonial.author}
-                </p>
-              )}
-            </div>
-          ))}
+    <TwoColumnWaterfall
+      items={imageTestimonials}
+      itemHeight={260}
+      gap={12}
+      baseDuration={28}
+      renderItem={(testimonial) => (
+        <div className="w-full h-full rounded-xl overflow-hidden relative shadow-lg">
+          <img
+            src={testimonial.imageUrl}
+            alt={testimonial.author || 'Student testimonial'}
+            className="w-full h-full object-cover"
+            draggable={false}
+          />
+          <div className="absolute bottom-0 left-0 right-0 h-14 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
+          {testimonial.author && (
+            <p className="absolute bottom-2 left-2 right-2 text-white text-xs sm:text-sm font-semibold drop-shadow line-clamp-1">
+              {testimonial.author}
+            </p>
+          )}
         </div>
-      </div>
-    </div>
+      )}
+    />
   );
 }
 
@@ -603,14 +614,17 @@ function CourseThumbnail({ course }) {
 // reviews never stretch the card: the text is clamped, and "Show more" reveals
 // the rest inside an internal scroll area instead of growing the card itself.
 // ─────────────────────────────────────────────────────────────────────────────
-function ReviewCard({ review }) {
+function ReviewCard({ review, onOpenReviews }) {
   const [expanded, setExpanded] = useState(false);
   const isLong = review.text && review.text.length > 140;
 
   return (
     <div
-      className="flex-shrink-0 w-[280px] sm:w-[320px] h-[300px] bg-white rounded-2xl shadow-sm hover:shadow-md transition border border-[#ece6dd] p-5 flex flex-col"
+      className="flex-shrink-0 w-[280px] sm:w-[320px] h-[300px] bg-white rounded-2xl shadow-sm hover:shadow-md transition border border-[#ece6dd] p-5 flex flex-col cursor-pointer"
       style={{ scrollSnapAlign: 'start' }}
+      onClick={onOpenReviews}
+      role={onOpenReviews ? 'button' : undefined}
+      tabIndex={onOpenReviews ? 0 : undefined}
     >
       <div className="flex items-start gap-3 mb-3 flex-shrink-0">
         <div
@@ -653,7 +667,7 @@ function ReviewCard({ review }) {
 
       {isLong && (
         <button
-          onClick={() => setExpanded((e) => !e)}
+          onClick={(e) => { e.stopPropagation(); setExpanded((x) => !x); }}
           className="text-[#e8540a] hover:text-[#c94708] font-semibold text-xs mt-2 flex-shrink-0 bg-transparent border-none cursor-pointer p-0 self-start"
         >
           {expanded ? 'Show less' : 'Show more'}
@@ -666,8 +680,9 @@ function ReviewCard({ review }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // TEXT REVIEWS SLIDER — horizontal swipe/scroll carousel, no arrow controls.
 // Cards are equal height (see ReviewCard). Scrollbar hidden via .reviews-scroll.
+// Clicking any card opens the full Ratings & Reviews view inside this page.
 // ─────────────────────────────────────────────────────────────────────────────
-function TextReviewsList({ reviews }) {
+function TextReviewsList({ reviews, onOpenReviews }) {
   if (!reviews.length) return null;
 
   return (
@@ -685,7 +700,7 @@ function TextReviewsList({ reviews }) {
         }}
       >
         {reviews.map((review) => (
-          <ReviewCard key={review.key} review={review} />
+          <ReviewCard key={review.key} review={review} onOpenReviews={onOpenReviews} />
         ))}
       </div>
     </>
@@ -747,6 +762,8 @@ export default function CourseLandingPage() {
 
   const [localNewReviews,   setLocalNewReviews]   = useState([]);
   const [fetchedReviews,    setFetchedReviews]    = useState([]);
+  const [reviewsOverlayOpen,  setReviewsOverlayOpen]  = useState(false);
+  const [reviewsVisibleCount, setReviewsVisibleCount] = useState(10);
 
   const descriptionRef = useRef(null);
   const instructorSectionRef = useRef(null);
@@ -756,11 +773,6 @@ export default function CourseLandingPage() {
   // section on this same page instead of navigating away.
   const scrollToInstructor = useCallback(() => {
     instructorSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }, []);
-
-  const [videoLikes, setVideoLikes] = useState({});
-  const handleVideoLike = useCallback((idx) => {
-    setVideoLikes(prev => ({ ...prev, [idx]: (prev[idx] ?? 6690) + 1 }));
   }, []);
 
   useEffect(() => {
@@ -895,16 +907,15 @@ export default function CourseLandingPage() {
     }
   };
 
-  // Navigate to the dedicated Reviews Page for THIS course only (FIX: Show All
-  // Reviews previously could resolve to a stale/incorrect course id — this now
-  // always reads courseData._id directly at click-time, which is derived from
-  // the current route's :id via useMemo above, so it can never point at a
-  // different course.
-  const goToReviewsPage = useCallback(() => {
-    const currentCourseId = courseData?._id;
-    if (!currentCourseId) return;
-    navigate(`/course/${currentCourseId}/reviews`);
-  }, [courseData?._id, navigate]);
+  // Ratings & Reviews open INSIDE this same course page — no route change —
+  // the same way the free-lecture preview opens inline. Reachable from the
+  // hero rating link, the free-preview rating link, "Show All Reviews", and
+  // every individual review card.
+  const openReviewsOverlay = useCallback(() => {
+    setReviewsVisibleCount(10);
+    setReviewsOverlayOpen(true);
+  }, []);
+  const closeReviewsOverlay = useCallback(() => setReviewsOverlayOpen(false), []);
 
   if (loading || fullCourseLoading) {
     return (
@@ -995,9 +1006,12 @@ export default function CourseLandingPage() {
     : null;
   const priceLabel = `PKR ${(courseData.price * 280).toLocaleString()}`;
 
+  const hasRealReviews = textReviews.length > 0;
+  const displayReviews = hasRealReviews ? textReviews : FALLBACK_REVIEWS;
   const displayRating = courseData.rating
-    || (textReviews.length ? (textReviews.reduce((s, r) => s + r.rating, 0) / textReviews.length) : 0);
-  const displayRatingCount = courseData.reviews || textReviews.length;
+    || (hasRealReviews ? (textReviews.reduce((s, r) => s + r.rating, 0) / textReviews.length) : FALLBACK_RATING);
+  const displayRatingCount = courseData.reviews || (hasRealReviews ? textReviews.length : FALLBACK_REVIEW_COUNT);
+  const displayRatingDistribution = hasRealReviews ? computeRatingDistribution(textReviews) : FALLBACK_RATING_DISTRIBUTION;
 
   return (
     <div className="min-h-screen bg-[#FDFAF6] overflow-x-hidden w-full" style={{ fontFamily: "'DM Sans', sans-serif" }}>
@@ -1021,28 +1035,29 @@ export default function CourseLandingPage() {
             <div className="max-w-7xl mx-auto"><PreviewVideoWithTracking url={currentVideo} course={courseData} lecture={activePreviewLecture} /></div>
           </div>
 
-          {/* Clickable rating link below the free lecture video player — opens the
-              dedicated Reviews Page. Keeps hover affordance + full keyboard access. */}
-          {courseData.rating > 0 && (
+          {/* Clickable rating link below the free lecture video player — closes this
+              preview and opens the Ratings & Reviews view inside the page. */}
+          {displayRating > 0 && (
             <div className="w-full bg-black border-b border-[#2d2416]">
               <div className="max-w-7xl mx-auto px-4 md:px-6 py-3 md:py-4">
                 <div
                   role="button"
                   tabIndex={0}
-                  onClick={goToReviewsPage}
+                  onClick={() => { handleClosePreview(); openReviewsOverlay(); }}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      goToReviewsPage();
+                      handleClosePreview();
+                      openReviewsOverlay();
                     }
                   }}
                   aria-label="View all course reviews"
                   className="inline-flex items-center gap-1.5 cursor-pointer rounded-md hover:opacity-80 transition focus:outline-none focus:ring-2 focus:ring-[#e8540a] focus:ring-offset-2 focus:ring-offset-black"
                 >
                   <Star size={16} className="text-[#f9c97a] md:w-[18px] md:h-[18px]" fill="currentColor" />
-                  <span className="text-[#f9c97a] font-bold text-sm md:text-base">{courseData.rating}</span>
+                  <span className="text-[#f9c97a] font-bold text-sm md:text-base">{displayRating.toFixed(1)}</span>
                   <span className="text-[#c8bfaf] text-sm md:text-base">·</span>
-                  <span className="text-[#c8bfaf] text-sm md:text-base underline decoration-[#c8bfaf]/40">{formatNumber(courseData.reviews || textReviews.length)} reviews</span>
+                  <span className="text-[#c8bfaf] text-sm md:text-base underline decoration-[#c8bfaf]/40">{formatNumber(displayRatingCount)} reviews</span>
                 </div>
               </div>
             </div>
@@ -1077,14 +1092,97 @@ export default function CourseLandingPage() {
         </div>
       )}
 
-      {/* FULL-SCREEN VIDEO VIEWER */}
-      <VideoFullScreenViewer
+      {/* RATINGS & REVIEWS — opens inside this same course page (no route change),
+          reachable from the hero rating link, the free-preview rating link,
+          "Show All Reviews", and any individual review card. */}
+      {reviewsOverlayOpen && (
+        <div className="fixed inset-0 z-[9999] bg-[#FDFAF6] flex flex-col">
+          <div className="sticky top-0 z-10 bg-white border-b border-[#ece6dd] shadow-sm">
+            <div className="max-w-4xl mx-auto px-4 md:px-6 py-3 md:py-4 flex items-center gap-3">
+              <button
+                onClick={closeReviewsOverlay}
+                aria-label="Back to course"
+                className="p-2 -ml-2 rounded-full hover:bg-[#f0ebe3] transition border-none bg-transparent cursor-pointer text-[#1a1208]"
+              >
+                <ArrowLeft size={22} />
+              </button>
+              <h2 className="text-lg md:text-xl font-bold text-[#1a1208]" style={{ fontFamily: "'Playfair Display', serif" }}>
+                Ratings &amp; Reviews
+              </h2>
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            <div className="max-w-4xl mx-auto px-4 md:px-6 py-6 md:py-10">
+              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-6 md:gap-12 mb-8 md:mb-10 pb-8 md:pb-10 border-b border-[#ece6dd]">
+                <div className="flex flex-col items-center flex-shrink-0">
+                  <span className="text-5xl md:text-6xl font-bold text-[#1a1208]" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {displayRating ? displayRating.toFixed(1) : '—'}
+                  </span>
+                  <div className="flex gap-1 mt-2">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Star key={i} size={18} className="text-[#f9c97a]" fill={i < Math.round(displayRating) ? 'currentColor' : 'none'} />
+                    ))}
+                  </div>
+                  <p className="text-sm text-[#9e9789] mt-2">{formatNumber(displayRatingCount)} ratings</p>
+                </div>
+                <div className="flex-1 w-full">
+                  <RatingDistribution distribution={displayRatingDistribution} />
+                </div>
+              </div>
+
+              <div className="space-y-4 md:space-y-5">
+                {displayReviews.slice(0, reviewsVisibleCount).map((review) => (
+                  <div key={review.key} className="bg-white border border-[#ece6dd] rounded-2xl p-5 md:p-6">
+                    <div className="flex items-start gap-3 mb-3">
+                      <div className="w-11 h-11 rounded-full bg-[#e8540a] text-white flex items-center justify-center font-bold text-lg flex-shrink-0 overflow-hidden">
+                        {review.avatar ? (
+                          <img src={review.avatar} alt={review.author} className="w-full h-full object-cover" />
+                        ) : (
+                          review.author.charAt(0).toUpperCase()
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-bold text-[#1a1208] text-sm md:text-base leading-snug break-words">{review.author}</p>
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          <div className="flex gap-0.5">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <Star key={i} size={12} className="text-[#f9c97a]" fill={i < Math.round(review.rating) ? 'currentColor' : 'none'} />
+                            ))}
+                          </div>
+                          {review.date && <span className="text-xs text-[#9e9789]">{review.date}</span>}
+                        </div>
+                      </div>
+                    </div>
+                    {review.text ? (
+                      <p className="text-[#3d3020] text-sm md:text-base leading-relaxed break-words">{review.text}</p>
+                    ) : (
+                      <p className="text-[#b0a898] text-sm italic">No written feedback provided.</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {reviewsVisibleCount < displayReviews.length && (
+                <button
+                  onClick={() => setReviewsVisibleCount((c) => c + 10)}
+                  className="w-full mt-6 bg-white hover:bg-[#fdf2ea] text-[#e8540a] font-bold py-3 rounded-xl transition text-base border-2 border-[#e8540a] cursor-pointer"
+                >
+                  Show more reviews
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DEFAULT VIDEO PLAYER — plain native controls, sound on, opened by tapping
+          any tile in the Video Reviews grid. */}
+      <DefaultVideoModal
         isOpen={videoReelsOpen}
         onClose={() => setVideoReelsOpen(false)}
         videos={videoTestimonials}
         startIndex={videoReelsStartIndex}
-        likes={videoLikes}
-        onLike={handleVideoLike}
       />
 
       {/* ANNOUNCEMENT BAR */}
@@ -1199,26 +1297,26 @@ export default function CourseLandingPage() {
                 </div>
               </div>
               {/* Rating link below the free lecture video player — the entire area is
-                  clickable and routes to the dedicated Reviews Page (requirement 2). */}
+                  clickable and opens the Ratings & Reviews view inside this page. */}
               <div className="flex flex-wrap items-center gap-3 md:gap-4 mb-4 md:mb-6">
-                {courseData.rating > 0 && (
+                {displayRating > 0 && (
                   <div
                     role="button"
                     tabIndex={0}
-                    onClick={goToReviewsPage}
+                    onClick={openReviewsOverlay}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' || e.key === ' ') {
                         e.preventDefault();
-                        goToReviewsPage();
+                        openReviewsOverlay();
                       }
                     }}
                     aria-label="View all course reviews"
                     className="flex items-center gap-1.5 cursor-pointer rounded-md hover:opacity-80 transition focus:outline-none focus:ring-2 focus:ring-[#e8540a] focus:ring-offset-2 focus:ring-offset-[#1a1208]"
                   >
                     <Star size={16} className="text-[#f9c97a] md:w-[18px] md:h-[18px]" fill="currentColor" />
-                    <span className="text-[#f9c97a] font-bold text-sm md:text-base">{courseData.rating}</span>
+                    <span className="text-[#f9c97a] font-bold text-sm md:text-base">{displayRating.toFixed(1)}</span>
                     <span className="text-[#c8bfaf] text-sm md:text-base">·</span>
-                    <span className="text-[#c8bfaf] text-sm md:text-base underline decoration-[#c8bfaf]/40">{formatNumber(courseData.reviews || textReviews.length)} reviews</span>
+                    <span className="text-[#c8bfaf] text-sm md:text-base underline decoration-[#c8bfaf]/40">{formatNumber(displayRatingCount)} reviews</span>
                   </div>
                 )}
                 {courseData.students > 0 && (
@@ -1417,7 +1515,7 @@ export default function CourseLandingPage() {
                     <div
                       className={`text-[#3d3020] leading-relaxed text-sm md:text-base lerni-prose max-w-none ${!showFullDescription ? 'max-h-48 overflow-hidden' : ''}`}
                       style={{ wordBreak: 'break-word' }}
-                      dangerouslySetInnerHTML={{ __html: courseData.description }}
+                      dangerouslySetInnerHTML={{ __html: richTextToHtml(courseData.description) }}
                     />
                     {!showFullDescription && (
                       <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white via-white/90 to-transparent pointer-events-none" />
@@ -1463,8 +1561,8 @@ export default function CourseLandingPage() {
                         )}
                       </div>
 
-                      {/* RIGHT: statistics list — icons line up in sequence with each other */}
-                      <div className="flex flex-col justify-center gap-2.5 md:gap-3.5 flex-1 min-w-0 pt-1 sm:pt-4 md:pt-8">
+                      {/* RIGHT: stat cards — 2x2 grid, Udemy-style */}
+                      <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 flex-1 min-w-0 pt-1 sm:pt-4 md:pt-6">
                         {[
                           { label: 'Total Rating', value: instructor.rating > 0 ? instructor.rating.toFixed(1) : '0', Icon: Star },
                           { label: 'Reviews', value: formatNumber(instructor.reviews), Icon: MessageCircle },
@@ -1473,10 +1571,14 @@ export default function CourseLandingPage() {
                         ].map((stat) => {
                           const StatIcon = stat.Icon;
                           return (
-                            <div key={stat.label} className="flex items-center gap-3">
-                              <StatIcon size={16} className="text-[#e8540a] flex-shrink-0" fill={StatIcon === Star ? 'currentColor' : 'none'} />
-                              <span className="text-xs sm:text-sm md:text-base text-[#6b5e4e] w-20 sm:w-24 md:w-28 flex-shrink-0 whitespace-nowrap">{stat.label}</span>
-                              <span className="text-xs sm:text-sm md:text-base font-semibold text-[#1a1208]">{stat.value}</span>
+                            <div key={stat.label} className="flex items-center gap-2 sm:gap-3 bg-white rounded-xl border border-[#ece6dd] px-2.5 sm:px-4 py-2 sm:py-3">
+                              <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-[#fdf0e4] flex items-center justify-center flex-shrink-0">
+                                <StatIcon size={14} className="text-[#e8540a]" fill={StatIcon === Star ? 'currentColor' : 'none'} />
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-sm sm:text-base md:text-lg font-bold text-[#1a1208] leading-tight">{stat.value}</p>
+                                <p className="text-[10px] sm:text-xs text-[#9e9789] leading-tight whitespace-nowrap">{stat.label}</p>
+                              </div>
                             </div>
                           );
                         })}
@@ -1486,9 +1588,22 @@ export default function CourseLandingPage() {
                     {/* INSTRUCTOR DESCRIPTION — below the whole profile row */}
                     <div className="mt-6 md:mt-8 pt-6 md:pt-8 border-t border-[#ece6dd] text-center sm:text-left">
                       {(instructor.description || instructor.bio) && (
-                        <p className="mt-4 text-[#3d3020] text-sm md:text-base leading-relaxed break-words whitespace-pre-line">
-                          {instructor.description || instructor.bio}
-                        </p>
+                        <div className="mt-4 relative">
+                          <div
+                            className={`text-[#3d3020] text-sm md:text-base leading-relaxed break-words lerni-prose max-w-none text-left ${!showFullInstructorDescription ? 'max-h-32 overflow-hidden' : ''}`}
+                            dangerouslySetInnerHTML={{ __html: richTextToHtml(instructor.description || instructor.bio) }}
+                          />
+                          {!showFullInstructorDescription && (
+                            <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[#f8f4ed] via-[#f8f4ed]/90 to-transparent pointer-events-none" />
+                          )}
+                          <button
+                            onClick={() => setShowFullInstructorDescription((v) => !v)}
+                            className="text-[#e8540a] hover:text-[#c94708] mt-2 text-sm md:text-base font-bold transition flex items-center gap-1 bg-transparent border-none cursor-pointer p-0 mx-auto sm:mx-0"
+                          >
+                            <span>{showFullInstructorDescription ? 'Show less' : 'Show more'}</span>
+                            <ChevronDown size={16} className={`transition-transform ${showFullInstructorDescription ? 'rotate-180' : ''}`} />
+                          </button>
+                        </div>
                       )}
                       {(instructor.location || instructor.website || instructor.twitter || instructor.linkedin) && (
                         <div className="flex flex-wrap justify-center sm:justify-start gap-3 text-sm text-[#9e9789] mt-4">
@@ -1520,34 +1635,41 @@ export default function CourseLandingPage() {
                   instead of stretching the card.
               ───────────────────────────────────────────────────────────── */}
               <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
-                <div className="mb-6 md:mb-8 flex items-center gap-2">
+                <div
+                  className="mb-6 md:mb-8 flex items-center gap-2 cursor-pointer w-fit"
+                  role="button"
+                  tabIndex={0}
+                  onClick={openReviewsOverlay}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openReviewsOverlay(); } }}
+                  aria-label="View all course reviews"
+                >
                   <Star size={28} className="text-[#f9c97a] flex-shrink-0" fill="currentColor" />
-                  <span className="text-2xl md:text-3xl font-bold text-[#1a1208]" style={{ fontFamily: "'Playfair Display', serif" }}>
+                  <span className="text-2xl md:text-3xl font-bold text-[#1a1208]" style={{ fontVariantNumeric: 'tabular-nums' }}>
                     {displayRating ? displayRating.toFixed(1) : '—'}
                   </span>
                   {displayRatingCount > 0 && (
                     <>
                       <span className="text-[#9e9789] text-lg md:text-xl">•</span>
-                      <span className="text-sm md:text-base text-[#9e9789] font-medium">
+                      <span className="text-sm md:text-base text-[#9e9789] font-medium underline decoration-[#9e9789]/40">
                         {formatNumber(displayRatingCount)} {displayRatingCount === 1 ? 'rating' : 'ratings'}
                       </span>
                     </>
                   )}
                 </div>
 
-                {textReviews.length === 0 ? (
+                {displayReviews.length === 0 ? (
                   <div className="border border-dashed border-[#ddd5c4] rounded-2xl p-8 text-center bg-[#fbf8f3]">
                     <p className="text-[#9e9789] text-sm md:text-base">Be the first to leave a review for this course.</p>
                   </div>
                 ) : (
-                  <TextReviewsList reviews={textReviews} />
+                  <TextReviewsList reviews={displayReviews} onOpenReviews={openReviewsOverlay} />
                 )}
               </div>
 
-              {/* SHOW ALL REVIEWS — opens the dedicated Reviews Page for THIS course */}
+              {/* SHOW ALL REVIEWS — opens the Ratings & Reviews view inside this page */}
               <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
                 <button
-                  onClick={goToReviewsPage}
+                  onClick={openReviewsOverlay}
                   className="w-full bg-white hover:bg-[#fdf2ea] text-[#e8540a] font-bold py-3 md:py-3.5 rounded-xl transition text-base md:text-lg border-2 border-[#e8540a] cursor-pointer">
                   Show All Reviews
                 </button>
