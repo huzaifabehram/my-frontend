@@ -63,6 +63,27 @@
 //            Video tiles autoplay muted while scrolling; tapping one opens a plain native
 //            video player (default browser controls, sound on) instead of a custom
 //            reels-style viewer.
+// ─── NEW CHANGE I: First 3 Course Content sections now expand automatically on load (still
+//            freely togglable afterward, including those first three).
+// ─── UX FIX 13: Instructor name column widened and its font sized so a typical two-word
+//            name stays on one line instead of wrapping. Instructor "Show more" button no
+//            longer sits under the description's fade-out gradient (that overlay was
+//            washing its color out compared to "Show less"). Instructor location line
+//            removed.
+// ─── NEW CHANGE J: Ratings & Reviews overlay's sticky header now reads "{rating} Total
+//            Rating · {count} Reviews" (dynamic, same data as the rest of the page) instead
+//            of a static "Ratings & Reviews" label. Background page scroll is now locked
+//            while the overlay is open (previously unlocked, which let the overlay's own
+//            scroll area and the page behind it fight over scroll on mobile and made the
+//            overlay feel like it "hung" partway down).
+// ─── NEW CHANGE K: Testimonial and video-review tiles enlarged (~50% taller). Both columns
+//            of the waterfall grid now share one animation duration (previously staggered)
+//            and an exact per-column loop distance (previously a flat -50%, which drifted by
+//            half a gap) so the two columns move in sync with no visible jump at the loop
+//            boundary. Added a top/bottom edge fade (CSS mask) so the grid fades out at the
+//            edges and stays sharp in the middle. Testimonial images are now clickable and
+//            open in a full-size lightbox (reusing the existing, previously-unwired
+//            imageSliderOpen state) without affecting the auto-scroll animation.
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Volume2, VolumeX, ArrowLeft } from 'lucide-react';
@@ -385,25 +406,39 @@ function TwoColumnWaterfall({ items, itemHeight = 260, gap = 12, renderItem, bas
     <div className="relative">
       <style>{`
         @keyframes waterfall-scroll-down {
-          0%   { transform: translateY(-50%); }
+          0%   { transform: translateY(calc(-1 * var(--scroll-distance, 50%))); }
           100% { transform: translateY(0%); }
         }
       `}</style>
       <div
         className="grid grid-cols-2 gap-3 overflow-hidden rounded-2xl"
-        style={{ height: `${viewportHeight}px` }}
+        style={{
+          height: `${viewportHeight}px`,
+          // Fades the top/bottom edges of the scrolling grid to transparent while
+          // the middle stays fully sharp — a subtle "premium" scroll mask. Applied
+          // to the whole grid so both columns fade together, and used as a mask
+          // (not a color overlay) so it works correctly over any section background.
+          WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 14%, black 86%, transparent 100%)',
+          maskImage: 'linear-gradient(to bottom, transparent 0%, black 14%, black 86%, transparent 100%)',
+        }}
       >
         {columns.map((colEntries, colIdx) => {
           if (colEntries.length === 0) return null;
           const looped = [...colEntries, ...colEntries];
-          const duration = baseDuration + colIdx * 6;
+          // Both columns share the same duration so they move at the same speed,
+          // in sync — no per-column stagger. The scroll distance is set to the
+          // exact pixel height of ONE (un-doubled) copy of this column's items,
+          // rather than a flat -50%, so the loop restarts on an exact, seamless
+          // boundary instead of drifting by half a gap and causing a visible jump.
+          const oneCopyHeight = colEntries.length * itemHeight + Math.max(0, colEntries.length - 1) * gap;
           return (
             <div key={colIdx} className="relative h-full overflow-hidden">
               <div
                 className="flex flex-col"
                 style={{
                   gap: `${gap}px`,
-                  animation: `waterfall-scroll-down ${duration}s linear infinite`,
+                  animation: `waterfall-scroll-down ${baseDuration}s linear infinite`,
+                  '--scroll-distance': `${oneCopyHeight}px`,
                   willChange: 'transform',
                 }}
               >
@@ -429,7 +464,7 @@ function VideoReviewsSlider({ videoTestimonials, onCardClick }) {
   return (
     <TwoColumnWaterfall
       items={videoTestimonials}
-      itemHeight={260}
+      itemHeight={390}
       gap={12}
       baseDuration={30}
       renderItem={(testimonial, originalIndex) => {
@@ -548,15 +583,21 @@ function DefaultVideoModal({ isOpen, onClose, videos, startIndex = 0 }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // STUDENT TESTIMONIALS — same 2-column waterfall grid, downward-scrolling.
 // ─────────────────────────────────────────────────────────────────────────────
-function AutoSlideImageTestimonials({ imageTestimonials }) {
+function AutoSlideImageTestimonials({ imageTestimonials, onImageClick }) {
   return (
     <TwoColumnWaterfall
       items={imageTestimonials}
-      itemHeight={260}
+      itemHeight={390}
       gap={12}
       baseDuration={28}
-      renderItem={(testimonial) => (
-        <div className="w-full h-full rounded-xl overflow-hidden relative shadow-lg">
+      renderItem={(testimonial, originalIndex) => (
+        <div
+          role="button"
+          tabIndex={0}
+          onClick={() => onImageClick?.(originalIndex)}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onImageClick?.(originalIndex); } }}
+          className="w-full h-full rounded-xl overflow-hidden relative shadow-lg cursor-pointer"
+        >
           <img
             src={testimonial.imageUrl}
             alt={testimonial.author || 'Student testimonial'}
@@ -572,6 +613,69 @@ function AutoSlideImageTestimonials({ imageTestimonials }) {
         </div>
       )}
     />
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IMAGE LIGHTBOX — clicking a Student Testimonial image opens it here at full
+// size, mirroring DefaultVideoModal's plain full-screen pattern (close button,
+// prev/next arrows, Escape to close, background scroll locked while open).
+// ─────────────────────────────────────────────────────────────────────────────
+function ImageLightbox({ isOpen, onClose, images, startIndex = 0 }) {
+  const [currentIndex, setCurrentIndex] = useState(startIndex);
+
+  useEffect(() => {
+    if (isOpen) { document.body.style.overflow = 'hidden'; setCurrentIndex(startIndex); }
+    else document.body.style.overflow = 'unset';
+    return () => { document.body.style.overflow = 'unset'; };
+  }, [isOpen, startIndex]);
+
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.key === 'Escape') onClose();
+      if (e.key === 'ArrowRight' && currentIndex < images.length - 1) setCurrentIndex(i => i + 1);
+      if (e.key === 'ArrowLeft' && currentIndex > 0) setCurrentIndex(i => i - 1);
+    };
+    if (isOpen) window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [isOpen, onClose, currentIndex, images.length]);
+
+  if (!isOpen) return null;
+
+  const current = images[currentIndex];
+
+  return (
+    <div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-4">
+      <button onClick={onClose} aria-label="Close image"
+        className="fixed top-4 right-4 z-50 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition border-none cursor-pointer">
+        <X size={22} />
+      </button>
+
+      {currentIndex > 0 && (
+        <button onClick={() => setCurrentIndex(i => i - 1)} aria-label="Previous image"
+          className="fixed left-2 md:left-6 top-1/2 -translate-y-1/2 z-50 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition border-none cursor-pointer">
+          <ChevronLeft size={24} />
+        </button>
+      )}
+      {currentIndex < images.length - 1 && (
+        <button onClick={() => setCurrentIndex(i => i + 1)} aria-label="Next image"
+          className="fixed right-2 md:right-6 top-1/2 -translate-y-1/2 z-50 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition border-none cursor-pointer">
+          <ChevronRight size={24} />
+        </button>
+      )}
+
+      <div className="w-full max-w-3xl flex flex-col items-center">
+        <img
+          key={current?.imageUrl}
+          src={current?.imageUrl}
+          alt={current?.author || 'Student testimonial'}
+          className="w-full max-h-[80vh] object-contain rounded-lg"
+        />
+        {current?.author && (
+          <p className="text-white/90 text-sm md:text-base font-semibold mt-4">{current.author}</p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -744,7 +848,7 @@ export default function CourseLandingPage() {
   const { API: api, user } = useAuth();
 
   const [mobileMenuOpen,        setMobileMenuOpen]        = useState(false);
-  const [expandedSection,       setExpandedSection]       = useState([0]);
+  const [expandedSection,       setExpandedSection]       = useState([0, 1, 2]);
   const [showFullDescription,   setShowFullDescription]   = useState(false);
   const [showFullInstructorBio, setShowFullInstructorBio] = useState(false);
   const [showFullInstructorDescription, setShowFullInstructorDescription] = useState(false);
@@ -916,6 +1020,17 @@ export default function CourseLandingPage() {
     setReviewsOverlayOpen(true);
   }, []);
   const closeReviewsOverlay = useCallback(() => setReviewsOverlayOpen(false), []);
+
+  // While the Ratings & Reviews overlay is open, lock background body scroll
+  // (same pattern used for the preview popup / video modal above). Without
+  // this, the page behind the fixed overlay could still scroll at the same
+  // time as the overlay's own internal scroll area, which is what caused the
+  // reviews view to feel like it "hangs" partway through scrolling on mobile.
+  useEffect(() => {
+    const handleKeyDown = (e) => { if (e.key === 'Escape' && reviewsOverlayOpen) closeReviewsOverlay(); };
+    if (reviewsOverlayOpen) { window.addEventListener('keydown', handleKeyDown); document.body.style.overflow = 'hidden'; }
+    return () => { window.removeEventListener('keydown', handleKeyDown); document.body.style.overflow = 'unset'; };
+  }, [reviewsOverlayOpen, closeReviewsOverlay]);
 
   if (loading || fullCourseLoading) {
     return (
@@ -1106,8 +1221,11 @@ export default function CourseLandingPage() {
               >
                 <ArrowLeft size={22} />
               </button>
+              {/* Compact dynamic summary instead of a static "Ratings & Reviews" label —
+                  values come from the same displayRating/displayRatingCount used
+                  everywhere else on the page, never hardcoded. */}
               <h2 className="text-lg md:text-xl font-bold text-[#1a1208]" style={{ fontFamily: "'Playfair Display', serif" }}>
-                Ratings &amp; Reviews
+                {displayRating ? displayRating.toFixed(1) : '—'} Total Rating · {formatNumber(displayRatingCount)} Reviews
               </h2>
             </div>
           </div>
@@ -1183,6 +1301,15 @@ export default function CourseLandingPage() {
         onClose={() => setVideoReelsOpen(false)}
         videos={videoTestimonials}
         startIndex={videoReelsStartIndex}
+      />
+
+      {/* IMAGE LIGHTBOX — opened by tapping any tile in the Student Testimonials
+          grid; the background waterfall keeps auto-scrolling behind it. */}
+      <ImageLightbox
+        isOpen={imageSliderOpen}
+        onClose={() => setImageSliderOpen(false)}
+        images={imageTestimonials}
+        startIndex={imageSliderStartIndex}
       />
 
       {/* ANNOUNCEMENT BAR */}
@@ -1542,8 +1669,11 @@ export default function CourseLandingPage() {
                           RIGHT column = Total Rating / Reviews / Students / Courses, icons
                                          aligned in a straight sequence with each other */}
                     <div className="flex flex-row items-start gap-8 sm:gap-12 md:gap-16">
-                      {/* LEFT: photo + name + title, stacked as one column */}
-                      <div className="flex flex-col items-center flex-shrink-0 w-28 sm:w-36 md:w-44">
+                      {/* LEFT: photo + name + title, stacked as one column.
+                          Column is a touch wider than the photo itself (photo size is
+                          unchanged) so a typical two-word instructor name has room to sit
+                          on a single line instead of wrapping. */}
+                      <div className="flex flex-col items-center flex-shrink-0 w-32 sm:w-40 md:w-48">
                         <div className="w-28 h-28 sm:w-36 sm:h-36 md:w-44 md:h-44 rounded-full overflow-hidden bg-[#f0ebe3] border-4 border-white shadow-md flex-shrink-0" style={{ aspectRatio: '1 / 1' }}>
                           {instructor.image && instructor.image.startsWith('http') ? (
                             <img src={instructor.image} alt={instructor.name} className="w-full h-full object-cover" />
@@ -1553,7 +1683,7 @@ export default function CourseLandingPage() {
                             </div>
                           )}
                         </div>
-                        <p className="mt-3 font-bold text-[#1a1208] text-base sm:text-xl md:text-2xl leading-tight text-center break-words" style={{ fontFamily: "'Playfair Display', serif" }}>
+                        <p className="mt-3 font-bold text-[#1a1208] text-sm sm:text-lg md:text-xl leading-tight text-center whitespace-nowrap" style={{ fontFamily: "'Playfair Display', serif" }}>
                           {instructor.name}
                         </p>
                         {instructor.title && (
@@ -1588,14 +1718,21 @@ export default function CourseLandingPage() {
                     {/* INSTRUCTOR DESCRIPTION — below the whole profile row */}
                     <div className="mt-6 md:mt-8 pt-6 md:pt-8 border-t border-[#ece6dd] text-center sm:text-left">
                       {(instructor.description || instructor.bio) && (
-                        <div className="mt-4 relative">
-                          <div
-                            className={`text-[#3d3020] text-sm md:text-base leading-relaxed break-words lerni-prose max-w-none text-left ${!showFullInstructorDescription ? 'max-h-32 overflow-hidden' : ''}`}
-                            dangerouslySetInnerHTML={{ __html: richTextToHtml(instructor.description || instructor.bio) }}
-                          />
-                          {!showFullInstructorDescription && (
-                            <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[#f8f4ed] via-[#f8f4ed]/90 to-transparent pointer-events-none" />
-                          )}
+                        <div className="mt-4">
+                          {/* The fade overlay is scoped to ONLY this inner wrapper (not the
+                              button below) — previously the overlay's "bottom: 0" was
+                              anchored to the whole block including the button, washing the
+                              "Show more" label out with the same cream fade and making it
+                              look dim compared to "Show less" (which has no overlay). */}
+                          <div className="relative">
+                            <div
+                              className={`text-[#3d3020] text-sm md:text-base leading-relaxed break-words lerni-prose max-w-none text-left ${!showFullInstructorDescription ? 'max-h-32 overflow-hidden' : ''}`}
+                              dangerouslySetInnerHTML={{ __html: richTextToHtml(instructor.description || instructor.bio) }}
+                            />
+                            {!showFullInstructorDescription && (
+                              <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[#f8f4ed] via-[#f8f4ed]/90 to-transparent pointer-events-none" />
+                            )}
+                          </div>
                           <button
                             onClick={() => setShowFullInstructorDescription((v) => !v)}
                             className="text-[#e8540a] hover:text-[#c94708] mt-2 text-sm md:text-base font-bold transition flex items-center gap-1 bg-transparent border-none cursor-pointer p-0 mx-auto sm:mx-0"
@@ -1605,11 +1742,8 @@ export default function CourseLandingPage() {
                           </button>
                         </div>
                       )}
-                      {(instructor.location || instructor.website || instructor.twitter || instructor.linkedin) && (
+                      {(instructor.website || instructor.twitter || instructor.linkedin) && (
                         <div className="flex flex-wrap justify-center sm:justify-start gap-3 text-sm text-[#9e9789] mt-4">
-                          {instructor.location && (
-                            <span className="flex items-center gap-1.5"><Globe size={14} className="text-[#e8540a]" />{instructor.location}</span>
-                          )}
                           {instructor.website && (
                             <a href={instructor.website.startsWith('http') ? instructor.website : `https://${instructor.website}`}
                               target="_blank" rel="noopener noreferrer"
@@ -1680,7 +1814,10 @@ export default function CourseLandingPage() {
                 <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
                   <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#1a1208] mb-2 md:mb-3" style={{ fontFamily: "'Playfair Display', serif" }}>Student Testimonials</h2>
                   <p className="text-[#9e9789] text-sm md:text-base mb-4 md:mb-6">See what our students have to say</p>
-                  <AutoSlideImageTestimonials imageTestimonials={imageTestimonials} />
+                  <AutoSlideImageTestimonials
+                    imageTestimonials={imageTestimonials}
+                    onImageClick={(idx) => { setImageSliderStartIndex(idx); setImageSliderOpen(true); }}
+                  />
                 </div>
               )}
 
