@@ -1,4 +1,4 @@
-// src/Pages/EnrollmentPage.jsx
+// src/Pages/EnrollmentPage.jsx  (v1.1)
 // ─────────────────────────────────────────────────────────────────────────────
 // ENROLLMENT PAGE — reached from "Enroll Now" on the course landing page
 // (Shopify.jsx). Two steps:
@@ -272,30 +272,30 @@ export default function EnrollmentPage() {
                 </p>
 
                 <div>
-                  <label className="flex items-center gap-1.5 text-sm font-bold text-[#3d3020] mb-1.5"><User size={15} className="text-[#e8540a]" /> Full Name</label>
+                  <label htmlFor="enroll-name" className="flex items-center gap-1.5 text-sm font-bold text-[#3d3020] mb-1.5"><User size={15} className="text-[#e8540a]" /> Full Name</label>
                   <input
-                    name="name" value={form.name} onChange={handleChange}
-                    placeholder="e.g. Ayesha Siddiqui"
+                    id="enroll-name" name="name" value={form.name} onChange={handleChange}
+                    placeholder="e.g. Ayesha Siddiqui" autoComplete="name"
                     className={`w-full border rounded-xl px-4 py-3 text-sm md:text-base text-[#1a1208] outline-none transition ${errors.name ? 'border-red-400' : 'border-[#ece6dd] focus:border-[#e8540a]'}`}
                   />
                   {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
                 </div>
 
                 <div>
-                  <label className="flex items-center gap-1.5 text-sm font-bold text-[#3d3020] mb-1.5"><Mail size={15} className="text-[#e8540a]" /> Email Address</label>
+                  <label htmlFor="enroll-email" className="flex items-center gap-1.5 text-sm font-bold text-[#3d3020] mb-1.5"><Mail size={15} className="text-[#e8540a]" /> Email Address</label>
                   <input
-                    name="email" type="email" value={form.email} onChange={handleChange}
-                    placeholder="you@email.com"
+                    id="enroll-email" name="email" type="email" value={form.email} onChange={handleChange}
+                    placeholder="you@email.com" autoComplete="email"
                     className={`w-full border rounded-xl px-4 py-3 text-sm md:text-base text-[#1a1208] outline-none transition ${errors.email ? 'border-red-400' : 'border-[#ece6dd] focus:border-[#e8540a]'}`}
                   />
                   {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
                 </div>
 
                 <div>
-                  <label className="flex items-center gap-1.5 text-sm font-bold text-[#3d3020] mb-1.5"><MessageCircle size={15} className="text-[#e8540a]" /> WhatsApp Number</label>
+                  <label htmlFor="enroll-whatsapp" className="flex items-center gap-1.5 text-sm font-bold text-[#3d3020] mb-1.5"><MessageCircle size={15} className="text-[#e8540a]" /> WhatsApp Number</label>
                   <input
-                    name="whatsapp" value={form.whatsapp} onChange={handleChange}
-                    placeholder="03XX-XXXXXXX"
+                    id="enroll-whatsapp" name="whatsapp" value={form.whatsapp} onChange={handleChange}
+                    placeholder="03XX-XXXXXXX" autoComplete="tel" inputMode="tel"
                     className={`w-full border rounded-xl px-4 py-3 text-sm md:text-base text-[#1a1208] outline-none transition ${errors.whatsapp ? 'border-red-400' : 'border-[#ece6dd] focus:border-[#e8540a]'}`}
                   />
                   {errors.whatsapp && <p className="text-red-500 text-xs mt-1">{errors.whatsapp}</p>}
