@@ -1,4 +1,4 @@
-// src/Pages/EnrollmentPage.jsx  (v1.1)
+// src/Pages/EnrolledPage.jsx  (v1.2)
 // ─────────────────────────────────────────────────────────────────────────────
 // ENROLLMENT PAGE — reached from "Enroll Now" on the course landing page
 // (Shopify.jsx). Two steps:
@@ -60,7 +60,7 @@ const PAYMENT_METHODS = [
   },
 ];
 
-export default function EnrollmentPage() {
+export default function EnrolledPage() {
   const navigate = useNavigate();
   const { id } = useParams();
   const { user } = useAuth();

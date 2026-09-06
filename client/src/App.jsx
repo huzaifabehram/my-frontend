@@ -6,7 +6,7 @@ import { CoursesProvider }        from "./context/CoursesContext";
 import AuthPage                   from "./Pages/AuthPages";
 import Shopify                    from "./Pages/Shopify";
 import CoursesPage                from "./Pages/CoursesPage";
-import EnrollmentPage             from "./Pages/EnrollmentPage";
+import EnrolledPage               from "./Pages/EnrolledPage";
 import Portals                    from "./Pages/Portals";
 import InstructorDashboard        from "./Pages/InstructorDashboard";
 import MetaPixelRouteTracker      from "./components/MetaPixelRouteTracker";
@@ -65,7 +65,7 @@ function AppRoutes() {
       {/* Enrollment must stay public (not behind ProtectedRoute) — guests who
           aren't logged in yet still need to reach this page from "Enroll Now".
           It sends them on to /auth/register itself once both steps are filled in. */}
-      <Route path="/course/:id/enroll" element={<EnrollmentPage />} />
+      <Route path="/course/:id/enroll" element={<EnrolledPage />} />
 
       {/* Auth */}
       <Route path="/auth"          element={<Navigate to="/auth/login" replace />} />
