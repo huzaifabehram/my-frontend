@@ -17,7 +17,7 @@
 //     AuthPages.jsx already finishes enrollment after a successful signup —
 //     see the small addition needed there, described in the setup notes.
 // ─────────────────────────────────────────────────────────────────────────────
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCourses } from '../context/CoursesContext';
@@ -25,7 +25,7 @@ import { enrollCourse } from '../api/courseApi';
 import { trackInitiateCheckout, trackPurchase, setPendingCourse } from '../utils/facebookPixel';
 import {
   Menu, X, Search, Check, ChevronLeft, ArrowLeft, MessageCircle,
-  Smartphone, CreditCard, Landmark, Loader2, ShieldCheck, User, Mail,
+  Smartphone, Landmark, Loader2, ShieldCheck, User, Mail, LogIn, ImagePlus,
 } from 'lucide-react';
 
 // Key used to stash Step 1 + Step 2 answers for guests who still need to
@@ -38,32 +38,26 @@ const PAYMENT_METHODS = [
     id: 'bank',
     label: 'Bank Transfer',
     icon: Landmark,
-    detail: 'Bank: [Your Bank] • Account Title: [Your Name] • Account #: [XXXX-XXXXXXX-X] • IBAN: [PKXX XXXX XXXX XXXX XXXX XXXX]',
+    detail: 'Bank Alfalah • Account Title: Let\'s Grow • Account #: 8318-1010223870',
   },
   {
     id: 'jazzcash',
     label: 'JazzCash',
     icon: Smartphone,
-    detail: 'Send to: [03XX-XXXXXXX] • Account Title: [Your Name]',
+    detail: 'Send to: 0324-5463513 • Account Title: Huzaifa Behram',
   },
   {
     id: 'easypaisa',
     label: 'Easypaisa',
     icon: Smartphone,
-    detail: 'Send to: [03XX-XXXXXXX] • Account Title: [Your Name]',
-  },
-  {
-    id: 'card',
-    label: 'Credit / Debit Card',
-    icon: CreditCard,
-    detail: 'Pay securely by card — you will get a confirmation on WhatsApp once it clears.',
+    detail: 'Send to: 0344-6199712 • Account Title: Huzaifa Behram',
   },
 ];
 
 export default function EnrolledPage() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { user } = useAuth();
+  const { user, API: api } = useAuth();
   const { courses, getCourse, fetchCourseById } = useCourses();
 
   const [fullCourse, setFullCourse] = useState(null);
@@ -74,13 +68,33 @@ export default function EnrolledPage() {
   const [form, setForm] = useState({ name: '', email: '', whatsapp: '' });
   const [errors, setErrors] = useState({});
   const [paymentMethod, setPaymentMethod] = useState('bank');
+  const [screenshotFile, setScreenshotFile] = useState(null);
+  const [screenshotPreview, setScreenshotPreview] = useState('');
+  const [screenshotError, setScreenshotError] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const fileInputRef = useRef(null);
 
   // Prefill from the logged-in account, if any — same fields still editable.
   useEffect(() => {
     if (user) setForm((f) => ({ ...f, name: f.name || user.name || '', email: f.email || user.email || '' }));
   }, [user]);
+
+  // WORKAROUND for a mobile Safari/Chrome quirk: focusing a text input whose
+  // rendered font-size is under 16px makes the browser auto zoom in, and the
+  // zoomed-in state can persist after moving to the next step — which is what
+  // was making the footer look cut off. All text inputs on this page are set
+  // to 16px (below) so the zoom shouldn't trigger in the first place; this
+  // effect is a second safety net that nudges the viewport back to 1:1 scale
+  // whenever the step changes, in case a browser still zoomed in.
+  useEffect(() => {
+    const viewport = document.querySelector('meta[name="viewport"]');
+    if (!viewport) return;
+    const original = viewport.getAttribute('content');
+    viewport.setAttribute('content', 'width=device-width, initial-scale=1, maximum-scale=1');
+    const reset = setTimeout(() => { if (original) viewport.setAttribute('content', original); }, 350);
+    return () => clearTimeout(reset);
+  }, [step]);
 
   // Same load pattern as the course landing page: cached copy first, then
   // refresh from the server so price/title are always current.
@@ -130,31 +144,70 @@ export default function EnrolledPage() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [form, course]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // "Already have an account?" — for returning students who don't need to
+  // fill this form again. Goes straight to the normal login flow.
+  const handleLoginClick = useCallback(() => {
+    if (course) setPendingCourse(course);
+    const courseId = course ? (course._id || course.id) : '';
+    navigate(`/auth/login?redirect=${encodeURIComponent('/thank-you')}${courseId ? `&courseId=${courseId}` : ''}`);
+  }, [course, navigate]);
+
+  function handleScreenshotChange(e) {
+    const file = e.target.files?.[0];
+    setScreenshotError('');
+    if (!file) { setScreenshotFile(null); setScreenshotPreview(''); return; }
+    if (!file.type.startsWith('image/')) {
+      setScreenshotError('Please upload an image file (screenshot).');
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      setScreenshotError('Image is too large — please keep it under 10 MB.');
+      return;
+    }
+    setScreenshotFile(file);
+    setScreenshotPreview(URL.createObjectURL(file));
+  }
+
   async function handleFinalSubmit() {
     if (!course) return;
+    if (!screenshotFile) { setScreenshotError('Please attach your payment screenshot to continue.'); return; }
+
     setSubmitting(true);
     setSubmitError('');
     const courseId = course._id || course.id;
-    const intake = {
-      name: form.name.trim(),
-      email: form.email.trim(),
-      whatsapp: form.whatsapp.trim(),
-      paymentMethod,
-    };
 
     try {
+      // Payment screenshots are submitted by guests who don't have an
+      // account yet, so this goes through a public upload endpoint (no
+      // login token required) rather than the instructor-only image upload.
+      const formData = new FormData();
+      formData.append('screenshot', screenshotFile);
+      formData.append('courseId', courseId);
+      const uploadRes = await api.post('/upload/payment-screenshot', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      const paymentScreenshotUrl = uploadRes?.data?.url || uploadRes?.data?.secure_url || '';
+
+      const intake = {
+        name: form.name.trim(),
+        email: form.email.trim(),
+        whatsapp: form.whatsapp.trim(),
+        paymentMethod,
+        paymentScreenshotUrl,
+      };
+
       if (user) {
         // Already signed in — enroll right away.
         await enrollCourse(courseId, intake);
         trackPurchase(course);
-        navigate('/portal', { replace: true });
+        navigate('/thank-you', { replace: true, state: { courseTitle: course.title } });
       } else {
         // Guest — stash the answers, then reuse the existing sign-up flow.
-        // AuthPages.jsx picks this up once the account is created (see the
-        // "Wiring it up" notes for the small addition needed there).
+        // AuthPages.jsx picks this up once the account is created and sends
+        // them to /thank-you itself (via the redirect param below).
         setPendingCourse(course);
         localStorage.setItem(INTAKE_STORAGE_KEY, JSON.stringify(intake));
-        navigate(`/auth/register?redirect=${encodeURIComponent('/portal')}&courseId=${courseId}`);
+        navigate(`/auth/register?redirect=${encodeURIComponent('/thank-you')}&courseId=${courseId}`);
       }
     } catch (err) {
       setSubmitError(err?.response?.data?.message || 'Something went wrong. Please try again.');
@@ -243,6 +296,11 @@ export default function EnrolledPage() {
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-8 lg:gap-10 items-start">
           {/* ── FORM COLUMN ── */}
           <div className="border border-[#ece6dd] rounded-2xl bg-white p-5 sm:p-7 md:p-9 w-full">
+            {/* Marketing headline — sits above everything else on the page */}
+            <h2 className="text-lg md:text-xl font-bold text-[#e8540a] mb-5 md:mb-6 leading-snug" style={{ fontFamily: "'Playfair Display', serif" }}>
+              Enroll Now in Our Updated 2026 Shopify &amp; Digital Marketing Course
+            </h2>
+
             {/* Step indicator */}
             <div className="flex items-center gap-3 mb-7 md:mb-9">
               {[1, 2].map((s) => (
@@ -276,7 +334,10 @@ export default function EnrolledPage() {
                   <input
                     id="enroll-name" name="name" value={form.name} onChange={handleChange}
                     placeholder="e.g. Ayesha Siddiqui" autoComplete="name"
-                    className={`w-full border rounded-xl px-4 py-3 text-sm md:text-base text-[#1a1208] outline-none transition ${errors.name ? 'border-red-400' : 'border-[#ece6dd] focus:border-[#e8540a]'}`}
+                    // text-base (16px) — anything smaller triggers an
+                    // automatic zoom-in on focus in mobile Safari/Chrome,
+                    // which is what was leaving the page "zoomed" afterward.
+                    className={`w-full border rounded-xl px-4 py-3 text-base text-[#1a1208] outline-none transition ${errors.name ? 'border-red-400' : 'border-[#ece6dd] focus:border-[#e8540a]'}`}
                   />
                   {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
                 </div>
@@ -286,7 +347,7 @@ export default function EnrolledPage() {
                   <input
                     id="enroll-email" name="email" type="email" value={form.email} onChange={handleChange}
                     placeholder="you@email.com" autoComplete="email"
-                    className={`w-full border rounded-xl px-4 py-3 text-sm md:text-base text-[#1a1208] outline-none transition ${errors.email ? 'border-red-400' : 'border-[#ece6dd] focus:border-[#e8540a]'}`}
+                    className={`w-full border rounded-xl px-4 py-3 text-base text-[#1a1208] outline-none transition ${errors.email ? 'border-red-400' : 'border-[#ece6dd] focus:border-[#e8540a]'}`}
                   />
                   {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
                 </div>
@@ -296,7 +357,7 @@ export default function EnrolledPage() {
                   <input
                     id="enroll-whatsapp" name="whatsapp" value={form.whatsapp} onChange={handleChange}
                     placeholder="03XX-XXXXXXX" autoComplete="tel" inputMode="tel"
-                    className={`w-full border rounded-xl px-4 py-3 text-sm md:text-base text-[#1a1208] outline-none transition ${errors.whatsapp ? 'border-red-400' : 'border-[#ece6dd] focus:border-[#e8540a]'}`}
+                    className={`w-full border rounded-xl px-4 py-3 text-base text-[#1a1208] outline-none transition ${errors.whatsapp ? 'border-red-400' : 'border-[#ece6dd] focus:border-[#e8540a]'}`}
                   />
                   {errors.whatsapp && <p className="text-red-500 text-xs mt-1">{errors.whatsapp}</p>}
                   <p className="text-xs text-[#9e9789] mt-1.5">Used only for enrollment and payment confirmation.</p>
@@ -308,12 +369,27 @@ export default function EnrolledPage() {
                 >
                   Continue to Payment
                 </button>
+
+                {!user && (
+                  <button
+                    type="button"
+                    onClick={handleLoginClick}
+                    className="w-full flex items-center justify-center gap-1.5 text-[#3d3020] hover:text-[#e8540a] font-semibold text-sm bg-transparent border-none cursor-pointer py-1"
+                  >
+                    <LogIn size={15} /> Already have an account? Log In
+                  </button>
+                )}
               </div>
             ) : (
               <div className="space-y-5">
                 <h1 className="text-xl md:text-2xl font-bold text-[#1a1208]" style={{ fontFamily: "'Playfair Display', serif" }}>
                   Choose how you'd like to pay
                 </h1>
+                <p className="text-[#3d3020] text-sm md:text-base -mt-3 leading-relaxed">
+                  Please submit your course fee of <span className="font-bold text-[#1a1208]">{priceLabel}</span> using
+                  any option below, then attach a screenshot of your payment. Once we confirm it, you'll get access
+                  to our portal for this course.
+                </p>
 
                 <div className="space-y-3">
                   {PAYMENT_METHODS.map((m) => {
@@ -343,12 +419,50 @@ export default function EnrolledPage() {
                   })}
                 </div>
 
+                {/* Payment screenshot — required before enrollment can be confirmed */}
+                <div>
+                  <label className="text-sm font-bold text-[#3d3020] mb-1.5 block">
+                    Payment Screenshot <span className="text-[#e8540a]">*</span>
+                  </label>
+                  <input
+                    ref={fileInputRef} type="file" accept="image/*"
+                    onChange={handleScreenshotChange} className="hidden" id="payment-screenshot"
+                  />
+                  {screenshotPreview ? (
+                    <div className="border border-[#ece6dd] rounded-xl p-3 flex items-center gap-3">
+                      <img src={screenshotPreview} alt="Payment screenshot preview" className="w-16 h-16 rounded-lg object-cover flex-shrink-0 border border-[#ece6dd]" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-[#1a1208] truncate">{screenshotFile?.name}</p>
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="text-xs text-[#e8540a] hover:text-[#c94708] font-bold bg-transparent border-none cursor-pointer p-0 mt-1"
+                        >
+                          Replace image
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <label
+                      htmlFor="payment-screenshot"
+                      className={`flex flex-col items-center justify-center gap-2 border-2 border-dashed rounded-xl py-7 cursor-pointer transition ${
+                        screenshotError ? 'border-red-300 bg-red-50' : 'border-[#ddd5c4] hover:border-[#e8540a] bg-[#f8f4ed]'
+                      }`}
+                    >
+                      <ImagePlus size={22} className="text-[#e8540a]" />
+                      <span className="text-sm font-semibold text-[#3d3020]">Tap to attach your payment screenshot</span>
+                      <span className="text-xs text-[#9e9789]">JPG, PNG, or WebP — up to 10 MB</span>
+                    </label>
+                  )}
+                  {screenshotError && <p className="text-red-500 text-xs mt-1">{screenshotError}</p>}
+                </div>
+
                 <div className="flex items-start gap-2 bg-[#f8f4ed] border border-[#ece6dd] rounded-xl p-3.5">
                   <ShieldCheck size={18} className="text-[#e8540a] flex-shrink-0 mt-0.5" />
                   <p className="text-xs md:text-sm text-[#6b5e4e]">
-                    After you complete the transfer, tap "Confirm Enrollment" below — access is
-                    granted as soon as your payment is verified, and we'll message you on WhatsApp
-                    to confirm.
+                    After you complete the transfer, attach your screenshot above and tap "Confirm
+                    Enrollment" — access is granted as soon as your payment is verified, and we'll
+                    message you on WhatsApp to confirm.
                   </p>
                 </div>
 
@@ -367,7 +481,7 @@ export default function EnrolledPage() {
                   </button>
                   <button
                     onClick={handleFinalSubmit}
-                    disabled={submitting}
+                    disabled={submitting || !screenshotFile}
                     className="flex-[2] bg-[#e8540a] hover:bg-[#c94708] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3.5 rounded-xl transition text-base border-none cursor-pointer flex items-center justify-center gap-2"
                   >
                     {submitting ? (<><Loader2 size={18} className="animate-spin" /> Processing…</>) : 'Confirm Enrollment'}
