@@ -10,6 +10,7 @@ import EnrolledPage               from "./Pages/EnrolledPage";
 import ThankYouPage                from "./Pages/ThankYouPage";
 import Portals                    from "./Pages/Portals";
 import InstructorDashboard        from "./Pages/InstructorDashboard";
+import SuperAdminDashboard        from "./Pages/SuperAdminsDashboard";
 import MetaPixelRouteTracker      from "./components/MetaPixelRouteTracker";
 
 // ─── Error boundary: shows a readable message instead of a blank screen ───────
@@ -51,7 +52,11 @@ function ProtectedRoute({ children, role }) {
   if (loading) return <LoadingScreen />;
   if (!user)   return <Navigate to="/auth/login" replace />;
   if (role && user.role !== role)
-    return <Navigate to={user.role === "instructor" ? "/instructor" : "/portal"} replace />;
+    return <Navigate to={
+      user.role === "admin" ? "/superadmin"
+      : user.role === "instructor" ? "/instructor"
+      : "/portal"
+    } replace />;
   return children;
 }
 
@@ -84,6 +89,9 @@ function AppRoutes() {
       }/>
       <Route path="/instructor/*" element={
         <ProtectedRoute role="instructor"><InstructorDashboard /></ProtectedRoute>
+      }/>
+      <Route path="/superadmin/*" element={
+        <ProtectedRoute role="admin"><SuperAdminDashboard /></ProtectedRoute>
       }/>
 
       <Route path="*" element={<Navigate to="/" replace />} />
