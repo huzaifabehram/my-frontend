@@ -10,7 +10,7 @@ import EnrolledPage               from "./Pages/EnrolledPage";
 import ThankYouPage                from "./Pages/ThankYouPage";
 import Portals                    from "./Pages/Portals";
 import InstructorDashboard        from "./Pages/InstructorDashboard";
-import SuperAdminDashboard        from "./Pages/SuperAdminsDashboard";
+import SuperAdminsDashboard        from "./Pages/SuperAdminsDashboard";
 import MetaPixelRouteTracker      from "./components/MetaPixelRouteTracker";
 
 // ─── Error boundary: shows a readable message instead of a blank screen ───────
@@ -91,7 +91,7 @@ function AppRoutes() {
         <ProtectedRoute role="instructor"><InstructorDashboard /></ProtectedRoute>
       }/>
       <Route path="/superadmin/*" element={
-        <ProtectedRoute role="admin"><SuperAdminDashboard /></ProtectedRoute>
+        <ProtectedRoute role="admin"><SuperAdminsDashboard /></ProtectedRoute>
       }/>
 
       <Route path="*" element={<Navigate to="/" replace />} />
