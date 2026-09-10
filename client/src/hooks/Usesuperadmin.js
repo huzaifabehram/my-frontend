@@ -1,4 +1,5 @@
 // client/src/hooks/useSuperAdmin.js
+// (re-saved to force a fresh commit — see chat for why)
 // ─────────────────────────────────────────────────────────────────────────────
 // Data layer for the Super Admin panel. Mirrors the shape of
 // `useInstructorCourses` already used by InstructorDashboard.jsx — same
