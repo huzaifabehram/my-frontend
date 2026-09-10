@@ -27,6 +27,7 @@ import {
   LayoutDashboard, Users, GraduationCap, ClipboardCheck, BookOpen,
   Search, CheckCircle2, XCircle, Clock, ExternalLink, Ban, RotateCcw,
   X, Menu, Eye, MessageCircle, Mail, ShieldCheck, DollarSign, AlertTriangle,
+  Palette, History, Plus, Trash2,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -322,6 +323,540 @@ function Modal({ open, onClose, children, maxWidth = "max-w-lg" }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// THEME EDITOR — every editable section of the course landing page
+// (Shopify.jsx). Defaults below match exactly what's currently hardcoded
+// there, so an unpublished/empty theme still renders the page as it looks
+// today. Reads/writes through the theme endpoints already defined in
+// server.js (draft/publish/history/reset) — no new backend routes needed,
+// just a role check update (see SUPERADMIN_SETUP.md).
+//
+// NOTE: Shopify.jsx does not yet fetch or apply these settings — that's a
+// separate, deliberately-staged follow-up (see chat). Publishing here saves
+// the theme correctly, but the live course page won't visually change until
+// Shopify.jsx is updated to read GET /api/theme/published and use these
+// values instead of its current hardcoded ones.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DEFAULT_THEME_SETTINGS = {
+  brand: {
+    nameFirstPart: "Ler",
+    nameSecondPart: "ni",
+  },
+  colors: {
+    primary:       "#e8540a",
+    primaryHover:  "#c94708",
+    dark:          "#1a1208",
+    darkSecondary: "#2d2416",
+    cream:         "#FDFAF6",
+    cardBg:        "#f8f4ed",
+    cardBgAlt:     "#f0ebe3",
+    border:        "#ece6dd",
+    gold:          "#f9c97a",
+  },
+  fonts: {
+    heading: "Playfair Display",
+    body:    "DM Sans",
+  },
+  announcementBar: {
+    enabled: true,
+    message: "🎉 Limited Time Offer: Save {pct}% — Ends Soon!",
+  },
+  header: {
+    navLinks: [
+      { label: "Categories", path: "/courses" },
+      { label: "Instructor", path: "/instructor" },
+      { label: "About", path: "/courses" },
+    ],
+    loginButtonText: "Log In",
+  },
+  hero: {
+    bestsellerBadgeText: "Bestseller",
+    createdByText:       "Created by",
+    lastUpdatedPrefix:   "Last updated",
+    languageLabel:       "Urdu",
+    studentsSuffix:      "students",
+    reviewsSuffix:       "reviews",
+    buyNowText:          "Buy now",
+    guaranteeText:       "30-Day Money-Back Guarantee",
+  },
+  sections: {
+    whatYouLearn:  { heading: "What you'll learn" },
+    courseContent: { heading: "Course Content", freeLabel: "Free Lecture" },
+    requirements:  { heading: "Requirements" },
+    description:   { heading: "Description", showMoreText: "Show more", showLessText: "Show less" },
+    instructor:    { heading: "Instructor", ratingLabel: "Total Rating", reviewsLabel: "Reviews", studentsLabel: "Students", coursesLabel: "Courses" },
+    reviews:       { showAllButtonText: "Show All Reviews" },
+    testimonials:  { heading: "Student Testimonials", subheading: "See what our students have to say" },
+    videoReviews:  { heading: "Video Reviews", subheading: "Watch authentic testimonials from our graduates" },
+    gallery:       { heading: "Project gallery", subheading: "Student work and course outcomes" },
+    alsoBought:    { heading: "Students also bought" },
+  },
+  courseIncludes: {
+    heading: "This course includes:",
+    items: [
+      { icon: "Film",       text: "On-demand video" },
+      { icon: "Download",   text: "Downloadable resources" },
+      { icon: "Smartphone", text: "Access on mobile and TV" },
+      { icon: "Shield",     text: "Full lifetime access" },
+      { icon: "Award",      text: "Certificate of completion" },
+    ],
+  },
+  fallbackReviews: {
+    rating: 4.8,
+    count: 5676,
+    distribution: [
+      { star: 5, count: 4427, percentage: 78 },
+      { star: 4, count: 851,  percentage: 15 },
+      { star: 3, count: 227,  percentage: 4 },
+      { star: 2, count: 114,  percentage: 2 },
+      { star: 1, count: 57,   percentage: 1 },
+    ],
+    reviews: [
+      { author: "Ayesha Siddiqui", rating: 5, date: "Aug 12, 2026", text: "Yeh course mera business dekhne ka tareeqa hi badal gaya. Facebook Ads aur Shopify wali videos bohat practical thi. Highly recommended for beginners!" },
+      { author: "Muhammad Bilal",  rating: 4, date: "Aug 3, 2026",  text: "Content is solid, especially the e-commerce dropshipping module. Kuch sections thori lambi lagti hain lekin overall bohat value hai." },
+      { author: "Zainab Fatima",   rating: 5, date: "Jul 27, 2026", text: "Sir ne har concept itni acchi tarhan explain kiya keh mujhe apna Instagram store shuru karne ka confidence mil gaya. Best marketing course in Urdu!" },
+      { author: "Usman Tariq",     rating: 5, date: "Jul 19, 2026", text: "I run a small clothing brand and this course helped me set up my first proper ad campaign. Roman Urdu explanation makes everything very easy to follow." },
+      { author: "Hina Rafiq",      rating: 4, date: "Jul 10, 2026", text: "SEO wala section thora aur detailed ho sakta tha, but overall the course is amazing for e-commerce beginners." },
+      { author: "Ahmed Raza",      rating: 5, date: "Jun 30, 2026", text: "Bohat zabardast course hai! Google Ads aur email marketing dono clearly samajh aa gaye. Worth every rupee." },
+      { author: "Sana Malik",      rating: 5, date: "Jun 22, 2026", text: "Great mix of theory and hands-on practice. Mujhe apni Daraz store ki sales double karne mein madad mili." },
+      { author: "Fahad Iqbal",     rating: 4, date: "Jun 15, 2026", text: "Acha course hai, beginners ke liye perfect starting point digital marketing seekhne ka." },
+    ],
+  },
+  footer: {
+    columns: [
+      { title: "Lerni",     links: ["About", "Press", "Contact", "Careers"] },
+      { title: "Community", links: ["Learners", "Partners", "Developers", "Beta Testers"] },
+      { title: "Teaching",  links: ["Become Instructor", "Teaching Center", "Resources"] },
+      { title: "Programs",  links: ["Enterprise", "Government", "Lerni Business"] },
+      { title: "Support",   links: ["Help Center", "Get the App", "FAQ", "Accessibility"] },
+      { title: "Legal",     links: ["Terms", "Privacy Policy", "Cookie Settings", "Sitemap"] },
+    ],
+    copyrightText: "© 2024 Lerni, Inc. All rights reserved.",
+  },
+  stickyBar: {
+    enrollText: "Enroll Now In",
+  },
+};
+
+// Merges saved settings on top of the defaults above — any section/field
+// the saved theme hasn't touched yet falls back to the current Shopify.jsx
+// hardcoded value, so the form is always fully populated even before a
+// theme has ever been published. Arrays (nav links, footer columns, etc.)
+// are replaced wholesale by the saved value rather than merged item-by-item.
+function deepMerge(base, override) {
+  if (!override || typeof override !== "object" || Array.isArray(override)) return base;
+  const out = { ...base };
+  for (const key of Object.keys(override)) {
+    const overrideVal = override[key];
+    const baseVal = base ? base[key] : undefined;
+    if (overrideVal && typeof overrideVal === "object" && !Array.isArray(overrideVal)
+      && baseVal && typeof baseVal === "object" && !Array.isArray(baseVal)) {
+      out[key] = deepMerge(baseVal, overrideVal);
+    } else if (overrideVal !== undefined) {
+      out[key] = overrideVal;
+    }
+  }
+  return out;
+}
+
+const INCLUDES_ICON_OPTIONS = ["Film", "Download", "Smartphone", "Shield", "Award", "BookOpen", "Clock", "Globe", "Users", "Star", "Check"];
+
+function ThemeCard({ title, description, children }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
+      <h3 className="font-bold text-gray-800 text-base">{title}</h3>
+      {description && <p className="text-xs sm:text-sm text-gray-500 mt-1">{description}</p>}
+      <div className="mt-4 space-y-4">{children}</div>
+    </div>
+  );
+}
+
+function ColorField({ label, value, onChange }) {
+  const safeHex = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(value) ? value : "#000000";
+  return (
+    <div className="flex flex-col gap-1">
+      <label className="text-xs sm:text-sm font-medium text-gray-700">{label}</label>
+      <div className="flex items-center gap-2">
+        <input type="color" value={safeHex} onChange={(e) => onChange(e.target.value)}
+          className="w-10 h-10 rounded-lg border border-gray-200 cursor-pointer p-0.5 bg-white flex-shrink-0" />
+        <input type="text" value={value} onChange={(e) => onChange(e.target.value)}
+          className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500" />
+      </div>
+    </div>
+  );
+}
+
+function StringListEditor({ items, onChange, placeholder = "Item" }) {
+  const update = (idx, val) => onChange(items.map((it, i) => (i === idx ? val : it)));
+  const remove = (idx) => onChange(items.filter((_, i) => i !== idx));
+  const add = () => onChange([...items, ""]);
+  return (
+    <div className="space-y-2">
+      {items.map((item, idx) => (
+        <div key={idx} className="flex items-center gap-2">
+          <input value={item} onChange={(e) => update(idx, e.target.value)} placeholder={placeholder}
+            className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500" />
+          <button onClick={() => remove(idx)} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1"><Trash2 size={15} /></button>
+        </div>
+      ))}
+      <button onClick={add} className="text-amber-700 hover:text-amber-800 text-xs font-semibold flex items-center gap-1 bg-transparent border-none cursor-pointer p-0">
+        <Plus size={14} /> Add item
+      </button>
+    </div>
+  );
+}
+
+function NavLinksEditor({ items, onChange }) {
+  const update = (idx, field, val) => onChange(items.map((it, i) => (i === idx ? { ...it, [field]: val } : it)));
+  const remove = (idx) => onChange(items.filter((_, i) => i !== idx));
+  const add = () => onChange([...items, { label: "", path: "/" }]);
+  return (
+    <div className="space-y-2">
+      {items.map((item, idx) => (
+        <div key={idx} className="flex items-center gap-2">
+          <input value={item.label} onChange={(e) => update(idx, "label", e.target.value)} placeholder="Label"
+            className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500" />
+          <input value={item.path} onChange={(e) => update(idx, "path", e.target.value)} placeholder="/path"
+            className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500" />
+          <button onClick={() => remove(idx)} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1"><Trash2 size={15} /></button>
+        </div>
+      ))}
+      <button onClick={add} className="text-amber-700 hover:text-amber-800 text-xs font-semibold flex items-center gap-1 bg-transparent border-none cursor-pointer p-0">
+        <Plus size={14} /> Add link
+      </button>
+    </div>
+  );
+}
+
+function CourseIncludesEditor({ items, onChange }) {
+  const update = (idx, field, val) => onChange(items.map((it, i) => (i === idx ? { ...it, [field]: val } : it)));
+  const remove = (idx) => onChange(items.filter((_, i) => i !== idx));
+  const add = () => onChange([...items, { icon: "Check", text: "" }]);
+  return (
+    <div className="space-y-2">
+      {items.map((item, idx) => (
+        <div key={idx} className="flex items-center gap-2">
+          <select value={item.icon} onChange={(e) => update(idx, "icon", e.target.value)}
+            className="border border-gray-200 rounded-lg px-2 py-2 text-sm text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+            {INCLUDES_ICON_OPTIONS.map((ic) => <option key={ic} value={ic}>{ic}</option>)}
+          </select>
+          <input value={item.text} onChange={(e) => update(idx, "text", e.target.value)} placeholder="Feature text"
+            className="flex-1 min-w-0 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500" />
+          <button onClick={() => remove(idx)} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1"><Trash2 size={15} /></button>
+        </div>
+      ))}
+      <button onClick={add} className="text-amber-700 hover:text-amber-800 text-xs font-semibold flex items-center gap-1 bg-transparent border-none cursor-pointer p-0">
+        <Plus size={14} /> Add feature
+      </button>
+    </div>
+  );
+}
+
+function FooterColumnsEditor({ columns, onChange }) {
+  const updateTitle = (idx, val) => onChange(columns.map((c, i) => (i === idx ? { ...c, title: val } : c)));
+  const updateLinks = (idx, links) => onChange(columns.map((c, i) => (i === idx ? { ...c, links } : c)));
+  const remove = (idx) => onChange(columns.filter((_, i) => i !== idx));
+  const add = () => onChange([...columns, { title: "New Column", links: [] }]);
+  return (
+    <div className="space-y-4">
+      {columns.map((col, idx) => (
+        <div key={idx} className="border border-gray-200 rounded-lg p-3 sm:p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <input value={col.title} onChange={(e) => updateTitle(idx, e.target.value)} placeholder="Column title"
+              className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm font-semibold text-gray-900 focus:outline-none focus:ring-2 focus:ring-amber-500" />
+            <button onClick={() => remove(idx)} className="text-red-400 hover:text-red-600 bg-transparent border-none cursor-pointer p-1"><Trash2 size={15} /></button>
+          </div>
+          <StringListEditor items={col.links} onChange={(links) => updateLinks(idx, links)} placeholder="Link text" />
+        </div>
+      ))}
+      <button onClick={add} className="text-amber-700 hover:text-amber-800 text-xs font-semibold flex items-center gap-1 bg-transparent border-none cursor-pointer p-0">
+        <Plus size={14} /> Add column
+      </button>
+    </div>
+  );
+}
+
+function FallbackDistributionEditor({ distribution, onChange }) {
+  const update = (idx, field, val) => onChange(distribution.map((d, i) => (i === idx ? { ...d, [field]: Number(val) || 0 } : d)));
+  return (
+    <div className="space-y-2">
+      {distribution.map((row, idx) => (
+        <div key={row.star} className="flex items-center gap-2">
+          <span className="w-14 text-sm font-semibold text-gray-700">{row.star} star</span>
+          <input type="number" min="0" value={row.count} onChange={(e) => update(idx, "count", e.target.value)} placeholder="Count"
+            className="w-24 border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
+          <input type="number" min="0" max="100" value={row.percentage} onChange={(e) => update(idx, "percentage", e.target.value)} placeholder="%"
+            className="w-20 border border-gray-200 rounded-lg px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
+          <span className="text-xs text-gray-400">%</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FallbackReviewsListEditor({ reviews, onChange }) {
+  const update = (idx, field, val) => onChange(reviews.map((r, i) => (i === idx ? { ...r, [field]: val } : r)));
+  const remove = (idx) => onChange(reviews.filter((_, i) => i !== idx));
+  const add = () => onChange([...reviews, { author: "", rating: 5, date: "", text: "" }]);
+  return (
+    <div className="space-y-3">
+      {reviews.map((r, idx) => (
+        <div key={idx} className="border border-gray-200 rounded-lg p-3 space-y-2">
+          <div className="grid sm:grid-cols-3 gap-2">
+            <input value={r.author} onChange={(e) => update(idx, "author", e.target.value)} placeholder="Author name"
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
+            <select value={r.rating} onChange={(e) => update(idx, "rating", Number(e.target.value))}
+              className="border border-gray-200 rounded-lg px-2 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500">
+              {[5, 4, 3, 2, 1].map((n) => <option key={n} value={n}>{n} star</option>)}
+            </select>
+            <input value={r.date} onChange={(e) => update(idx, "date", e.target.value)} placeholder="e.g. Aug 12, 2026"
+              className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500" />
+          </div>
+          <Textarea value={r.text} onChange={(v) => update(idx, "text", v)} rows={2} placeholder="Review text" />
+          <button onClick={() => remove(idx)} className="text-red-400 hover:text-red-600 text-xs font-semibold flex items-center gap-1 bg-transparent border-none cursor-pointer p-0">
+            <Trash2 size={13} /> Remove review
+          </button>
+        </div>
+      ))}
+      <button onClick={add} className="text-amber-700 hover:text-amber-800 text-xs font-semibold flex items-center gap-1 bg-transparent border-none cursor-pointer p-0">
+        <Plus size={14} /> Add fallback review
+      </button>
+    </div>
+  );
+}
+
+function ThemeHistoryModal({ open, onClose, history, loading, onRestore }) {
+  return (
+    <Modal open={open} onClose={onClose} maxWidth="max-w-lg">
+      <div className="p-5 sm:p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-bold text-gray-900 text-lg">Publish History</h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 bg-transparent border-none cursor-pointer"><X size={20} /></button>
+        </div>
+        {loading ? (
+          <p className="text-sm text-gray-400 text-center py-8">Loading…</p>
+        ) : history.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-8">No published versions yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {history.map((h) => (
+              <div key={h._id} className="flex items-center justify-between gap-3 border border-gray-100 rounded-lg px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-gray-800">Version {h.version}</p>
+                  <p className="text-xs text-gray-500">{h.changedBy?.name || "Unknown"} · {fmtDate(h.createdAt)}</p>
+                </div>
+                <Btn size="sm" variant="secondary" onClick={() => onRestore(h._id)}>Restore</Btn>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function ThemeEditorPage({ toast }) {
+  const { API: api } = useAuth();
+  const [settings,   setSettings]   = useState(DEFAULT_THEME_SETTINGS);
+  const [loading,    setLoading]    = useState(true);
+  const [saving,     setSaving]     = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [dirty,      setDirty]      = useState(false);
+  const [historyOpen,    setHistoryOpen]    = useState(false);
+  const [history,        setHistory]        = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    api.get("/theme/draft")
+      .then((res) => { if (!cancelled) setSettings(deepMerge(DEFAULT_THEME_SETTINGS, res.data?.settings || {})); })
+      .catch(() => { if (!cancelled) toast("Could not load the saved theme — showing defaults.", "error"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function update(path, value) {
+    setSettings((s) => {
+      const next = JSON.parse(JSON.stringify(s));
+      let cur = next;
+      for (let i = 0; i < path.length - 1; i++) cur = cur[path[i]];
+      cur[path[path.length - 1]] = value;
+      return next;
+    });
+    setDirty(true);
+  }
+
+  async function handleSaveDraft() {
+    setSaving(true);
+    try { await api.put("/theme/draft", { settings }); setDirty(false); toast("Draft saved.", "success"); }
+    catch { toast("Could not save draft.", "error"); }
+    finally { setSaving(false); }
+  }
+
+  async function handlePublish() {
+    setPublishing(true);
+    try { await api.post("/theme/publish", { settings }); setDirty(false); toast("Published.", "success"); }
+    catch { toast("Could not publish.", "error"); }
+    finally { setPublishing(false); }
+  }
+
+  function handleResetToDefaults() {
+    if (!window.confirm("Reset every field back to the original defaults? This only changes your draft — nothing already published changes until you publish again.")) return;
+    setSettings(DEFAULT_THEME_SETTINGS);
+    setDirty(true);
+    toast("Reset to defaults — save or publish to keep it.", "info");
+  }
+
+  async function openHistory() {
+    setHistoryOpen(true);
+    setLoadingHistory(true);
+    try { const res = await api.get("/theme/history"); setHistory(Array.isArray(res.data) ? res.data : []); }
+    catch { toast("Could not load history.", "error"); }
+    finally { setLoadingHistory(false); }
+  }
+
+  async function handleRestore(historyId) {
+    try {
+      const res = await api.post(`/theme/restore/${historyId}`);
+      setSettings(deepMerge(DEFAULT_THEME_SETTINGS, res.data?.settings || {}));
+      setDirty(true);
+      setHistoryOpen(false);
+      toast("Restored into your draft — review, then publish when ready.", "success");
+    } catch { toast("Could not restore that version.", "error"); }
+  }
+
+  if (loading) return <div className="text-center py-16 text-gray-400">Loading theme…</div>;
+
+  const s = settings;
+
+  return (
+    <div className="space-y-6 sm:space-y-8 max-w-4xl">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900">Course Page Theme Editor</h2>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+            Every editable section of the course landing page — colors, headings, footer, and fallback content.
+            {dirty && <span className="text-amber-600 font-semibold"> Unsaved changes.</span>}
+          </p>
+        </div>
+        <div className="flex gap-2 flex-wrap">
+          <Btn variant="secondary" size="sm" onClick={openHistory}><History size={14} /> History</Btn>
+          <Btn variant="secondary" size="sm" onClick={handleResetToDefaults}><RotateCcw size={14} /> Reset</Btn>
+          <Btn variant="secondary" size="sm" onClick={handleSaveDraft} disabled={saving}>{saving ? "Saving…" : "Save Draft"}</Btn>
+          <Btn variant="primary" size="sm" onClick={handlePublish} disabled={publishing}>{publishing ? "Publishing…" : "Publish"}</Btn>
+        </div>
+      </div>
+
+      <ThemeCard title="Brand & Colors" description="Wordmark text, fonts, and the color palette used across the whole course page.">
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Input label="Brand name — first part" value={s.brand.nameFirstPart} onChange={(v) => update(["brand", "nameFirstPart"], v)} />
+          <Input label="Brand name — second part (shown in accent color)" value={s.brand.nameSecondPart} onChange={(v) => update(["brand", "nameSecondPart"], v)} />
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <ColorField label="Primary accent" value={s.colors.primary} onChange={(v) => update(["colors", "primary"], v)} />
+          <ColorField label="Primary accent (hover)" value={s.colors.primaryHover} onChange={(v) => update(["colors", "primaryHover"], v)} />
+          <ColorField label="Dark (header / hero background)" value={s.colors.dark} onChange={(v) => update(["colors", "dark"], v)} />
+          <ColorField label="Dark secondary" value={s.colors.darkSecondary} onChange={(v) => update(["colors", "darkSecondary"], v)} />
+          <ColorField label="Page background (cream)" value={s.colors.cream} onChange={(v) => update(["colors", "cream"], v)} />
+          <ColorField label="Card background" value={s.colors.cardBg} onChange={(v) => update(["colors", "cardBg"], v)} />
+          <ColorField label="Card background (alt)" value={s.colors.cardBgAlt} onChange={(v) => update(["colors", "cardBgAlt"], v)} />
+          <ColorField label="Borders" value={s.colors.border} onChange={(v) => update(["colors", "border"], v)} />
+          <ColorField label="Stars / badges (gold)" value={s.colors.gold} onChange={(v) => update(["colors", "gold"], v)} />
+        </div>
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Input label="Heading font" value={s.fonts.heading} onChange={(v) => update(["fonts", "heading"], v)} />
+          <Input label="Body font" value={s.fonts.body} onChange={(v) => update(["fonts", "body"], v)} />
+        </div>
+      </ThemeCard>
+
+      <ThemeCard title="Announcement Bar" description="The scrolling banner shown above the header when a course has a discount.">
+        <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+          <input type="checkbox" checked={s.announcementBar.enabled} onChange={(e) => update(["announcementBar", "enabled"], e.target.checked)} className="accent-amber-600 w-4 h-4" />
+          Show announcement bar
+        </label>
+        <Input label="Message (use {pct} for the discount percentage)" value={s.announcementBar.message} onChange={(v) => update(["announcementBar", "message"], v)} />
+      </ThemeCard>
+
+      <ThemeCard title="Header & Navigation" description="Top navigation links and the login button.">
+        <NavLinksEditor items={s.header.navLinks} onChange={(v) => update(["header", "navLinks"], v)} />
+        <Input label="Login button text" value={s.header.loginButtonText} onChange={(v) => update(["header", "loginButtonText"], v)} />
+      </ThemeCard>
+
+      <ThemeCard title="Hero Section" description="Badges, sidebar buttons, and labels around the top of the course page.">
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Input label="Bestseller badge text" value={s.hero.bestsellerBadgeText} onChange={(v) => update(["hero", "bestsellerBadgeText"], v)} />
+          <Input label='"Created by" text' value={s.hero.createdByText} onChange={(v) => update(["hero", "createdByText"], v)} />
+          <Input label='"Last updated" prefix' value={s.hero.lastUpdatedPrefix} onChange={(v) => update(["hero", "lastUpdatedPrefix"], v)} />
+          <Input label="Language label" value={s.hero.languageLabel} onChange={(v) => update(["hero", "languageLabel"], v)} />
+          <Input label="Students suffix" value={s.hero.studentsSuffix} onChange={(v) => update(["hero", "studentsSuffix"], v)} />
+          <Input label="Reviews suffix" value={s.hero.reviewsSuffix} onChange={(v) => update(["hero", "reviewsSuffix"], v)} />
+          <Input label='"Buy now" button text' value={s.hero.buyNowText} onChange={(v) => update(["hero", "buyNowText"], v)} />
+          <Input label="Money-back guarantee text" value={s.hero.guaranteeText} onChange={(v) => update(["hero", "guaranteeText"], v)} />
+        </div>
+      </ThemeCard>
+
+      <ThemeCard title="Section Headings" description="The heading (and subheading, where the section has one) shown above each block of the page.">
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Input label="What You'll Learn — heading" value={s.sections.whatYouLearn.heading} onChange={(v) => update(["sections", "whatYouLearn", "heading"], v)} />
+          <Input label="Course Content — heading" value={s.sections.courseContent.heading} onChange={(v) => update(["sections", "courseContent", "heading"], v)} />
+          <Input label="Free lecture badge text" value={s.sections.courseContent.freeLabel} onChange={(v) => update(["sections", "courseContent", "freeLabel"], v)} />
+          <Input label="Requirements — heading" value={s.sections.requirements.heading} onChange={(v) => update(["sections", "requirements", "heading"], v)} />
+          <Input label="Description — heading" value={s.sections.description.heading} onChange={(v) => update(["sections", "description", "heading"], v)} />
+          <Input label='Description — "show more" text' value={s.sections.description.showMoreText} onChange={(v) => update(["sections", "description", "showMoreText"], v)} />
+          <Input label='Description — "show less" text' value={s.sections.description.showLessText} onChange={(v) => update(["sections", "description", "showLessText"], v)} />
+          <Input label="Instructor — heading" value={s.sections.instructor.heading} onChange={(v) => update(["sections", "instructor", "heading"], v)} />
+          <Input label="Instructor stat — rating label" value={s.sections.instructor.ratingLabel} onChange={(v) => update(["sections", "instructor", "ratingLabel"], v)} />
+          <Input label="Instructor stat — reviews label" value={s.sections.instructor.reviewsLabel} onChange={(v) => update(["sections", "instructor", "reviewsLabel"], v)} />
+          <Input label="Instructor stat — students label" value={s.sections.instructor.studentsLabel} onChange={(v) => update(["sections", "instructor", "studentsLabel"], v)} />
+          <Input label="Instructor stat — courses label" value={s.sections.instructor.coursesLabel} onChange={(v) => update(["sections", "instructor", "coursesLabel"], v)} />
+          <Input label='Reviews — "Show All Reviews" button text' value={s.sections.reviews.showAllButtonText} onChange={(v) => update(["sections", "reviews", "showAllButtonText"], v)} />
+          <Input label="Testimonials — heading" value={s.sections.testimonials.heading} onChange={(v) => update(["sections", "testimonials", "heading"], v)} />
+          <Input label="Testimonials — subheading" value={s.sections.testimonials.subheading} onChange={(v) => update(["sections", "testimonials", "subheading"], v)} />
+          <Input label="Video Reviews — heading" value={s.sections.videoReviews.heading} onChange={(v) => update(["sections", "videoReviews", "heading"], v)} />
+          <Input label="Video Reviews — subheading" value={s.sections.videoReviews.subheading} onChange={(v) => update(["sections", "videoReviews", "subheading"], v)} />
+          <Input label="Project Gallery — heading" value={s.sections.gallery.heading} onChange={(v) => update(["sections", "gallery", "heading"], v)} />
+          <Input label="Project Gallery — subheading" value={s.sections.gallery.subheading} onChange={(v) => update(["sections", "gallery", "subheading"], v)} />
+          <Input label="Students Also Bought — heading" value={s.sections.alsoBought.heading} onChange={(v) => update(["sections", "alsoBought", "heading"], v)} />
+        </div>
+      </ThemeCard>
+
+      <ThemeCard title='"This Course Includes" (sidebar)' description="The fixed feature list shown in the desktop sidebar — not pulled from any individual course.">
+        <Input label="Heading" value={s.courseIncludes.heading} onChange={(v) => update(["courseIncludes", "heading"], v)} />
+        <CourseIncludesEditor items={s.courseIncludes.items} onChange={(v) => update(["courseIncludes", "items"], v)} />
+      </ThemeCard>
+
+      <ThemeCard title="Fallback Reviews" description="Shown only on courses that have no real reviews yet, so the page never looks empty.">
+        <div className="grid sm:grid-cols-2 gap-3">
+          <Input label="Fallback rating (e.g. 4.8)" type="number" value={String(s.fallbackReviews.rating)} onChange={(v) => update(["fallbackReviews", "rating"], parseFloat(v) || 0)} />
+          <Input label="Fallback review count" type="number" value={String(s.fallbackReviews.count)} onChange={(v) => update(["fallbackReviews", "count"], parseInt(v, 10) || 0)} />
+        </div>
+        <div>
+          <p className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Star distribution</p>
+          <FallbackDistributionEditor distribution={s.fallbackReviews.distribution} onChange={(v) => update(["fallbackReviews", "distribution"], v)} />
+        </div>
+        <div>
+          <p className="text-xs sm:text-sm font-medium text-gray-700 mb-2">Sample reviews</p>
+          <FallbackReviewsListEditor reviews={s.fallbackReviews.reviews} onChange={(v) => update(["fallbackReviews", "reviews"], v)} />
+        </div>
+      </ThemeCard>
+
+      <ThemeCard title="Footer" description="All footer columns and their links, plus the copyright line.">
+        <FooterColumnsEditor columns={s.footer.columns} onChange={(v) => update(["footer", "columns"], v)} />
+        <Input label="Copyright text" value={s.footer.copyrightText} onChange={(v) => update(["footer", "copyrightText"], v)} />
+      </ThemeCard>
+
+      <ThemeCard title="Sticky Mobile Enroll Bar" description="The bar pinned to the bottom of the screen on mobile.">
+        <Input label="Button text prefix (shown before the price)" value={s.stickyBar.enrollText} onChange={(v) => update(["stickyBar", "enrollText"], v)} />
+      </ThemeCard>
+
+      <ThemeHistoryModal open={historyOpen} onClose={() => setHistoryOpen(false)} history={history} loading={loadingHistory} onRestore={handleRestore} />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // NAVIGATION SHELL — Sidebar + TopBar + Layout (same structure as the
 // instructor dashboard, amber accent instead of purple)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -332,6 +867,7 @@ const NAV_ITEMS = [
   { to: "/superadmin/students",      label: "Students",      icon: Users },
   { to: "/superadmin/instructors",   label: "Instructors",   icon: GraduationCap },
   { to: "/superadmin/courses",       label: "Courses",       icon: BookOpen },
+  { to: "/superadmin/theme",         label: "Theme Editor",  icon: Palette },
 ];
 
 function Sidebar({ admin, collapsed, setCollapsed, isMobile, pendingCount }) {
@@ -1100,6 +1636,9 @@ export default function SuperAdminDashboard() {
           } />
           <Route path="courses" element={
             <CoursesPage courses={courses} loading={loading.courses} setCourseStatus={setCourseStatus} toast={toast} />
+          } />
+          <Route path="theme" element={
+            <ThemeEditorPage toast={toast} />
           } />
           <Route path="*" element={<Navigate to="" replace />} />
         </Routes>
