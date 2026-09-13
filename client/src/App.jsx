@@ -1,10 +1,22 @@
 // src/App.jsx
+//
+// CHANGES FROM YOUR VERSION (only these two):
+//   1. "/" now renders <HomePage /> instead of <Shopify />. Shopify.jsx is
+//      the course landing page — it still owns /course/:id — but "/" was
+//      just falling back to it for lack of a real home page. Now that
+//      HomePage.jsx exists, it takes over "/".
+//   2. Added "/services" → <ServicesPage />, grouped with the other public
+//      routes.
+// Nothing else below is changed — same ErrorBoundary, MetaPixelRouteTracker,
+// ProtectedRoute, and every other route exactly as you had them.
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth }  from "./context/AuthContext";
 import { CoursesProvider }        from "./context/CoursesContext";
 import AuthPage                   from "./Pages/AuthPages";
 import Shopify                    from "./Pages/Shopify";
+import HomePage                   from "./Pages/Homepage";
+import ServicesPage               from "./Pages/Servicespage";
 import CoursesPage                from "./Pages/CoursesPage";
 import EnrolledPage               from "./Pages/EnrolledPage";
 import ThankYouPage                from "./Pages/ThankYouPage";
@@ -65,7 +77,8 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Public */}
-      <Route path="/"                element={<Shopify />} />
+      <Route path="/"                element={<HomePage />} />
+      <Route path="/services"        element={<ServicesPage />} />
       <Route path="/courses"         element={<CoursesPage />} />
       <Route path="/course/:id"      element={<Shopify />} />
       {/* Enrollment must stay public (not behind ProtectedRoute) — guests who

@@ -95,6 +95,10 @@
 //            blur at the boundary to none toward the center) layered with the existing
 //            opacity fade, so content sharpens in the middle and blurs+fades out completely
 //            at the edges instead of a hard cutoff.
+// ─── NEW CHANGE N: Header nav (desktop + mobile) now includes "Home" and "Services" links
+//            alongside Categories/Instructor/About, so the course page can link straight to
+//            HomePage.jsx and ServicesPage.jsx. This is the only functional change in this
+//            revision — everything else above is unchanged from the previous version.
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Volume2, VolumeX, ArrowLeft } from 'lucide-react';
@@ -1427,8 +1431,11 @@ export default function CourseLandingPage() {
               Ler<span className="text-[#e8540a]">ni</span>
             </button>
           </div>
+          {/* NEW CHANGE N: added Home + Services links alongside the existing ones */}
           <nav className="hidden lg:flex items-center gap-8 flex-1 ml-12">
+            <button onClick={() => handleNavigate('/')} className="text-base text-[#3d3020] hover:text-[#e8540a] transition bg-transparent border-none cursor-pointer p-0 font-medium">Home</button>
             <button onClick={() => handleNavigate('/courses')} className="text-base text-[#3d3020] hover:text-[#e8540a] transition bg-transparent border-none cursor-pointer p-0 font-medium">Categories</button>
+            <button onClick={() => handleNavigate('/services')} className="text-base text-[#3d3020] hover:text-[#e8540a] transition bg-transparent border-none cursor-pointer p-0 font-medium">Services</button>
             <button onClick={() => handleNavigate('/instructor')} className="text-base text-[#3d3020] hover:text-[#e8540a] transition bg-transparent border-none cursor-pointer p-0 font-medium">Instructor</button>
             <button onClick={() => handleNavigate('/courses')} className="text-base text-[#3d3020] hover:text-[#e8540a] transition bg-transparent border-none cursor-pointer p-0 font-medium">About</button>
           </nav>
@@ -1446,7 +1453,10 @@ export default function CourseLandingPage() {
                   <span className="text-xl font-bold text-white" style={{ fontFamily: "'Playfair Display', serif" }}>Menu</span>
                   <button onClick={() => setMobileMenuOpen(false)} className="p-2 hover:bg-white/10 rounded-lg transition bg-transparent border-none cursor-pointer text-white"><X size={24} /></button>
                 </div>
+                {/* NEW CHANGE N: same Home + Services links added to the mobile drawer */}
+                <button onClick={() => handleNavigate('/')} className="block w-full text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base">Home</button>
                 <button onClick={() => handleNavigate('/courses')} className="block w-full text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base">Categories</button>
+                <button onClick={() => handleNavigate('/services')} className="block w-full text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base">Services</button>
                 <button onClick={() => handleNavigate('/instructor')} className="block w-full text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base">Instructor</button>
               </div>
             </div>
