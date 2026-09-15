@@ -10,11 +10,18 @@
 //          (heading, sub heading, video URL, image upload/URL) that render on
 //          the course landing page. All video-URL previews are now compact,
 //          corner-anchored thumbnails instead of a full-width player.
-// UPDATED: Instructor Profile → Description now supports an unlimited media
-//          gallery ("Add Video" / "Add Picture"), each item with its own
-//          heading + description. Pictures upload to Cloudinary; videos are
-//          pasted YouTube / Bunny.net links. Saved as instructorMedia[] and
-//          synced to every course landing page via the instructor profile.
+// UPDATED: Instructor Profile → Description is now one ordered list of
+//          blocks (paragraph / picture / video) instead of a plain textarea
+//          plus a separate media gallery — "+ Add Text", "🎬 Add Video" and
+//          "🖼️ Add Picture" append a block, and dragging its ☰ handle puts a
+//          photo or video after any paragraph. Pictures upload to
+//          Cloudinary; videos are pasted YouTube / Bunny.net links. Saved as
+//          instructorDescriptionBlocks[] and synced to every course landing
+//          page via the instructor profile. NOTE: persisting this (and the
+//          older instructorDescription/instructorMedia fields) after a
+//          refresh depends on the backend User schema + update route
+//          actually accepting/returning these fields — see the comment
+//          above ProfilePage's handleSave for what to check server-side.
 // All dummy data is replaced with real API calls via useInstructorCourses hook.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1663,21 +1670,48 @@ function ProfilePage({ toast }) {
     totalReviews:          user?.totalReviews != null && user.totalReviews !== "" ? String(user.totalReviews) : "",
     totalStudents:         user?.totalStudents != null && user.totalStudents !== "" ? String(user.totalStudents) : "",
     totalCourses:          user?.totalCourses != null && user.totalCourses !== "" ? String(user.totalCourses) : "",
-    instructorDescription: user?.instructorDescription || "",
   });
   const [saving,          setSaving]          = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileRef = useRef();
 
-  // ── Instructor Media Gallery — unlimited videos + pictures, each with its
-  //    own heading + description. Pictures upload to Cloudinary; videos are
-  //    pasted YouTube / Bunny.net links. Saved as instructorMedia[] and read
-  //    by Shopify.jsx on every course this instructor owns. ─────────────────
-  const [mediaItems, setMediaItems] = useState(
-    Array.isArray(user?.instructorMedia) ? user.instructorMedia : []
-  );
-  const [uploadingMediaImage, setUploadingMediaImage] = useState({}); // keyed by item id
-  const mediaImageRefs = useRef({});
+  // ── Description — one ordered list of blocks instead of a plain textarea
+  //    plus a separate media gallery. A block is either:
+  //      { type: 'text',  text }
+  //      { type: 'image', heading, description, imageUrl }
+  //      { type: 'video', heading, description, videoUrl }
+  //    Add text / picture / video blocks with the buttons below, then drag
+  //    the ☰ handle to put a photo or video after whichever paragraph you
+  //    want — the saved order is exactly what renders on the course landing
+  //    page. Old accounts that only have the previous instructorDescription
+  //    + instructorMedia fields are migrated into this shape automatically
+  //    the first time this page loads.
+  //    SAVED AS: instructorDescriptionBlocks (see NOTE at handleSave below —
+  //    the backend User model needs this field added, or it will keep being
+  //    silently dropped on save). ─────────────────────────────────────────
+  function blocksFromUser(u) {
+    if (Array.isArray(u?.instructorDescriptionBlocks) && u.instructorDescriptionBlocks.length) {
+      return u.instructorDescriptionBlocks.map(b => ({ id: uid(), ...b }));
+    }
+    const migrated = [];
+    if (u?.instructorDescription) migrated.push({ id: uid(), type: 'text', text: u.instructorDescription });
+    if (Array.isArray(u?.instructorMedia)) {
+      u.instructorMedia.forEach(m => migrated.push({
+        id: uid(),
+        type: m.type === 'video' ? 'video' : 'image',
+        heading: m.heading || '',
+        description: m.description || '',
+        videoUrl: m.videoUrl || '',
+        imageUrl: m.imageUrl || '',
+      }));
+    }
+    return migrated;
+  }
+
+  const [blocks, setBlocks] = useState(() => blocksFromUser(user));
+  const [uploadingBlockImage, setUploadingBlockImage] = useState({}); // keyed by block id
+  const [draggedBlockId, setDraggedBlockId] = useState(null);
+  const blockImageRefs = useRef({});
 
   // Re-sync if user context updates (e.g. after a save)
   useEffect(() => {
@@ -1696,52 +1730,61 @@ function ProfilePage({ toast }) {
       totalReviews:          user.totalReviews != null && user.totalReviews !== "" ? String(user.totalReviews) : "",
       totalStudents:         user.totalStudents != null && user.totalStudents !== "" ? String(user.totalStudents) : "",
       totalCourses:          user.totalCourses != null && user.totalCourses !== "" ? String(user.totalCourses) : "",
-      instructorDescription: user.instructorDescription || "",
     });
-    setMediaItems(Array.isArray(user.instructorMedia) ? user.instructorMedia : []);
+    setBlocks(blocksFromUser(user));
   }, [user]);
 
   function update(field, val) { setForm(f => ({ ...f, [field]: val })); }
 
-  // ── Media item handlers ──────────────────────────────────────────────────
-  const addMediaItem = (type) => {
-    const item = { id: uid(), type, heading: '', description: '', videoUrl: '', imageUrl: '', imagePreview: '' };
-    setMediaItems(p => [...p, item]);
-  };
+  // ── Block handlers ───────────────────────────────────────────────────────
+  const addTextBlock  = () => setBlocks(p => [...p, { id: uid(), type: 'text', text: '' }]);
+  const addMediaBlock = (type) => setBlocks(p => [...p, { id: uid(), type, heading: '', description: '', videoUrl: '', imageUrl: '', imagePreview: '' }]);
+  const updateBlock   = (id, field, val) => setBlocks(p => p.map(b => b.id === id ? { ...b, [field]: val } : b));
+  const deleteBlock   = (id) => { setBlocks(p => p.filter(b => b.id !== id)); toast("Removed", "success"); };
 
-  const updateMediaItem = (itemId, field, val) => {
-    setMediaItems(p => p.map(m => (m.id || m._id) === itemId ? { ...m, [field]: val } : m));
-  };
-
-  const deleteMediaItem = (itemId) => {
-    setMediaItems(p => p.filter(m => (m.id || m._id) !== itemId));
-    toast("Removed", "success");
-  };
-
-  const handleMediaImageFile = async (e, itemId) => {
+  const handleBlockImageFile = async (e, id) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => updateMediaItem(itemId, 'imagePreview', ev.target.result);
+    reader.onload = (ev) => updateBlock(id, 'imagePreview', ev.target.result);
     reader.readAsDataURL(file);
-    setUploadingMediaImage(p => ({ ...p, [itemId]: true }));
+    setUploadingBlockImage(p => ({ ...p, [id]: true }));
     try {
       const formData = new FormData();
       formData.append("image", file);
       const res = await api.post("/upload/image", formData);
       const url = res.data?.url ?? res.data?.secure_url ?? res.data?.imageUrl;
       if (!url) { toast("Upload succeeded but no URL returned.", "error"); return; }
-      updateMediaItem(itemId, 'imageUrl', url);
-      updateMediaItem(itemId, 'imagePreview', url);
+      updateBlock(id, 'imageUrl', url);
+      updateBlock(id, 'imagePreview', url);
       toast("Picture uploaded to Cloudinary ✓", "success");
     } catch (err) {
-      console.error("Media picture upload error:", err);
+      console.error("Description block image upload error:", err);
       toast("Upload failed. Please try again.", "error");
     } finally {
-      setUploadingMediaImage(p => ({ ...p, [itemId]: false }));
+      setUploadingBlockImage(p => ({ ...p, [id]: false }));
       if (e.target) e.target.value = "";
     }
   };
+
+  // Native HTML5 drag & drop reordering — same pattern as the Custom Content
+  // Blocks in the course editor, so a photo or video can be dropped anywhere
+  // between the paragraphs.
+  const handleBlockDragStart = (id) => setDraggedBlockId(id);
+  const handleBlockDragOver = (e, overId) => {
+    e.preventDefault();
+    if (!draggedBlockId || draggedBlockId === overId) return;
+    setBlocks(prev => {
+      const from = prev.findIndex(b => b.id === draggedBlockId);
+      const to   = prev.findIndex(b => b.id === overId);
+      if (from === -1 || to === -1 || from === to) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  };
+  const handleBlockDragEnd = () => setDraggedBlockId(null);
 
   // ── Avatar upload → Cloudinary ──────────────────────────────────────────
   const handleAvatarUpload = async (e) => {
@@ -1774,6 +1817,24 @@ function ProfilePage({ toast }) {
   };
 
   // ── Save all profile fields to backend ──────────────────────────────────
+  // NOTE ON THE "DISAPPEARS AFTER REFRESH" BUG: this component sends the
+  // right payload and updateProfile() resolves without an error, which means
+  // the request itself works — the fields just aren't coming back from a
+  // fresh GET after reload. That almost always means one of two things on
+  // the SERVER side (not fixable from this file alone):
+  //   1. The Mongoose User/Instructor schema doesn't declare these fields
+  //      (instructorDescriptionBlocks, and previously instructorDescription/
+  //      instructorMedia) — Mongoose silently drops any key that isn't in
+  //      the schema when you call findByIdAndUpdate/save with strict mode
+  //      (the default), so it looks like it saved but nothing is written.
+  //   2. The update route whitelists which fields it accepts from the body
+  //      (e.g. `const { name, title, bio } = req.body`) and this field just
+  //      isn't in that list, or the GET /users/:id / GET /me route doesn't
+  //      select/return it.
+  // Fix: add `instructorDescriptionBlocks: { type: Array, default: [] }`
+  // (or Schema.Types.Mixed) to the User schema, and make sure both the
+  // update route and the read route include it. Share server/models/User.js
+  // and the profile update route and this can be pinned down exactly.
   const handleSave = async () => {
     if (!form.name.trim()) {
       toast("Full name is required.", "error");
@@ -1783,7 +1844,7 @@ function ProfilePage({ toast }) {
       toast("Please wait for the photo upload to finish.", "error");
       return;
     }
-    if (Object.values(uploadingMediaImage).some(Boolean)) {
+    if (Object.values(uploadingBlockImage).some(Boolean)) {
       toast("Please wait for the picture upload to finish.", "error");
       return;
     }
@@ -1822,8 +1883,7 @@ function ProfilePage({ toast }) {
         totalReviews:          form.totalReviews === "" ? 0 : parseInt(form.totalReviews, 10),
         totalStudents:         form.totalStudents === "" ? 0 : parseInt(form.totalStudents, 10),
         totalCourses:          form.totalCourses === "" ? 0 : parseInt(form.totalCourses, 10),
-        instructorDescription: form.instructorDescription.trim(),
-        instructorMedia:       mediaItems.map(({ imagePreview, ...rest }) => rest),
+        instructorDescriptionBlocks: blocks.map(({ imagePreview, ...rest }) => rest),
       };
 
       await updateProfile(payload);
@@ -1969,99 +2029,109 @@ function ProfilePage({ toast }) {
         </p>
       </div>
 
-      {/* ── Detailed Description ── */}
+      {/* ── Description — ordered text/photo/video blocks ──────────────────
+          One flowing description made of paragraphs, pictures and videos in
+          whatever order you want. Add a block with the buttons on the
+          right, then drag its ☰ handle to place it after any paragraph. ── */}
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm space-y-4">
-        <h3 className="font-bold text-gray-800">Description</h3>
-        <p className="text-xs sm:text-sm text-gray-500">
-          A longer profile description shown below your bio on course landing pages. Supports multiple paragraphs and basic HTML.
-        </p>
-        <Textarea
-          label="Instructor Description"
-          value={form.instructorDescription}
-          onChange={v => update("instructorDescription", v)}
-          placeholder={"Write a detailed description about your teaching experience, expertise, and background...\n\nYou can use paragraphs and basic HTML tags like <p>, <strong>, <ul>."}
-          rows={8}
-        />
-
-        {/* ── Media Gallery — unlimited videos + pictures, each with its own
-            heading + description. Renders automatically inside the Instructor
-            section on every course landing page this instructor owns. ────── */}
-        <div className="pt-5 border-t border-gray-100">
-          <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
-            <h4 className="font-bold text-gray-800 text-sm">Photos &amp; Videos</h4>
-            <div className="flex gap-2">
-              <Btn size="sm" variant="secondary" onClick={() => addMediaItem('video')}>🎬 Add Video</Btn>
-              <Btn size="sm" variant="secondary" onClick={() => addMediaItem('image')}>🖼️ Add Picture</Btn>
-            </div>
+        <div className="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <h3 className="font-bold text-gray-800">Description</h3>
+            <p className="text-xs sm:text-sm text-gray-500 mt-1 max-w-md">
+              Shown below your bio on every course landing page you own. Mix in as many paragraphs,
+              photos and videos as you like — drag ☰ to put a photo or video after whichever
+              paragraph you want.
+            </p>
           </div>
-          <p className="text-xs sm:text-sm text-gray-500 mb-4">
-            Add as many photos and videos as you like — each with its own heading and description.
-            Pictures upload straight to Cloudinary; videos are YouTube or Bunny.net links you paste in.
-          </p>
-
-          {mediaItems.length === 0 ? (
-            <EmptyState
-              icon="🎞️"
-              title="No media yet"
-              body="Add a video or a picture to showcase your work below your description."
-            />
-          ) : (
-            <div className="space-y-3">
-              {mediaItems.map((item) => {
-                const mId = item.id || item._id;
-                const uploading = uploadingMediaImage[mId];
-                const imgPreview = item.imagePreview || item.imageUrl;
-                return (
-                  <div key={mId} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
-                    <div className="flex items-center gap-2 mb-3">
-                      <span className="text-xs font-semibold text-purple-600 uppercase tracking-wide flex-1">
-                        {item.type === 'video' ? '🎬 Video' : '🖼️ Picture'}
-                      </span>
-                      <button onClick={() => deleteMediaItem(mId)} className="text-red-400 hover:text-red-600 transition text-xs px-2 py-1 rounded hover:bg-red-50">✕ Remove</button>
-                    </div>
-
-                    <div className="grid sm:grid-cols-2 gap-3 mb-3">
-                      <Input label="Heading" value={item.heading || ""} onChange={v => updateMediaItem(mId, "heading", v)} placeholder="e.g. Behind the scenes"/>
-                      <Input label="Description" value={item.description || ""} onChange={v => updateMediaItem(mId, "description", v)} placeholder="A short line about this photo or video"/>
-                    </div>
-
-                    {item.type === 'video' ? (
-                      <div>
-                        <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">Video URL</label>
-                        <input value={item.videoUrl || ""} onChange={e => updateMediaItem(mId, "videoUrl", e.target.value)}
-                          placeholder="Paste a YouTube or Bunny.net link"
-                          className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"/>
-                        <p className="text-xs text-gray-400 mt-1">YouTube · Bunny.net (embed supported)</p>
-                        {item.videoUrl && (
-                          <div className="flex justify-end mt-2">
-                            <CompactVideoPreview url={item.videoUrl} width={160} height={90}/>
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div>
-                        <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">Picture</label>
-                        <div className="flex items-start gap-3">
-                          <div className="w-24 h-24 flex-shrink-0 relative">
-                            <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-purple-400 transition cursor-pointer group"
-                              onClick={() => mediaImageRefs.current[mId]?.click()}>
-                              {imgPreview
-                                ? <img src={imgPreview} alt="Preview" className="w-full h-full object-cover"/>
-                                : <div className="w-full h-full flex flex-col items-center justify-center"><span className="text-xl mb-0.5">📷</span><p className="text-[10px] text-gray-400 text-center px-1">Click to upload</p></div>}
-                              <UploadOverlay uploading={uploading}/>
-                            </div>
-                            <input ref={el => (mediaImageRefs.current[mId] = el)} type="file" accept="image/*" className="hidden" onChange={e => handleMediaImageFile(e, mId)}/>
-                          </div>
-                          <p className="text-xs text-gray-400 flex-1">Click the box to upload — saved directly to Cloudinary.</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <div className="flex gap-2 flex-wrap flex-shrink-0">
+            <Btn size="sm" variant="secondary" onClick={addTextBlock}>+ Add Text</Btn>
+            <Btn size="sm" variant="secondary" onClick={() => addMediaBlock('video')}>🎬 Add Video</Btn>
+            <Btn size="sm" variant="secondary" onClick={() => addMediaBlock('image')}>🖼️ Add Picture</Btn>
+          </div>
         </div>
+
+        {blocks.length === 0 ? (
+          <EmptyState
+            icon="📝"
+            title="No description yet"
+            body="Add a paragraph, photo, or video to introduce yourself to students."
+            action={<Btn size="sm" onClick={addTextBlock}>+ Add Text</Btn>}
+          />
+        ) : (
+          <div className="space-y-3">
+            {blocks.map((block) => {
+              const isDragging = draggedBlockId === block.id;
+              const uploading = uploadingBlockImage[block.id];
+              const imgPreview = block.imagePreview || block.imageUrl;
+              return (
+                <div
+                  key={block.id}
+                  draggable
+                  onDragStart={() => handleBlockDragStart(block.id)}
+                  onDragOver={(e) => handleBlockDragOver(e, block.id)}
+                  onDrop={(e) => e.preventDefault()}
+                  onDragEnd={handleBlockDragEnd}
+                  className={`border rounded-xl p-4 transition ${isDragging ? "border-purple-400 bg-purple-50/60 opacity-60" : "border-gray-200 bg-gray-50"}`}
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 text-sm select-none" title="Drag to reorder">☰</span>
+                    <span className="text-xs font-semibold text-purple-600 uppercase tracking-wide flex-1">
+                      {block.type === 'text' ? '📝 Paragraph' : block.type === 'video' ? '🎬 Video' : '🖼️ Picture'}
+                    </span>
+                    <button onClick={() => deleteBlock(block.id)} className="text-red-400 hover:text-red-600 transition text-xs px-2 py-1 rounded hover:bg-red-50">✕ Remove</button>
+                  </div>
+
+                  {block.type === 'text' ? (
+                    <Textarea
+                      value={block.text || ""}
+                      onChange={v => updateBlock(block.id, "text", v)}
+                      placeholder="Write a paragraph about your background, experience, or teaching style..."
+                      rows={4}
+                    />
+                  ) : (
+                    <>
+                      <div className="grid sm:grid-cols-2 gap-3 mb-3">
+                        <Input label="Heading" value={block.heading || ""} onChange={v => updateBlock(block.id, "heading", v)} placeholder="e.g. Behind the scenes"/>
+                        <Input label="Description" value={block.description || ""} onChange={v => updateBlock(block.id, "description", v)} placeholder="A short line about this photo or video"/>
+                      </div>
+                      {block.type === 'video' ? (
+                        <div>
+                          <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">Video URL</label>
+                          <input value={block.videoUrl || ""} onChange={e => updateBlock(block.id, "videoUrl", e.target.value)}
+                            placeholder="Paste a YouTube or Bunny.net link"
+                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"/>
+                          <p className="text-xs text-gray-400 mt-1">YouTube · Bunny.net (embed supported)</p>
+                          {block.videoUrl && (
+                            <div className="flex justify-end mt-2">
+                              <CompactVideoPreview url={block.videoUrl} width={160} height={90}/>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div>
+                          <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">Picture</label>
+                          <div className="flex items-start gap-3">
+                            <div className="w-24 h-24 flex-shrink-0 relative">
+                              <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-purple-400 transition cursor-pointer group"
+                                onClick={() => blockImageRefs.current[block.id]?.click()}>
+                                {imgPreview
+                                  ? <img src={imgPreview} alt="Preview" className="w-full h-full object-cover"/>
+                                  : <div className="w-full h-full flex flex-col items-center justify-center"><span className="text-xl mb-0.5">📷</span><p className="text-[10px] text-gray-400 text-center px-1">Click to upload</p></div>}
+                                <UploadOverlay uploading={uploading}/>
+                              </div>
+                              <input ref={el => (blockImageRefs.current[block.id] = el)} type="file" accept="image/*" className="hidden" onChange={e => handleBlockImageFile(e, block.id)}/>
+                            </div>
+                            <p className="text-xs text-gray-400 flex-1">Click the box to upload — saved directly to Cloudinary.</p>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* ── Links & Social ── */}

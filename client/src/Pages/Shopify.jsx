@@ -153,6 +153,18 @@
 //            everything behind them — a real backdrop blur layered under the dark overlay
 //            — instead of just a flat dark scrim, so the previous content behind the
 //            opened photo/video is visibly softened rather than just dimmed.
+// ─── NEW CHANGE AA: Replaced NEW CHANGE Y's separate "Photos & Videos" grid with a single
+//            ordered rendering of instructor.instructorDescriptionBlocks — paragraphs,
+//            photos and videos now render in exactly the order the instructor arranged
+//            them on the dashboard (a photo/video can sit right after any paragraph),
+//            instead of all text first and all media in a grid at the end. Falls back to
+//            the older flat instructorDescription + instructorMedia fields (and, if even
+//            those are empty, to the instructor's short bio) for any instructor who
+//            hasn't re-saved their profile since this change.
+// ─── NEW CHANGE AB: The Instructor section's description now defaults to fully expanded
+//            (was collapsed behind "Show more") — the whole paragraph/photo/video block
+//            is visible as soon as the page loads, with "Show less" at the bottom to
+//            collapse it if someone wants to.
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Volume2, VolumeX, ArrowLeft } from 'lucide-react';
@@ -347,6 +359,30 @@ export function richTextToHtml(raw) {
     .join('');
 
   return html;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// INSTRUCTOR DESCRIPTION — LEGACY MIGRATION
+// Older accounts (or a course whose instructor hasn't re-saved their profile
+// since this update) only have the previous flat `instructorDescription`
+// string plus a separate `instructorMedia` array, instead of one ordered
+// `instructorDescriptionBlocks` list. This turns the old shape into the new
+// one on the fly (text first, then each media item) so nothing disappears
+// for instructors who haven't touched their profile yet.
+// ─────────────────────────────────────────────────────────────────────────────
+function buildLegacyDescriptionBlocks(text, media) {
+  const blocks = [];
+  if (text) blocks.push({ type: 'text', text });
+  (Array.isArray(media) ? media : []).forEach((m) => {
+    blocks.push({
+      type: m.type === 'video' ? 'video' : 'image',
+      heading: m.heading || '',
+      description: m.description || '',
+      videoUrl: m.videoUrl || '',
+      imageUrl: m.imageUrl || '',
+    });
+  });
+  return blocks;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -988,7 +1024,10 @@ export default function CourseLandingPage() {
   const [expandedSection,       setExpandedSection]       = useState([0, 1, 2]);
   const [showFullDescription,   setShowFullDescription]   = useState(false);
   const [showFullInstructorBio, setShowFullInstructorBio] = useState(false);
-  const [showFullInstructorDescription, setShowFullInstructorDescription] = useState(false);
+  // NEW CHANGE AB: defaults to true now — the Instructor section shows its
+  // full description (and any photos/videos in it) as soon as the page
+  // loads. Clicking "Show less" collapses it; clicking it again re-expands.
+  const [showFullInstructorDescription, setShowFullInstructorDescription] = useState(true);
   const [isPreviewOpen,         setIsPreviewOpen]         = useState(false);
   const [currentVideo,          setCurrentVideo]          = useState('');
   const [activePreviewLecture,  setActivePreviewLecture]  = useState(null);
@@ -1213,7 +1252,12 @@ export default function CourseLandingPage() {
     bio:         instructorData.bio                 || courseData.instructorBio     || '',
     description: instructorData.instructorDescription || courseData.instructorDescription || '',
     image:       instructorData.avatar              || instructorData.profileImage  || instructorData.instructorImage || courseData.instructorImage || '👩‍💼',
-    media:       Array.isArray(instructorData.instructorMedia) ? instructorData.instructorMedia : (Array.isArray(courseData.instructorMedia) ? courseData.instructorMedia : []),
+    descriptionBlocks: Array.isArray(instructorData.instructorDescriptionBlocks) && instructorData.instructorDescriptionBlocks.length
+      ? instructorData.instructorDescriptionBlocks
+      : buildLegacyDescriptionBlocks(
+          instructorData.instructorDescription || courseData.instructorDescription || instructorData.bio || courseData.instructorBio || '',
+          Array.isArray(instructorData.instructorMedia) ? instructorData.instructorMedia : (Array.isArray(courseData.instructorMedia) ? courseData.instructorMedia : [])
+        ),
   } : {
     name:        courseData.instructor        || 'Instructor',
     title:       courseData.instructorTitle   || '',
@@ -1228,29 +1272,32 @@ export default function CourseLandingPage() {
     bio:         courseData.instructorBio     || '',
     description: courseData.instructorDescription || '',
     image:       courseData.instructorImage   || '👩‍💼',
-    media:       Array.isArray(courseData.instructorMedia) ? courseData.instructorMedia : [],
+    descriptionBlocks: Array.isArray(courseData.instructorDescriptionBlocks) && courseData.instructorDescriptionBlocks.length
+      ? courseData.instructorDescriptionBlocks
+      : buildLegacyDescriptionBlocks(courseData.instructorDescription || courseData.instructorBio || '', Array.isArray(courseData.instructorMedia) ? courseData.instructorMedia : []),
   };
 
-  // Split the instructor's media gallery into pictures and videos for the
-  // two modals below. Shape saved by the dashboard: { type, heading,
-  // description, imageUrl, videoUrl }.
-  const instructorImages = (instructor.media || [])
-    .filter((m) => m.type === 'image' && m.imageUrl)
-    .map((m) => ({ imageUrl: m.imageUrl, author: m.heading || '' }));
-  const instructorVideos = (instructor.media || [])
-    .filter((m) => m.type === 'video' && m.videoUrl);
+  // instructor.descriptionBlocks is the ordered paragraph/picture/video list
+  // set on the Instructor Dashboard's Profile → Description page. Rendered
+  // in exactly that order below (NOT as a separate gallery), and also split
+  // out into flat images/videos arrays purely so the lightbox/video modal
+  // can page through "all photos" / "all videos" regardless of which one was
+  // clicked first.
+  const instructorImages = (instructor.descriptionBlocks || [])
+    .filter((b) => b.type === 'image' && b.imageUrl)
+    .map((b) => ({ imageUrl: b.imageUrl, author: b.heading || '' }));
+  const instructorVideos = (instructor.descriptionBlocks || [])
+    .filter((b) => b.type === 'video' && b.videoUrl);
 
-  // Same items, in the order the instructor added them, each tagged with its
-  // click-through index into instructorImages/instructorVideos above so the
-  // right item opens in the right modal.
+  // The same blocks, in original order, each tagged with its click-through
+  // index into instructorImages/instructorVideos above (text blocks are left
+  // untagged — they render as plain paragraphs).
   let __instrVidIdx = 0, __instrImgIdx = 0;
-  const instructorMediaItems = (instructor.media || [])
-    .map((m) => {
-      if (m.type === 'video' && m.videoUrl) return { ...m, kind: 'video', clickIndex: __instrVidIdx++ };
-      if (m.type === 'image' && m.imageUrl) return { ...m, kind: 'image', clickIndex: __instrImgIdx++ };
-      return null;
-    })
-    .filter(Boolean);
+  const instructorFlowBlocks = (instructor.descriptionBlocks || []).map((b, idx) => {
+    if (b.type === 'video' && b.videoUrl) return { ...b, _key: idx, _kind: 'video', _clickIndex: __instrVidIdx++ };
+    if (b.type === 'image' && b.imageUrl) return { ...b, _key: idx, _kind: 'image', _clickIndex: __instrImgIdx++ };
+    return { ...b, _key: idx, _kind: 'text' };
+  });
 
   const totalLectures = sections.reduce((a, s) => a + (s.lectures || 0), 0);
 
@@ -1929,85 +1976,79 @@ export default function CourseLandingPage() {
                       </div>
                     </div>
 
-                    {/* INSTRUCTOR DESCRIPTION — below the whole profile row */}
+                    {/* INSTRUCTOR DESCRIPTION — one flowing mix of paragraphs, photos
+                        and videos, in exactly the order set on the Instructor
+                        Dashboard's Profile → Description page (not a separate
+                        gallery below the text — a photo or video can sit right
+                        after any paragraph). Open by default; "Show less"
+                        collapses it, and clicking again re-expands. */}
                     <div className="mt-6 md:mt-8 pt-6 md:pt-8 border-t border-[#ece6dd] text-center sm:text-left">
-                      {(instructor.description || instructor.bio) && (
+                      {instructorFlowBlocks.length > 0 && (
                         <div className="mt-4">
                           {/* The fade overlay is scoped to ONLY this inner wrapper (not the
-                              button below) — previously the overlay's "bottom: 0" was
-                              anchored to the whole block including the button, washing the
-                              "Show more" label out with the same cream fade and making it
-                              look dim compared to "Show less" (which has no overlay). */}
+                              button below), and only shows up while collapsed. */}
                           <div className="relative">
-                            <div
-                              className={`text-[#3d3020] text-sm md:text-base leading-relaxed break-words lerni-prose max-w-none text-left ${!showFullInstructorDescription ? 'max-h-32 overflow-hidden' : ''}`}
-                              dangerouslySetInnerHTML={{ __html: richTextToHtml(instructor.description || instructor.bio) }}
-                            />
+                            <div className={`text-left space-y-4 ${!showFullInstructorDescription ? 'max-h-64 overflow-hidden' : ''}`}>
+                              {instructorFlowBlocks.map((block) => {
+                                if (block._kind === 'text') {
+                                  if (!block.text) return null;
+                                  return (
+                                    <div
+                                      key={block._key}
+                                      className="text-[#3d3020] text-sm md:text-base leading-relaxed break-words lerni-prose max-w-none"
+                                      dangerouslySetInnerHTML={{ __html: richTextToHtml(block.text) }}
+                                    />
+                                  );
+                                }
+
+                                const isVideo = block._kind === 'video';
+                                const ytId = isVideo ? getYouTubeId(block.videoUrl) : null;
+                                const onMediaClick = () => {
+                                  if (isVideo) { setInstructorVideoStartIndex(block._clickIndex); setInstructorVideoOpen(true); }
+                                  else { setInstructorImageStartIndex(block._clickIndex); setInstructorImageOpen(true); }
+                                };
+
+                                return (
+                                  <div key={block._key}>
+                                    {block.heading && <p className="text-sm md:text-base font-bold text-[#1a1208] mb-2">{block.heading}</p>}
+                                    {isVideo ? (
+                                      <button
+                                        onClick={onMediaClick}
+                                        className="relative block w-full aspect-video rounded-xl overflow-hidden border border-[#ece6dd] shadow-sm hover:shadow-md transition cursor-pointer bg-[#2d2416] p-0"
+                                      >
+                                        {ytId && (
+                                          <img src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`} alt={block.heading || 'Video'} className="absolute inset-0 w-full h-full object-cover" />
+                                        )}
+                                        <div className="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center">
+                                          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-[#e8540a] flex items-center justify-center shadow-lg">
+                                            <Play size={16} className="text-white ml-0.5" fill="currentColor" />
+                                          </div>
+                                        </div>
+                                      </button>
+                                    ) : (
+                                      <button
+                                        onClick={onMediaClick}
+                                        className="block w-full rounded-xl overflow-hidden border border-[#ece6dd] shadow-sm hover:shadow-md transition cursor-pointer bg-white p-0"
+                                      >
+                                        <img src={block.imageUrl} alt={block.heading || 'Photo'} className="w-full max-h-80 object-cover" />
+                                      </button>
+                                    )}
+                                    {block.description && <p className="text-xs md:text-sm text-[#9e9789] mt-2">{block.description}</p>}
+                                  </div>
+                                );
+                              })}
+                            </div>
                             {!showFullInstructorDescription && (
                               <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-[#f8f4ed] via-[#f8f4ed]/90 to-transparent pointer-events-none" />
                             )}
                           </div>
                           <button
                             onClick={() => setShowFullInstructorDescription((v) => !v)}
-                            className="text-[#e8540a] hover:text-[#c94708] mt-2 text-sm md:text-base font-bold transition flex items-center gap-1 bg-transparent border-none cursor-pointer p-0 mx-auto sm:mx-0"
+                            className="text-[#e8540a] hover:text-[#c94708] mt-3 text-sm md:text-base font-bold transition flex items-center gap-1 bg-transparent border-none cursor-pointer p-0 mx-auto sm:mx-0"
                           >
                             <span>{showFullInstructorDescription ? 'Show less' : 'Show more'}</span>
                             <ChevronDown size={16} className={`transition-transform ${showFullInstructorDescription ? 'rotate-180' : ''}`} />
                           </button>
-                        </div>
-                      )}
-
-                      {/* INSTRUCTOR PHOTOS & VIDEOS — media gallery set from the
-                          Instructor Dashboard → Profile → Description. Same
-                          card language as the rest of this section (white
-                          cards, #ece6dd borders, cream background, orange
-                          accent). Only shows up when the instructor has added
-                          at least one photo or video. */}
-                      {instructorMediaItems.length > 0 && (
-                        <div className="mt-6 pt-6 border-t border-[#ece6dd] text-left">
-                          <p className="text-xs font-bold text-[#9e9789] uppercase tracking-wide mb-3">Photos &amp; Videos</p>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
-                            {instructorMediaItems.map((item) => {
-                              const isVideo = item.kind === 'video';
-                              const ytId = isVideo ? getYouTubeId(item.videoUrl) : null;
-                              const onClick = () => {
-                                if (isVideo) { setInstructorVideoStartIndex(item.clickIndex); setInstructorVideoOpen(true); }
-                                else { setInstructorImageStartIndex(item.clickIndex); setInstructorImageOpen(true); }
-                              };
-                              return (
-                                <button
-                                  key={item.id || item._id}
-                                  onClick={onClick}
-                                  className="text-left bg-white border border-[#ece6dd] rounded-xl overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer p-0"
-                                >
-                                  <div className="relative aspect-video bg-[#f0ebe3]">
-                                    {isVideo ? (
-                                      ytId ? (
-                                        <img src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`} alt={item.heading || 'Video'} className="w-full h-full object-cover" />
-                                      ) : (
-                                        <div className="w-full h-full flex items-center justify-center bg-[#2d2416]" />
-                                      )
-                                    ) : (
-                                      <img src={item.imageUrl} alt={item.heading || 'Photo'} className="w-full h-full object-cover" />
-                                    )}
-                                    {isVideo && (
-                                      <div className="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center">
-                                        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#e8540a] flex items-center justify-center shadow-lg">
-                                          <Play size={14} className="text-white ml-0.5" fill="currentColor" />
-                                        </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                  {(item.heading || item.description) && (
-                                    <div className="px-2.5 py-2">
-                                      {item.heading && <p className="text-xs sm:text-sm font-bold text-[#1a1208] leading-snug line-clamp-1">{item.heading}</p>}
-                                      {item.description && <p className="text-[11px] sm:text-xs text-[#9e9789] leading-snug line-clamp-2 mt-0.5">{item.description}</p>}
-                                    </div>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
                         </div>
                       )}
 
