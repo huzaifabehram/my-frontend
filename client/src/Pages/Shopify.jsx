@@ -97,8 +97,32 @@
 //            at the edges instead of a hard cutoff.
 // ─── NEW CHANGE N: Header nav (desktop + mobile) now includes "Home" and "Services" links
 //            alongside Categories/Instructor/About, so the course page can link straight to
-//            HomePage.jsx and ServicesPage.jsx. This is the only functional change in this
-//            revision — everything else above is unchanged from the previous version.
+//            HomePage.jsx and ServicesPage.jsx.
+// ─── NEW CHANGE O: Reviews/students count shown right below the free-preview thumbnail
+//            (and everywhere else displayRatingCount is used on this page) now falls back
+//            to a large, stable-per-course number — reviews ~11,800–12,899, students
+//            61,001–62,000 — instead of the old flat FALLBACK_REVIEW_COUNT / nothing at
+//            all for students. Real backend counts still win whenever a course actually
+//            has them.
+// ─── NEW CHANGE P: Description's "Show more/less" button is now centered on mobile and
+//            left-aligned from sm: up, matching the Instructor description's button exactly
+//            (same mx-auto sm:mx-0 pattern).
+// ─── NEW CHANGE Q: Instructor stat cards (Total Rating / Reviews / Students / Courses) —
+//            the label text no longer forces whitespace-nowrap, which was pushing it past
+//            the white card's edge on narrow screens; it now wraps within the card instead,
+//            with overflow-hidden on the card as a backstop.
+// ─── NEW CHANGE R: Review avatars (both the horizontal review cards and the Ratings &
+//            Reviews overlay) no longer show the student's uploaded photo — every review
+//            now shows a plain black circle with the student's first initial in white,
+//            regardless of whether an avatar URL exists.
+// ─── NEW CHANGE S: Video Reviews tiles — the YouTube iframe was relying on `object-cover`,
+//            which has no effect on <iframe> (object-fit only works on <img>/<video>), so
+//            YouTube's own letterboxing was showing as extra empty space inside each tile.
+//            Fixed by oversizing the iframe and centering+cropping it manually, matching
+//            how the Student Testimonials image tiles actually fill their space.
+// ─── NEW CHANGE T: The waterfall auto-scroll (both Student Testimonials and Video Reviews)
+//            now pauses for as long as its lightbox/video modal is open, and resumes the
+//            moment it's closed — previously it kept scrolling behind the fullscreen view.
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Volume2, VolumeX, ArrowLeft } from 'lucide-react';
@@ -199,6 +223,23 @@ export function formatNumber(num) {
   if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M';
   if (num >= 1_000)     return (num / 1_000).toFixed(1) + 'K';
   return String(num);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STABLE PER-COURSE SOCIAL-PROOF NUMBERS — used only as a fallback when a
+// course has no real review/student data yet (same purpose as
+// FALLBACK_RATING/FALLBACK_REVIEW_COUNT below, just per-course instead of one
+// flat number for every course). The same course always gets the same number
+// on every load (deterministic hash of its id), but different courses land
+// on different numbers within the requested range.
+// ─────────────────────────────────────────────────────────────────────────────
+function stableCourseOffset(seed, range) {
+  const str = String(seed || 'course');
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  }
+  return hash % range;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -412,7 +453,7 @@ function VideoPlayer({ url, className = "", isReelsStyle = false, autoPlay = fal
 // this guarantees the two columns move at exactly the same speed and never
 // drift apart, however many items are passed in.
 // ─────────────────────────────────────────────────────────────────────────────
-function TwoColumnWaterfall({ items, itemHeight = 260, gap = 12, renderItem, baseDuration = 26 }) {
+function TwoColumnWaterfall({ items, itemHeight = 260, gap = 12, renderItem, baseDuration = 26, isPaused = false }) {
   const columns = useMemo(() => {
     if (items.length === 0) return [[], []];
     const colLen = Math.ceil(items.length / 2);
@@ -468,6 +509,7 @@ function TwoColumnWaterfall({ items, itemHeight = 260, gap = 12, renderItem, bas
                 style={{
                   gap: `${gap}px`,
                   animation: `waterfall-scroll-down ${baseDuration}s linear infinite`,
+                  animationPlayState: isPaused ? 'paused' : 'running',
                   '--scroll-distance': `${oneCopyHeight}px`,
                   willChange: 'transform',
                 }}
@@ -518,13 +560,14 @@ function TwoColumnWaterfall({ items, itemHeight = 260, gap = 12, renderItem, bas
   );
 }
 
-function VideoReviewsSlider({ videoTestimonials, onCardClick }) {
+function VideoReviewsSlider({ videoTestimonials, onCardClick, isPaused }) {
   return (
     <TwoColumnWaterfall
       items={videoTestimonials}
       itemHeight={390}
       gap={12}
       baseDuration={30}
+      isPaused={isPaused}
       renderItem={(testimonial, originalIndex) => {
         const ytId = getYouTubeId(testimonial.videoUrl);
         return (
@@ -536,13 +579,22 @@ function VideoReviewsSlider({ videoTestimonials, onCardClick }) {
             className="w-full h-full rounded-xl overflow-hidden relative shadow-lg cursor-pointer group"
           >
             {ytId ? (
-              <iframe
-                src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&loop=1&playlist=${ytId}&controls=0&playsinline=1`}
-                className="w-full h-full object-cover pointer-events-none"
-                allow="autoplay; encrypted-media"
-                title="Video testimonial"
-                style={{ border: 'none' }}
-              />
+              // `object-cover` has no effect on <iframe> — CSS object-fit only
+              // applies to replaced elements like <img>/<video>. Without this,
+              // YouTube's own player letterboxes the video to fit the iframe's
+              // box, which reads as extra empty space at the edges of the
+              // tile (this was the "extra spacing at the bottom" bug). Fix:
+              // oversize the iframe and center+crop it manually, the same
+              // effect object-fit:cover would have given a real video element.
+              <div className="absolute inset-0 overflow-hidden pointer-events-none">
+                <iframe
+                  src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&loop=1&playlist=${ytId}&controls=0&playsinline=1`}
+                  className="absolute top-1/2 left-1/2"
+                  style={{ border: 'none', width: '300%', height: '300%', transform: 'translate(-50%, -50%)' }}
+                  allow="autoplay; encrypted-media"
+                  title="Video testimonial"
+                />
+              </div>
             ) : (
               <video
                 src={testimonial.videoUrl}
@@ -641,13 +693,14 @@ function DefaultVideoModal({ isOpen, onClose, videos, startIndex = 0 }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // STUDENT TESTIMONIALS — same 2-column waterfall grid, downward-scrolling.
 // ─────────────────────────────────────────────────────────────────────────────
-function AutoSlideImageTestimonials({ imageTestimonials, onImageClick }) {
+function AutoSlideImageTestimonials({ imageTestimonials, onImageClick, isPaused }) {
   return (
     <TwoColumnWaterfall
       items={imageTestimonials}
       itemHeight={390}
       gap={12}
       baseDuration={28}
+      isPaused={isPaused}
       renderItem={(testimonial, originalIndex) => (
         <div
           role="button"
@@ -790,14 +843,10 @@ function ReviewCard({ review, onOpenReviews }) {
     >
       <div className="flex items-start gap-3 mb-3 flex-shrink-0">
         <div
-          className="w-11 h-11 rounded-full bg-[#e8540a] text-white flex items-center justify-center font-bold text-lg flex-shrink-0 overflow-hidden"
+          className="w-11 h-11 rounded-full bg-black text-white flex items-center justify-center font-bold text-lg flex-shrink-0 overflow-hidden"
           style={{ fontFamily: "'Playfair Display', serif" }}
         >
-          {review.avatar ? (
-            <img src={review.avatar} alt={review.author} className="w-full h-full object-cover" />
-          ) : (
-            review.author.charAt(0).toUpperCase()
-          )}
+          {review.author.charAt(0).toUpperCase()}
         </div>
         <div className="flex-1 min-w-0">
           <p className="font-bold text-[#1a1208] text-sm leading-snug break-words">{review.author}</p>
@@ -1186,7 +1235,16 @@ export default function CourseLandingPage() {
   const displayReviews = hasRealReviews ? textReviews : FALLBACK_REVIEWS;
   const displayRating = courseData.rating
     || (hasRealReviews ? (textReviews.reduce((s, r) => s + r.rating, 0) / textReviews.length) : FALLBACK_RATING);
-  const displayRatingCount = courseData.reviews || (hasRealReviews ? textReviews.length : FALLBACK_REVIEW_COUNT);
+
+  // Per-course fallback numbers — reviews land somewhere in 11,800–12,899,
+  // enrolled students in 61,001–62,000. Only used when the course has no
+  // real count of its own, same as the FALLBACK_* constants above.
+  const courseSeed = courseData._id || courseData.id || courseData.title;
+  const fallbackReviewCount  = 11800 + stableCourseOffset(courseSeed, 1100);
+  const fallbackStudentCount = 61001 + stableCourseOffset(`${courseSeed}-students`, 999);
+
+  const displayRatingCount = courseData.reviews || (hasRealReviews ? textReviews.length : fallbackReviewCount);
+  const displayStudentCount = courseData.students > 0 ? courseData.students : fallbackStudentCount;
   const displayRatingDistribution = hasRealReviews ? computeRatingDistribution(textReviews) : FALLBACK_RATING_DISTRIBUTION;
 
   return (
@@ -1321,12 +1379,8 @@ export default function CourseLandingPage() {
                 {displayReviews.slice(0, reviewsVisibleCount).map((review) => (
                   <div key={review.key} className="bg-white border border-[#ece6dd] rounded-2xl p-5 md:p-6">
                     <div className="flex items-start gap-3 mb-3">
-                      <div className="w-11 h-11 rounded-full bg-[#e8540a] text-white flex items-center justify-center font-bold text-lg flex-shrink-0 overflow-hidden">
-                        {review.avatar ? (
-                          <img src={review.avatar} alt={review.author} className="w-full h-full object-cover" />
-                        ) : (
-                          review.author.charAt(0).toUpperCase()
-                        )}
+                      <div className="w-11 h-11 rounded-full bg-black text-white flex items-center justify-center font-bold text-lg flex-shrink-0 overflow-hidden">
+                        {review.author.charAt(0).toUpperCase()}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-[#1a1208] text-sm md:text-base leading-snug break-words">{review.author}</p>
@@ -1520,11 +1574,9 @@ export default function CourseLandingPage() {
                     <span className="text-[#c8bfaf] text-sm md:text-base underline decoration-[#c8bfaf]/40">{formatNumber(displayRatingCount)} reviews</span>
                   </div>
                 )}
-                {courseData.students > 0 && (
-                  <div className="flex items-center gap-1.5 text-[#c8bfaf] text-sm md:text-base">
-                    <Users size={16} /><span>{courseData.students.toLocaleString()} students</span>
-                  </div>
-                )}
+                <div className="flex items-center gap-1.5 text-[#c8bfaf] text-sm md:text-base">
+                  <Users size={16} /><span>{displayStudentCount.toLocaleString()} students</span>
+                </div>
               </div>
               <div className="mb-4 md:mb-6">
                 <p className="text-[#9e8e7a] text-sm md:text-base">
@@ -1723,7 +1775,7 @@ export default function CourseLandingPage() {
                     )}
                   </div>
                   <button onClick={handleToggleDescription}
-                    className="text-[#e8540a] hover:text-[#c94708] mt-3 text-sm md:text-base font-bold transition flex items-center gap-1 bg-transparent border-none cursor-pointer p-0">
+                    className="text-[#e8540a] hover:text-[#c94708] mt-3 text-sm md:text-base font-bold transition flex items-center gap-1 bg-transparent border-none cursor-pointer p-0 mx-auto sm:mx-0">
                     <span>{showFullDescription ? 'Show less' : 'Show more'}</span>
                     <ChevronDown size={16} className={`transition-transform ${showFullDescription ? 'rotate-180' : ''}`} />
                   </button>
@@ -1775,13 +1827,13 @@ export default function CourseLandingPage() {
                         ].map((stat) => {
                           const StatIcon = stat.Icon;
                           return (
-                            <div key={stat.label} className="flex items-center gap-2 sm:gap-3 bg-white rounded-xl border border-[#ece6dd] px-2.5 sm:px-4 py-2 sm:py-3">
+                            <div key={stat.label} className="flex items-center gap-2 sm:gap-3 bg-white rounded-xl border border-[#ece6dd] px-2.5 sm:px-4 py-2 sm:py-3 overflow-hidden">
                               <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-[#fdf0e4] flex items-center justify-center flex-shrink-0">
                                 <StatIcon size={14} className="text-[#e8540a]" fill={StatIcon === Star ? 'currentColor' : 'none'} />
                               </div>
-                              <div className="min-w-0">
+                              <div className="min-w-0 flex-1">
                                 <p className="text-sm sm:text-base md:text-lg font-bold text-[#1a1208] leading-tight">{stat.value}</p>
-                                <p className="text-[10px] sm:text-xs text-[#9e9789] leading-tight whitespace-nowrap">{stat.label}</p>
+                                <p className="text-[10px] sm:text-xs text-[#9e9789] leading-tight break-words">{stat.label}</p>
                               </div>
                             </div>
                           );
@@ -1891,6 +1943,7 @@ export default function CourseLandingPage() {
                   <AutoSlideImageTestimonials
                     imageTestimonials={imageTestimonials}
                     onImageClick={(idx) => { setImageSliderStartIndex(idx); setImageSliderOpen(true); }}
+                    isPaused={imageSliderOpen}
                   />
                 </div>
               )}
@@ -1903,6 +1956,7 @@ export default function CourseLandingPage() {
                   <VideoReviewsSlider
                     videoTestimonials={videoTestimonials}
                     onCardClick={(idx) => { setVideoReelsStartIndex(idx); setVideoReelsOpen(true); }}
+                    isPaused={videoReelsOpen}
                   />
                 </div>
               )}
