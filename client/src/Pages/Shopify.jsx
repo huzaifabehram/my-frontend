@@ -123,6 +123,19 @@
 // ─── NEW CHANGE T: The waterfall auto-scroll (both Student Testimonials and Video Reviews)
 //            now pauses for as long as its lightbox/video modal is open, and resumes the
 //            moment it's closed — previously it kept scrolling behind the fullscreen view.
+// ─── NEW CHANGE U: Reviews/students are now ADDITIVE, not "real-or-fallback" — every
+//            course shows the fallback base number (reviews ~11,800–12,899, students
+//            61,001–62,000) no matter what, and any real reviews/enrollments a course
+//            actually has are added on top of that base instead of replacing it. Previously
+//            a course with even one real review/enrollment would show that small real
+//            number instead of the big fallback one.
+// ─── NEW CHANGE V: Instructor stat card labels — reverted Reviews/Students/Courses back to
+//            whitespace-nowrap (that's how they already fit correctly before NEW CHANGE Q;
+//            only "Total Rating" was ever overflowing). NEW CHANGE Q's blanket break-words
+//            was fracturing "Students" into "Student"/"s" on two lines. Now only two-word
+//            labels (just "Total Rating") are allowed to wrap.
+// ─── NEW CHANGE W: Video Reviews' baseDuration now matches Student Testimonials' exactly
+//            (28s, was 30s) for full parity between the two waterfall grids.
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Volume2, VolumeX, ArrowLeft } from 'lucide-react';
@@ -566,7 +579,7 @@ function VideoReviewsSlider({ videoTestimonials, onCardClick, isPaused }) {
       items={videoTestimonials}
       itemHeight={390}
       gap={12}
-      baseDuration={30}
+      baseDuration={28}
       isPaused={isPaused}
       renderItem={(testimonial, originalIndex) => {
         const ytId = getYouTubeId(testimonial.videoUrl);
@@ -1236,15 +1249,20 @@ export default function CourseLandingPage() {
   const displayRating = courseData.rating
     || (hasRealReviews ? (textReviews.reduce((s, r) => s + r.rating, 0) / textReviews.length) : FALLBACK_RATING);
 
-  // Per-course fallback numbers — reviews land somewhere in 11,800–12,899,
-  // enrolled students in 61,001–62,000. Only used when the course has no
-  // real count of its own, same as the FALLBACK_* constants above.
+  // Per-course fallback base numbers — reviews land somewhere in 11,800–12,899,
+  // enrolled students in 61,001–62,000. Every course gets this base by
+  // default; real reviews/enrollments ADD ON TOP of it rather than replacing
+  // it, so the number only ever grows from here, never resets to a small
+  // real count.
   const courseSeed = courseData._id || courseData.id || courseData.title;
   const fallbackReviewCount  = 11800 + stableCourseOffset(courseSeed, 1100);
   const fallbackStudentCount = 61001 + stableCourseOffset(`${courseSeed}-students`, 999);
 
-  const displayRatingCount = courseData.reviews || (hasRealReviews ? textReviews.length : fallbackReviewCount);
-  const displayStudentCount = courseData.students > 0 ? courseData.students : fallbackStudentCount;
+  const realReviewCount  = courseData.reviews  || (hasRealReviews ? textReviews.length : 0);
+  const realStudentCount = courseData.students || 0;
+
+  const displayRatingCount  = fallbackReviewCount + realReviewCount;
+  const displayStudentCount = fallbackStudentCount + realStudentCount;
   const displayRatingDistribution = hasRealReviews ? computeRatingDistribution(textReviews) : FALLBACK_RATING_DISTRIBUTION;
 
   return (
@@ -1826,6 +1844,13 @@ export default function CourseLandingPage() {
                           { label: 'Courses', value: formatNumber(instructor.courses), Icon: BookOpen },
                         ].map((stat) => {
                           const StatIcon = stat.Icon;
+                          // Only "Total Rating" (two words) is allowed to wrap — it's the
+                          // one that was overflowing the card. The single-word labels
+                          // (Reviews/Students/Courses) go back to whitespace-nowrap, since
+                          // that's how they already fit correctly before — break-words was
+                          // fracturing "Students" into "Student"/"s" on two lines when it
+                          // didn't need to.
+                          const wrapLabel = stat.label.includes(' ');
                           return (
                             <div key={stat.label} className="flex items-center gap-2 sm:gap-3 bg-white rounded-xl border border-[#ece6dd] px-2.5 sm:px-4 py-2 sm:py-3 overflow-hidden">
                               <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-[#fdf0e4] flex items-center justify-center flex-shrink-0">
@@ -1833,7 +1858,7 @@ export default function CourseLandingPage() {
                               </div>
                               <div className="min-w-0 flex-1">
                                 <p className="text-sm sm:text-base md:text-lg font-bold text-[#1a1208] leading-tight">{stat.value}</p>
-                                <p className="text-[10px] sm:text-xs text-[#9e9789] leading-tight break-words">{stat.label}</p>
+                                <p className={`text-[10px] sm:text-xs text-[#9e9789] leading-tight ${wrapLabel ? 'break-words' : 'whitespace-nowrap'}`}>{stat.label}</p>
                               </div>
                             </div>
                           );
