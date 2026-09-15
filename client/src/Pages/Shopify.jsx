@@ -136,6 +136,23 @@
 //            labels (just "Total Rating") are allowed to wrap.
 // ─── NEW CHANGE W: Video Reviews' baseDuration now matches Student Testimonials' exactly
 //            (28s, was 30s) for full parity between the two waterfall grids.
+// ─── NEW CHANGE X: Removed the custom orange in-page loading spinner shown while a course
+//            loads — the page now renders nothing during that moment, so only the browser's
+//            own default tab/address-bar loading indicator is visible.
+// ─── NEW CHANGE Y: Instructor section now reads the media gallery (photos + videos, each
+//            with a heading and description) set on the Instructor Dashboard → Profile →
+//            Description page, and renders it as a small grid right below the instructor's
+//            description — same white-card / cream / orange-accent styling as the rest of
+//            this section. Clicking a photo opens it in the existing full-size lightbox;
+//            clicking a video opens it in the existing native video modal — both reused
+//            as separate instances so they don't interfere with the Student Testimonials /
+//            Video Reviews grids elsewhere on the page. Nothing else in the Instructor
+//            section was touched.
+// ─── NEW CHANGE Z: The Student Testimonials image lightbox and the Video Reviews video
+//            modal (and the new Instructor photo/video modals from NEW CHANGE Y) now blur
+//            everything behind them — a real backdrop blur layered under the dark overlay
+//            — instead of just a flat dark scrim, so the previous content behind the
+//            opened photo/video is visibly softened rather than just dimmed.
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Volume2, VolumeX, ArrowLeft } from 'lucide-react';
@@ -660,7 +677,7 @@ function DefaultVideoModal({ isOpen, onClose, videos, startIndex = 0 }) {
   const ytId = currentVideo ? getYouTubeId(currentVideo.videoUrl) : null;
 
   return (
-    <div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-xl z-[9999] flex items-center justify-center p-4">
       <button onClick={onClose} aria-label="Close video"
         className="fixed top-4 right-4 z-50 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition border-none cursor-pointer">
         <X size={22} />
@@ -769,7 +786,7 @@ function ImageLightbox({ isOpen, onClose, images, startIndex = 0 }) {
   const current = images[currentIndex];
 
   return (
-    <div className="fixed inset-0 bg-black/90 z-[9999] flex items-center justify-center p-4">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-xl z-[9999] flex items-center justify-center p-4">
       <button onClick={onClose} aria-label="Close image"
         className="fixed top-4 right-4 z-50 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white transition border-none cursor-pointer">
         <X size={22} />
@@ -984,6 +1001,15 @@ export default function CourseLandingPage() {
   const [imageSliderOpen,       setImageSliderOpen]       = useState(false);
   const [imageSliderStartIndex, setImageSliderStartIndex] = useState(0);
 
+  // Instructor profile media gallery (Photos & Videos, set from the
+  // Instructor Dashboard → Profile → Description) — its own lightbox/video
+  // modal state, separate from the Student Testimonials / Video Reviews ones
+  // above so opening one never affects the other.
+  const [instructorImageOpen,      setInstructorImageOpen]      = useState(false);
+  const [instructorImageStartIndex, setInstructorImageStartIndex] = useState(0);
+  const [instructorVideoOpen,      setInstructorVideoOpen]      = useState(false);
+  const [instructorVideoStartIndex, setInstructorVideoStartIndex] = useState(0);
+
   const [localNewReviews,   setLocalNewReviews]   = useState([]);
   const [fetchedReviews,    setFetchedReviews]    = useState([]);
   const [reviewsOverlayOpen,  setReviewsOverlayOpen]  = useState(false);
@@ -1155,12 +1181,11 @@ export default function CourseLandingPage() {
     return () => { window.removeEventListener('keydown', handleKeyDown); document.body.style.overflow = 'unset'; };
   }, [reviewsOverlayOpen, closeReviewsOverlay]);
 
+  // NEW CHANGE X: No custom in-page loading spinner anymore — while the course
+  // is loading we render nothing at all, so the only loading feedback the
+  // visitor sees is the browser's own default tab/address-bar indicator.
   if (loading || fullCourseLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#FDFAF6]">
-        <div className="w-12 h-12 border-4 border-[#e8540a] border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return null;
   }
 
   if (!courseData) {
@@ -1188,6 +1213,7 @@ export default function CourseLandingPage() {
     bio:         instructorData.bio                 || courseData.instructorBio     || '',
     description: instructorData.instructorDescription || courseData.instructorDescription || '',
     image:       instructorData.avatar              || instructorData.profileImage  || instructorData.instructorImage || courseData.instructorImage || '👩‍💼',
+    media:       Array.isArray(instructorData.instructorMedia) ? instructorData.instructorMedia : (Array.isArray(courseData.instructorMedia) ? courseData.instructorMedia : []),
   } : {
     name:        courseData.instructor        || 'Instructor',
     title:       courseData.instructorTitle   || '',
@@ -1202,7 +1228,29 @@ export default function CourseLandingPage() {
     bio:         courseData.instructorBio     || '',
     description: courseData.instructorDescription || '',
     image:       courseData.instructorImage   || '👩‍💼',
+    media:       Array.isArray(courseData.instructorMedia) ? courseData.instructorMedia : [],
   };
+
+  // Split the instructor's media gallery into pictures and videos for the
+  // two modals below. Shape saved by the dashboard: { type, heading,
+  // description, imageUrl, videoUrl }.
+  const instructorImages = (instructor.media || [])
+    .filter((m) => m.type === 'image' && m.imageUrl)
+    .map((m) => ({ imageUrl: m.imageUrl, author: m.heading || '' }));
+  const instructorVideos = (instructor.media || [])
+    .filter((m) => m.type === 'video' && m.videoUrl);
+
+  // Same items, in the order the instructor added them, each tagged with its
+  // click-through index into instructorImages/instructorVideos above so the
+  // right item opens in the right modal.
+  let __instrVidIdx = 0, __instrImgIdx = 0;
+  const instructorMediaItems = (instructor.media || [])
+    .map((m) => {
+      if (m.type === 'video' && m.videoUrl) return { ...m, kind: 'video', clickIndex: __instrVidIdx++ };
+      if (m.type === 'image' && m.imageUrl) return { ...m, kind: 'image', clickIndex: __instrImgIdx++ };
+      return null;
+    })
+    .filter(Boolean);
 
   const totalLectures = sections.reduce((a, s) => a + (s.lectures || 0), 0);
 
@@ -1450,6 +1498,21 @@ export default function CourseLandingPage() {
         onClose={() => setImageSliderOpen(false)}
         images={imageTestimonials}
         startIndex={imageSliderStartIndex}
+      />
+
+      {/* INSTRUCTOR PHOTOS & VIDEOS — same lightbox/video-modal pattern as the
+          testimonial grids above, fed by the instructor's own media gallery. */}
+      <DefaultVideoModal
+        isOpen={instructorVideoOpen}
+        onClose={() => setInstructorVideoOpen(false)}
+        videos={instructorVideos}
+        startIndex={instructorVideoStartIndex}
+      />
+      <ImageLightbox
+        isOpen={instructorImageOpen}
+        onClose={() => setInstructorImageOpen(false)}
+        images={instructorImages}
+        startIndex={instructorImageStartIndex}
       />
 
       {/* ANNOUNCEMENT BAR */}
@@ -1893,6 +1956,61 @@ export default function CourseLandingPage() {
                           </button>
                         </div>
                       )}
+
+                      {/* INSTRUCTOR PHOTOS & VIDEOS — media gallery set from the
+                          Instructor Dashboard → Profile → Description. Same
+                          card language as the rest of this section (white
+                          cards, #ece6dd borders, cream background, orange
+                          accent). Only shows up when the instructor has added
+                          at least one photo or video. */}
+                      {instructorMediaItems.length > 0 && (
+                        <div className="mt-6 pt-6 border-t border-[#ece6dd] text-left">
+                          <p className="text-xs font-bold text-[#9e9789] uppercase tracking-wide mb-3">Photos &amp; Videos</p>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+                            {instructorMediaItems.map((item) => {
+                              const isVideo = item.kind === 'video';
+                              const ytId = isVideo ? getYouTubeId(item.videoUrl) : null;
+                              const onClick = () => {
+                                if (isVideo) { setInstructorVideoStartIndex(item.clickIndex); setInstructorVideoOpen(true); }
+                                else { setInstructorImageStartIndex(item.clickIndex); setInstructorImageOpen(true); }
+                              };
+                              return (
+                                <button
+                                  key={item.id || item._id}
+                                  onClick={onClick}
+                                  className="text-left bg-white border border-[#ece6dd] rounded-xl overflow-hidden shadow-sm hover:shadow-md transition cursor-pointer p-0"
+                                >
+                                  <div className="relative aspect-video bg-[#f0ebe3]">
+                                    {isVideo ? (
+                                      ytId ? (
+                                        <img src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`} alt={item.heading || 'Video'} className="w-full h-full object-cover" />
+                                      ) : (
+                                        <div className="w-full h-full flex items-center justify-center bg-[#2d2416]" />
+                                      )
+                                    ) : (
+                                      <img src={item.imageUrl} alt={item.heading || 'Photo'} className="w-full h-full object-cover" />
+                                    )}
+                                    {isVideo && (
+                                      <div className="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center">
+                                        <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#e8540a] flex items-center justify-center shadow-lg">
+                                          <Play size={14} className="text-white ml-0.5" fill="currentColor" />
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                  {(item.heading || item.description) && (
+                                    <div className="px-2.5 py-2">
+                                      {item.heading && <p className="text-xs sm:text-sm font-bold text-[#1a1208] leading-snug line-clamp-1">{item.heading}</p>}
+                                      {item.description && <p className="text-[11px] sm:text-xs text-[#9e9789] leading-snug line-clamp-2 mt-0.5">{item.description}</p>}
+                                    </div>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+
                       {(instructor.website || instructor.twitter || instructor.linkedin) && (
                         <div className="flex flex-wrap justify-center sm:justify-start gap-3 text-sm text-[#9e9789] mt-4">
                           {instructor.website && (

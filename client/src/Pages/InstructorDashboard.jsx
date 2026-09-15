@@ -10,6 +10,11 @@
 //          (heading, sub heading, video URL, image upload/URL) that render on
 //          the course landing page. All video-URL previews are now compact,
 //          corner-anchored thumbnails instead of a full-width player.
+// UPDATED: Instructor Profile → Description now supports an unlimited media
+//          gallery ("Add Video" / "Add Picture"), each item with its own
+//          heading + description. Pictures upload to Cloudinary; videos are
+//          pasted YouTube / Bunny.net links. Saved as instructorMedia[] and
+//          synced to every course landing page via the instructor profile.
 // All dummy data is replaced with real API calls via useInstructorCourses hook.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1664,6 +1669,16 @@ function ProfilePage({ toast }) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const fileRef = useRef();
 
+  // ── Instructor Media Gallery — unlimited videos + pictures, each with its
+  //    own heading + description. Pictures upload to Cloudinary; videos are
+  //    pasted YouTube / Bunny.net links. Saved as instructorMedia[] and read
+  //    by Shopify.jsx on every course this instructor owns. ─────────────────
+  const [mediaItems, setMediaItems] = useState(
+    Array.isArray(user?.instructorMedia) ? user.instructorMedia : []
+  );
+  const [uploadingMediaImage, setUploadingMediaImage] = useState({}); // keyed by item id
+  const mediaImageRefs = useRef({});
+
   // Re-sync if user context updates (e.g. after a save)
   useEffect(() => {
     if (!user) return;
@@ -1683,9 +1698,50 @@ function ProfilePage({ toast }) {
       totalCourses:          user.totalCourses != null && user.totalCourses !== "" ? String(user.totalCourses) : "",
       instructorDescription: user.instructorDescription || "",
     });
+    setMediaItems(Array.isArray(user.instructorMedia) ? user.instructorMedia : []);
   }, [user]);
 
   function update(field, val) { setForm(f => ({ ...f, [field]: val })); }
+
+  // ── Media item handlers ──────────────────────────────────────────────────
+  const addMediaItem = (type) => {
+    const item = { id: uid(), type, heading: '', description: '', videoUrl: '', imageUrl: '', imagePreview: '' };
+    setMediaItems(p => [...p, item]);
+  };
+
+  const updateMediaItem = (itemId, field, val) => {
+    setMediaItems(p => p.map(m => (m.id || m._id) === itemId ? { ...m, [field]: val } : m));
+  };
+
+  const deleteMediaItem = (itemId) => {
+    setMediaItems(p => p.filter(m => (m.id || m._id) !== itemId));
+    toast("Removed", "success");
+  };
+
+  const handleMediaImageFile = async (e, itemId) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => updateMediaItem(itemId, 'imagePreview', ev.target.result);
+    reader.readAsDataURL(file);
+    setUploadingMediaImage(p => ({ ...p, [itemId]: true }));
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      const res = await api.post("/upload/image", formData);
+      const url = res.data?.url ?? res.data?.secure_url ?? res.data?.imageUrl;
+      if (!url) { toast("Upload succeeded but no URL returned.", "error"); return; }
+      updateMediaItem(itemId, 'imageUrl', url);
+      updateMediaItem(itemId, 'imagePreview', url);
+      toast("Picture uploaded to Cloudinary ✓", "success");
+    } catch (err) {
+      console.error("Media picture upload error:", err);
+      toast("Upload failed. Please try again.", "error");
+    } finally {
+      setUploadingMediaImage(p => ({ ...p, [itemId]: false }));
+      if (e.target) e.target.value = "";
+    }
+  };
 
   // ── Avatar upload → Cloudinary ──────────────────────────────────────────
   const handleAvatarUpload = async (e) => {
@@ -1727,6 +1783,10 @@ function ProfilePage({ toast }) {
       toast("Please wait for the photo upload to finish.", "error");
       return;
     }
+    if (Object.values(uploadingMediaImage).some(Boolean)) {
+      toast("Please wait for the picture upload to finish.", "error");
+      return;
+    }
 
     if (form.totalRatings !== "") {
       const r = parseFloat(form.totalRatings);
@@ -1763,6 +1823,7 @@ function ProfilePage({ toast }) {
         totalStudents:         form.totalStudents === "" ? 0 : parseInt(form.totalStudents, 10),
         totalCourses:          form.totalCourses === "" ? 0 : parseInt(form.totalCourses, 10),
         instructorDescription: form.instructorDescription.trim(),
+        instructorMedia:       mediaItems.map(({ imagePreview, ...rest }) => rest),
       };
 
       await updateProfile(payload);
@@ -1921,6 +1982,86 @@ function ProfilePage({ toast }) {
           placeholder={"Write a detailed description about your teaching experience, expertise, and background...\n\nYou can use paragraphs and basic HTML tags like <p>, <strong>, <ul>."}
           rows={8}
         />
+
+        {/* ── Media Gallery — unlimited videos + pictures, each with its own
+            heading + description. Renders automatically inside the Instructor
+            section on every course landing page this instructor owns. ────── */}
+        <div className="pt-5 border-t border-gray-100">
+          <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+            <h4 className="font-bold text-gray-800 text-sm">Photos &amp; Videos</h4>
+            <div className="flex gap-2">
+              <Btn size="sm" variant="secondary" onClick={() => addMediaItem('video')}>🎬 Add Video</Btn>
+              <Btn size="sm" variant="secondary" onClick={() => addMediaItem('image')}>🖼️ Add Picture</Btn>
+            </div>
+          </div>
+          <p className="text-xs sm:text-sm text-gray-500 mb-4">
+            Add as many photos and videos as you like — each with its own heading and description.
+            Pictures upload straight to Cloudinary; videos are YouTube or Bunny.net links you paste in.
+          </p>
+
+          {mediaItems.length === 0 ? (
+            <EmptyState
+              icon="🎞️"
+              title="No media yet"
+              body="Add a video or a picture to showcase your work below your description."
+            />
+          ) : (
+            <div className="space-y-3">
+              {mediaItems.map((item) => {
+                const mId = item.id || item._id;
+                const uploading = uploadingMediaImage[mId];
+                const imgPreview = item.imagePreview || item.imageUrl;
+                return (
+                  <div key={mId} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
+                    <div className="flex items-center gap-2 mb-3">
+                      <span className="text-xs font-semibold text-purple-600 uppercase tracking-wide flex-1">
+                        {item.type === 'video' ? '🎬 Video' : '🖼️ Picture'}
+                      </span>
+                      <button onClick={() => deleteMediaItem(mId)} className="text-red-400 hover:text-red-600 transition text-xs px-2 py-1 rounded hover:bg-red-50">✕ Remove</button>
+                    </div>
+
+                    <div className="grid sm:grid-cols-2 gap-3 mb-3">
+                      <Input label="Heading" value={item.heading || ""} onChange={v => updateMediaItem(mId, "heading", v)} placeholder="e.g. Behind the scenes"/>
+                      <Input label="Description" value={item.description || ""} onChange={v => updateMediaItem(mId, "description", v)} placeholder="A short line about this photo or video"/>
+                    </div>
+
+                    {item.type === 'video' ? (
+                      <div>
+                        <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">Video URL</label>
+                        <input value={item.videoUrl || ""} onChange={e => updateMediaItem(mId, "videoUrl", e.target.value)}
+                          placeholder="Paste a YouTube or Bunny.net link"
+                          className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"/>
+                        <p className="text-xs text-gray-400 mt-1">YouTube · Bunny.net (embed supported)</p>
+                        {item.videoUrl && (
+                          <div className="flex justify-end mt-2">
+                            <CompactVideoPreview url={item.videoUrl} width={160} height={90}/>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div>
+                        <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">Picture</label>
+                        <div className="flex items-start gap-3">
+                          <div className="w-24 h-24 flex-shrink-0 relative">
+                            <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-purple-400 transition cursor-pointer group"
+                              onClick={() => mediaImageRefs.current[mId]?.click()}>
+                              {imgPreview
+                                ? <img src={imgPreview} alt="Preview" className="w-full h-full object-cover"/>
+                                : <div className="w-full h-full flex flex-col items-center justify-center"><span className="text-xl mb-0.5">📷</span><p className="text-[10px] text-gray-400 text-center px-1">Click to upload</p></div>}
+                              <UploadOverlay uploading={uploading}/>
+                            </div>
+                            <input ref={el => (mediaImageRefs.current[mId] = el)} type="file" accept="image/*" className="hidden" onChange={e => handleMediaImageFile(e, mId)}/>
+                          </div>
+                          <p className="text-xs text-gray-400 flex-1">Click the box to upload — saved directly to Cloudinary.</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── Links & Social ── */}
