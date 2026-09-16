@@ -181,6 +181,18 @@
 //            "🎬 Add Video" button is always its own separate card, never merged into another
 //            block's slider. The full-screen video modal still pages through every video on
 //            the profile, in order, regardless of which block or slide it was opened from.
+// ─── NEW CHANGE AF: Instructor video blocks with 2+ links now show every video side by side
+//            (no arrows) instead of one-at-a-time, so it's obvious at a glance it's a group of
+//            videos. Heading/description alignment, size and bold/italic — set per block on
+//            the Instructor Dashboard — now render here exactly as chosen.
+// ─── NEW CHANGE AG: Announcement bar no longer has the 🎉 emoji, and its "Save X%" now reads
+//            the same real price/originalPrice the rest of the page uses (was reading the
+//            unused `discountPrice` field, so it never matched an instructor's actual sale).
+// ─── NEW CHANGE AH: Footer rebuilt — logo now comes from Super Admin → Settings (Cloudinary),
+//            falling back to the original "Lerni" text wordmark when none is set; added the
+//            Motiviam Pvt Ltd address/phone/email; replaced the old 6-column link grid with a
+//            3-tab FAQ-style accordion (About / Policies / Contact Us, chevron flips open↔closed);
+//            added a newsletter box outside the tabs that posts to the backend.
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Volume2, VolumeX, ArrowLeft } from 'lucide-react';
@@ -408,6 +420,20 @@ function buildLegacyDescriptionBlocks(text, media) {
 function getBlockVideoUrls(b) {
   if (Array.isArray(b.videoUrls)) return b.videoUrls.filter(Boolean);
   return b.videoUrl ? [b.videoUrl] : [];
+}
+
+// Heading/description alignment + size + style set per block on the
+// Instructor Dashboard — translated into Tailwind classes here so the course
+// page renders exactly what was chosen.
+const BLOCK_TEXT_ALIGN_CLASS = { left: 'text-left', center: 'text-center', right: 'text-right' };
+const BLOCK_HEADING_SIZE_CLASS = { sm: 'text-xs md:text-sm', base: 'text-sm md:text-base', lg: 'text-base md:text-lg', xl: 'text-lg md:text-xl' };
+const BLOCK_DESC_SIZE_CLASS = { sm: 'text-[11px] md:text-xs', base: 'text-xs md:text-sm', lg: 'text-sm md:text-base', xl: 'text-base md:text-lg' };
+function blockTextClass(block, kind) {
+  const align = BLOCK_TEXT_ALIGN_CLASS[block.textAlign] || BLOCK_TEXT_ALIGN_CLASS.left;
+  const size = (kind === 'heading' ? BLOCK_HEADING_SIZE_CLASS : BLOCK_DESC_SIZE_CLASS)[block.textSize] || (kind === 'heading' ? BLOCK_HEADING_SIZE_CLASS.base : BLOCK_DESC_SIZE_CLASS.base);
+  const weight = kind === 'heading' ? (block.textBold === false ? 'font-normal' : 'font-bold') : (block.textBold ? 'font-bold' : '');
+  const italic = block.textItalic ? 'italic' : '';
+  return [align, size, weight, italic].filter(Boolean).join(' ');
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -784,20 +810,18 @@ function DefaultVideoModal({ isOpen, onClose, videos, startIndex = 0 }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // INSTRUCTOR VIDEO BLOCK — one video link renders as a single clickable card,
 // exactly as before. A block with 2+ links (added via "+ Add Another Video"
-// on the Instructor Dashboard) renders as a slider instead — one card with
-// left/right arrows and dots, sharing the block's one heading/description.
-// Whichever slide is showing opens the full-screen DefaultVideoModal at that
-// exact video's position via clickIndexes[slide].
+// on the Instructor Dashboard) renders every video side by side in a small
+// grid instead of one-at-a-time — so it's obvious at a glance that there's
+// more than one video, with no arrows to click through. Each thumbnail opens
+// the full-screen DefaultVideoModal at its own exact position in the
+// profile's video list, via clickIndexes[i].
 // ─────────────────────────────────────────────────────────────────────────────
 function InstructorVideoBlock({ urls, clickIndexes, heading, onOpen }) {
-  const [slide, setSlide] = useState(0);
-  const isSlider = urls.length > 1;
-  const ytId = getYouTubeId(urls[slide]);
-
-  return (
-    <div className="relative">
+  if (urls.length === 1) {
+    const ytId = getYouTubeId(urls[0]);
+    return (
       <button
-        onClick={() => onOpen(clickIndexes[slide])}
+        onClick={() => onOpen(clickIndexes[0])}
         className="relative block w-full aspect-video rounded-xl overflow-hidden border border-[#ece6dd] shadow-sm hover:shadow-md transition cursor-pointer bg-[#2d2416] p-0"
       >
         {ytId && (
@@ -809,34 +833,30 @@ function InstructorVideoBlock({ urls, clickIndexes, heading, onOpen }) {
           </div>
         </div>
       </button>
+    );
+  }
 
-      {isSlider && (
-        <>
-          {slide > 0 && (
-            <button
-              onClick={() => setSlide((s) => s - 1)}
-              aria-label="Previous video"
-              className="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center text-white transition border-none cursor-pointer"
-            >
-              <ChevronLeft size={18} />
-            </button>
-          )}
-          {slide < urls.length - 1 && (
-            <button
-              onClick={() => setSlide((s) => s + 1)}
-              aria-label="Next video"
-              className="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center text-white transition border-none cursor-pointer"
-            >
-              <ChevronRight size={18} />
-            </button>
-          )}
-          <div className="absolute bottom-2 left-0 right-0 flex items-center justify-center gap-1.5">
-            {urls.map((_, i) => (
-              <span key={i} className={`w-1.5 h-1.5 rounded-full transition ${i === slide ? 'bg-white' : 'bg-white/40'}`} />
-            ))}
-          </div>
-        </>
-      )}
+  return (
+    <div className="grid grid-cols-2 gap-2 md:gap-3">
+      {urls.map((url, i) => {
+        const ytId = getYouTubeId(url);
+        return (
+          <button
+            key={i}
+            onClick={() => onOpen(clickIndexes[i])}
+            className="relative block w-full aspect-video rounded-xl overflow-hidden border border-[#ece6dd] shadow-sm hover:shadow-md transition cursor-pointer bg-[#2d2416] p-0"
+          >
+            {ytId && (
+              <img src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`} alt={heading || 'Video'} className="absolute inset-0 w-full h-full object-cover" />
+            )}
+            <div className="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#e8540a] flex items-center justify-center shadow-lg">
+                <Play size={14} className="text-white ml-0.5" fill="currentColor" />
+              </div>
+            </div>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -1133,6 +1153,27 @@ export default function CourseLandingPage() {
   const [instructorImageStartIndex, setInstructorImageStartIndex] = useState(0);
   const [instructorVideoOpen,      setInstructorVideoOpen]      = useState(false);
   const [instructorVideoStartIndex, setInstructorVideoStartIndex] = useState(0);
+
+  // ── FOOTER — site logo (Super Admin → Settings), FAQ accordion, newsletter ──
+  const [siteLogoUrl, setSiteLogoUrl] = useState('');
+  const [openFooterTab, setOpenFooterTab] = useState(null); // 'about' | 'policies' | 'contact' | null
+  const [newsletterEmail, setNewsletterEmail] = useState('');
+  const [newsletterStatus, setNewsletterStatus] = useState('idle'); // idle | sending | sent | error
+
+  useEffect(() => {
+    api.get('/settings')
+      .then((res) => setSiteLogoUrl(res.data?.logoUrl || ''))
+      .catch(() => {}); // logo is optional — footer falls back to the text wordmark
+  }, [api]);
+
+  const handleNewsletterSubmit = (e) => {
+    e.preventDefault();
+    if (!newsletterEmail.trim() || newsletterStatus === 'sending') return;
+    setNewsletterStatus('sending');
+    api.post('/newsletter', { email: newsletterEmail.trim() })
+      .then(() => { setNewsletterStatus('sent'); setNewsletterEmail(''); })
+      .catch(() => setNewsletterStatus('error'));
+  };
 
   const [localNewReviews,   setLocalNewReviews]   = useState([]);
   const [fetchedReviews,    setFetchedReviews]    = useState([]);
@@ -1669,8 +1710,10 @@ export default function CourseLandingPage() {
         startIndex={instructorImageStartIndex}
       />
 
-      {/* ANNOUNCEMENT BAR */}
-      {courseData.discountPrice && courseData.discountPrice < courseData.originalPrice && (
+      {/* ANNOUNCEMENT BAR — uses the same real price/originalPrice as the rest
+          of the page (was reading the unused `discountPrice` field before,
+          so this never actually reflected what the instructor set). */}
+      {discountPct > 0 && (
         <div className="bg-[#1a1208] py-2 md:py-3 w-full overflow-hidden">
           <style>{`
             @keyframes announcement-marquee {
@@ -1694,9 +1737,9 @@ export default function CourseLandingPage() {
                 className="text-sm md:text-base font-semibold text-[#f9c97a] whitespace-nowrap px-16"
                 aria-hidden={copy === 1}
               >
-                🎉 Limited Time Offer: Save {Math.round((1 - courseData.discountPrice / courseData.originalPrice) * 100)}% — Ends Soon!
+                Limited Time Offer: Save {discountPct}% — Ends Soon!
                 &nbsp;&nbsp;&nbsp;•&nbsp;&nbsp;&nbsp;
-                🎉 Limited Time Offer: Save {Math.round((1 - courseData.discountPrice / courseData.originalPrice) * 100)}% — Ends Soon!
+                Limited Time Offer: Save {discountPct}% — Ends Soon!
               </span>
             ))}
           </div>
@@ -1715,9 +1758,15 @@ export default function CourseLandingPage() {
           </button>
           <div className="absolute left-1/2 transform -translate-x-1/2 lg:relative lg:left-auto lg:transform-none">
             <button onClick={() => handleNavigate('/')}
-              className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-[#1a1208] cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0"
+              className="cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0 flex items-center"
               style={{ fontFamily: "'Playfair Display', serif" }}>
-              Ler<span className="text-[#e8540a]">ni</span>
+              {siteLogoUrl ? (
+                <img src={siteLogoUrl} alt="Logo" className="h-9 md:h-11 lg:h-12 w-auto object-contain" />
+              ) : (
+                <span className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-[#1a1208]">
+                  Ler<span className="text-[#e8540a]">ni</span>
+                </span>
+              )}
             </button>
           </div>
           {/* NEW CHANGE N: added Home + Services links alongside the existing ones */}
@@ -2120,7 +2169,7 @@ export default function CourseLandingPage() {
 
                                 return (
                                   <div key={block._key}>
-                                    {block.heading && <p className="text-sm md:text-base font-bold text-[#1a1208] mb-2">{block.heading}</p>}
+                                    {block.heading && <p className={`${blockTextClass(block, 'heading')} text-[#1a1208] mb-2`}>{block.heading}</p>}
                                     {isVideo ? (
                                       <InstructorVideoBlock
                                         urls={block._urls}
@@ -2136,7 +2185,7 @@ export default function CourseLandingPage() {
                                         <img src={block.imageUrl} alt={block.heading || 'Photo'} className="w-full max-h-80 object-cover" />
                                       </button>
                                     )}
-                                    {block.description && <p className="text-xs md:text-sm text-[#9e9789] mt-2">{block.description}</p>}
+                                    {block.description && <p className={`${blockTextClass(block, 'description')} text-[#9e9789] mt-2`}>{block.description}</p>}
                                   </div>
                                 );
                               })}
@@ -2337,32 +2386,99 @@ export default function CourseLandingPage() {
       {/* FOOTER */}
       <footer className="bg-[#1a1208] text-[#9e8e7a] py-8 md:py-12 w-full border-t border-[#2d2416]">
         <div className="max-w-7xl mx-auto px-4 lg:px-6">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 md:gap-8 mb-8 md:mb-12">
-            {[
-              { title: 'Lerni',     links: ['About', 'Press', 'Contact', 'Careers'] },
-              { title: 'Community', links: ['Learners', 'Partners', 'Developers', 'Beta Testers'] },
-              { title: 'Teaching',  links: ['Become Instructor', 'Teaching Center', 'Resources'] },
-              { title: 'Programs',  links: ['Enterprise', 'Government', 'Lerni Business'] },
-              { title: 'Support',   links: ['Help Center', 'Get the App', 'FAQ', 'Accessibility'] },
-              { title: 'Legal',     links: ['Terms', 'Privacy Policy', 'Cookie Settings', 'Sitemap'] },
-            ].map(col => (
-              <div key={col.title}>
-                <h3 className="font-bold text-[#f9c97a] mb-3 md:mb-4 text-xs md:text-sm uppercase tracking-wide">{col.title}</h3>
-                <ul className="space-y-1.5 md:space-y-2 text-xs md:text-sm">
-                  {col.links.map(link => (
-                    <li key={link}><button onClick={() => handleNavigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-[#9e8e7a] p-0">{link}</button></li>
-                  ))}
-                </ul>
+          <div className="grid md:grid-cols-3 gap-8 md:gap-12 mb-8 md:mb-10">
+            {/* Logo + address/phone/email — same brand mark as before, now
+                pulled from Super Admin → Settings when one has been uploaded,
+                falling back to the original text wordmark otherwise. */}
+            <div>
+              <button onClick={() => handleNavigate('/')}
+                className="cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0 block mb-4">
+                {siteLogoUrl ? (
+                  <img src={siteLogoUrl} alt="Logo" className="h-10 md:h-12 w-auto object-contain" />
+                ) : (
+                  <span className="text-xl md:text-2xl font-extrabold text-white" style={{ fontFamily: "'Playfair Display', serif" }}>
+                    Ler<span className="text-[#f9c97a]">ni</span>
+                  </span>
+                )}
+              </button>
+              <div className="text-xs md:text-sm space-y-2 leading-relaxed">
+                <p>Motiviam Pvt Ltd Building Opposite Attock Petrol Pump Adjacent Baluchistan Marble Ghazikot Mansehra</p>
+                <p>
+                  <a href="tel:03446199711" className="hover:text-white transition">03446199711</a>
+                </p>
+                <p>
+                  <a href="mailto:motiviampvtltd@gmail.com" className="hover:text-white transition">motiviampvtltd@gmail.com</a>
+                </p>
               </div>
-            ))}
+            </div>
+
+            {/* FAQ-style accordion — About / Policies / Contact Us. Chevron
+                points down while closed, up while open. */}
+            <div>
+              {[
+                { key: 'about',    label: 'About',      rows: [{ label: 'About Page', path: '/about' }] },
+                { key: 'policies', label: 'Policies',    rows: [{ label: '1. Return Policy', path: '/return-policy' }, { label: '2. Privacy Policy', path: '/privacy-policy' }] },
+                { key: 'contact',  label: 'Contact Us',  rows: [{ label: 'Contact Us', path: '/contact-us' }] },
+              ].map((tab) => {
+                const isOpen = openFooterTab === tab.key;
+                return (
+                  <div key={tab.key} className="border-b border-[#2d2416]">
+                    <button
+                      onClick={() => setOpenFooterTab(isOpen ? null : tab.key)}
+                      className="w-full flex items-center justify-between py-3 bg-transparent border-none cursor-pointer text-left"
+                    >
+                      <span className="font-bold text-[#f9c97a] text-xs md:text-sm uppercase tracking-wide">{tab.label}</span>
+                      <ChevronDown size={16} className={`text-[#9e8e7a] transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {isOpen && (
+                      <ul className="pb-3 space-y-2 text-xs md:text-sm">
+                        {tab.rows.map((row) => (
+                          <li key={row.path}>
+                            <button onClick={() => handleNavigate(row.path)} className="hover:text-white transition bg-transparent border-none cursor-pointer text-[#9e8e7a] p-0 text-left">
+                              {row.label}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Newsletter — outside the accordion tabs */}
+            <div>
+              <h3 className="font-bold text-[#f9c97a] mb-3 text-xs md:text-sm uppercase tracking-wide">Newsletter</h3>
+              <p className="text-xs md:text-sm mb-3">Get news and updates in your inbox.</p>
+              <form onSubmit={handleNewsletterSubmit} className="flex gap-2">
+                <input
+                  type="email"
+                  required
+                  value={newsletterEmail}
+                  onChange={(e) => { setNewsletterEmail(e.target.value); if (newsletterStatus !== 'sending') setNewsletterStatus('idle'); }}
+                  placeholder="you@example.com"
+                  className="flex-1 min-w-0 bg-[#241c10] border border-[#2d2416] rounded-lg px-3 py-2 text-xs md:text-sm text-white placeholder-[#6b5e4e] focus:outline-none focus:ring-2 focus:ring-[#e8540a]"
+                />
+                <button
+                  type="submit"
+                  disabled={newsletterStatus === 'sending'}
+                  className="flex-shrink-0 bg-[#e8540a] hover:bg-[#c94708] disabled:opacity-60 text-white text-xs md:text-sm font-semibold px-4 py-2 rounded-lg transition border-none cursor-pointer"
+                >
+                  {newsletterStatus === 'sending' ? '...' : 'Send'}
+                </button>
+              </form>
+              {newsletterStatus === 'sent' && <p className="text-xs text-emerald-400 mt-2">✓ Subscribed — thanks!</p>}
+              {newsletterStatus === 'error' && <p className="text-xs text-red-400 mt-2">Something went wrong — try again.</p>}
+            </div>
           </div>
-          <div className="flex flex-col md:flex-row justify-between items-center pt-6 md:pt-8 border-t border-[#2d2416]">
+
+          <div className="flex flex-col md:flex-row justify-between items-center pt-6 md:pt-8 border-t border-[#2d2416] gap-3">
             <button onClick={() => handleNavigate('/')}
-              className="text-xl md:text-2xl font-extrabold text-white cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0 mb-4 md:mb-0"
+              className="text-xl md:text-2xl font-extrabold text-white cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0"
               style={{ fontFamily: "'Playfair Display', serif" }}>
-              Ler<span className="text-[#f9c97a]">ni</span>
+              {siteLogoUrl ? <img src={siteLogoUrl} alt="Logo" className="h-8 md:h-9 w-auto object-contain" /> : <>Ler<span className="text-[#f9c97a]">ni</span></>}
             </button>
-            <p className="text-xs md:text-sm text-[#6b5e4e]">© 2024 Lerni, Inc. All rights reserved.</p>
+            <p className="text-xs md:text-sm text-[#6b5e4e]">© {new Date().getFullYear()} Motiviam Pvt Ltd. All rights reserved.</p>
           </div>
         </div>
       </footer>

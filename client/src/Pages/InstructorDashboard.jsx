@@ -27,6 +27,13 @@
 //          Shopify.jsx renders those as a slider. The top-level "🎬 Add
 //          Video" button still always starts a brand new, separate block.
 //          Video link previews in this editor are also a bit larger now.
+// UPDATED: Course Editor — "Full Price"/"Discount Price" are now "Course
+//          Price"/"Sale Price". Course Price is the reference price; Sale
+//          Price (optional) is what students are actually charged when set
+//          and lower — the course page shows a strikethrough + real % off.
+// UPDATED: Each photo/video block's heading + description can now be
+//          aligned left/center/right, sized S/M/L/XL, and toggled
+//          bold/italic — rendered exactly as set on the course landing page.
 // All dummy data is replaced with real API calls via useInstructorCourses hook.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -741,8 +748,22 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
 
   const [title,          setTitle]          = useState(existing?.title          || "");
   const [category,       setCategory]       = useState(existing?.category       || "Marketing");
-  const [price,          setPrice]          = useState(existing?.price?.toString() || "49.99");
-  const [discountPrice,  setDiscountPrice]  = useState(existing?.discountPrice?.toString() || "");
+  // PRICING — "Course Price" is the regular/reference price shown to
+  // students. "Sale Price" is optional; when set and lower, it's what
+  // students are ACTUALLY charged (backend field `price`), and Course Price
+  // becomes `originalPrice` purely so the course page can show a
+  // strikethrough + real "% off". With no Sale Price, Course Price alone is
+  // charged and no discount badge shows. This prefill also picks up courses
+  // saved under the old single "Discount Price" field, best-effort.
+  const [coursePrice, setCoursePrice] = useState(() => {
+    if (existing?.originalPrice) return existing.originalPrice.toString();
+    return existing?.price?.toString() || "49.99";
+  });
+  const [salePrice, setSalePrice] = useState(() => {
+    if (existing?.originalPrice) return existing?.price?.toString() || "";
+    if (existing?.discountPrice && existing.price && existing.discountPrice < existing.price) return existing.discountPrice.toString();
+    return "";
+  });
   const [status,         setStatus]         = useState(existing?.status         || "draft");
   const [description,    setDescription]    = useState(existing?.description    || "");
   const [thumbnail,      setThumbnail]      = useState(existing?.thumbnail      || "");
@@ -1037,11 +1058,23 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
 
   async function handleSave(publish = false) {
     if (!title.trim()) { toast("Course title is required.", "error"); return; }
+    const cp = parseFloat(coursePrice) || 0;
+    const sp = salePrice.trim() ? parseFloat(salePrice) : null;
+    if (sp !== null && (isNaN(sp) || sp <= 0)) { toast("Sale Price must be a number greater than 0.", "error"); return; }
+    if (sp !== null && sp >= cp) { toast("Sale Price must be lower than Course Price.", "error"); return; }
+    const saleActive = sp !== null && sp > 0 && sp < cp;
     setSaving(true);
     const payload = {
       title, category,
-      price:           parseFloat(price) || 0,
-      discountPrice:   discountPrice ? parseFloat(discountPrice) : undefined,
+      // The REAL, charged amount — unchanged everywhere else in the app
+      // (enrollment amount, "Enroll Now" price, course cards) that already
+      // reads `course.price`.
+      price:         saleActive ? sp : cp,
+      // Reference price for the strikethrough + "% off" on the course page.
+      // Explicitly null (not left out) when there's no sale, so editing an
+      // existing on-sale course back to "no sale" actually clears the old
+      // originalPrice in the database instead of leaving it stale.
+      originalPrice: saleActive ? cp : null,
       status:          publish ? "published" : status,
       description, sections, thumbnail, previewVideoUrl,
       tags:            tags.split(",").map(t => t.trim()).filter(Boolean),
@@ -1136,8 +1169,17 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
           <Input label="Course Title *" value={title} onChange={setTitle} placeholder="e.g. Complete React Bootcamp 2024" className="sm:col-span-2"/>
           <Select label="Category" value={category} onChange={setCategory} options={CATEGORIES}/>
           <Input label="Tags (comma-separated)" value={tags} onChange={setTags} placeholder="React, Node.js, MongoDB"/>
-          <Input label="Full Price (USD)" value={price} onChange={setPrice} placeholder="89.99" type="number"/>
-          <Input label="Discount Price (USD)" value={discountPrice} onChange={setDiscountPrice} placeholder="13.99 (optional)" type="number"/>
+          <Input label="Course Price (USD)" value={coursePrice} onChange={setCoursePrice} placeholder="89.99" type="number"/>
+          <div>
+            <Input label="Sale Price (USD) — optional" value={salePrice} onChange={setSalePrice} placeholder="e.g. 49.99 — leave blank if not on sale" type="number"/>
+            {(() => {
+              const cp = parseFloat(coursePrice) || 0;
+              const sp = parseFloat(salePrice) || 0;
+              if (!salePrice.trim() || !sp || !cp || sp >= cp) return null;
+              const pct = Math.round((1 - sp / cp) * 100);
+              return <p className="text-xs text-emerald-600 font-semibold mt-1">{pct}% off Course Price — this is what students will actually pay.</p>;
+            })()}
+          </div>
           <Select label="Status" value={status} onChange={setStatus} options={[{value:"draft",label:"Draft"},{value:"published",label:"Published"},{value:"review",label:"Under Review"}]}/>
         </div>
         <Textarea label="Course Description" value={description} onChange={setDescription} placeholder="What will students learn? Who is this for?" rows={4}/>
@@ -2136,6 +2178,36 @@ function ProfilePage({ toast }) {
                       <div className="grid sm:grid-cols-2 gap-3 mb-3">
                         <Input label="Heading" value={block.heading || ""} onChange={v => updateBlock(block.id, "heading", v)} placeholder="e.g. Behind the scenes"/>
                         <Input label="Description" value={block.description || ""} onChange={v => updateBlock(block.id, "description", v)} placeholder="A short line about this photo or video"/>
+                      </div>
+
+                      {/* Heading/description formatting — alignment, size, style. Applied on
+                          the course landing page exactly as set here. */}
+                      <div className="flex flex-wrap items-center gap-4 mb-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px] font-semibold text-gray-500 mr-1">Align</span>
+                          {[['left','⬅'],['center','↔'],['right','➡']].map(([val, icon]) => (
+                            <button key={val} type="button" onClick={() => updateBlock(block.id, 'textAlign', val)}
+                              className={`w-7 h-7 rounded flex items-center justify-center text-xs transition ${(block.textAlign || 'left') === val ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}
+                              title={`Align ${val}`}>{icon}</button>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px] font-semibold text-gray-500 mr-1">Size</span>
+                          {[['sm','S'],['base','M'],['lg','L'],['xl','XL']].map(([val, label]) => (
+                            <button key={val} type="button" onClick={() => updateBlock(block.id, 'textSize', val)}
+                              className={`min-w-[1.75rem] h-7 px-1.5 rounded flex items-center justify-center text-[11px] font-bold transition ${(block.textSize || 'base') === val ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}
+                              title={`Font size ${label}`}>{label}</button>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-[11px] font-semibold text-gray-500 mr-1">Style</span>
+                          <button type="button" onClick={() => updateBlock(block.id, 'textBold', !block.textBold)}
+                            className={`w-7 h-7 rounded flex items-center justify-center text-xs font-bold transition ${block.textBold ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}
+                            title="Bold">B</button>
+                          <button type="button" onClick={() => updateBlock(block.id, 'textItalic', !block.textItalic)}
+                            className={`w-7 h-7 rounded flex items-center justify-center text-xs italic transition ${block.textItalic ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}
+                            title="Italic">I</button>
+                        </div>
                       </div>
                       {block.type === 'video' ? (
                         <div>

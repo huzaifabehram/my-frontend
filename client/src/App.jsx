@@ -20,6 +20,10 @@ import ServicesPage               from "./Pages/Servicespage";
 import CoursesPage                from "./Pages/CoursesPage";
 import EnrolledPage               from "./Pages/EnrolledPage";
 import ThankYouPage                from "./Pages/ThankYouPage";
+import AboutPage                  from "./Pages/AboutPage";
+import PrivacyPolicyPage          from "./Pages/PrivacyPolicyPage";
+import ReturnPolicyPage           from "./Pages/ReturnPolicyPage";
+import ContactUsPage              from "./Pages/ContactUsPage";
 import Portals                    from "./Pages/Portals";
 import InstructorDashboard        from "./Pages/InstructorDashboard";
 import SuperAdminsDashboard        from "./Pages/SuperAdminsDashboard";
@@ -88,6 +92,12 @@ function AppRoutes() {
       {/* Also public — reached after Confirm Enrollment, for both guests
           (via the /auth/register redirect) and already-logged-in students. */}
       <Route path="/thank-you" element={<ThankYouPage />} />
+
+      {/* Footer pages — About / Policies / Contact Us */}
+      <Route path="/about"           element={<AboutPage />} />
+      <Route path="/privacy-policy"  element={<PrivacyPolicyPage />} />
+      <Route path="/return-policy"   element={<ReturnPolicyPage />} />
+      <Route path="/contact-us"      element={<ContactUsPage />} />
 
       {/* Auth */}
       <Route path="/auth"          element={<Navigate to="/auth/login" replace />} />
