@@ -165,6 +165,22 @@
 //            (was collapsed behind "Show more") — the whole paragraph/photo/video block
 //            is visible as soon as the page loads, with "Show less" at the bottom to
 //            collapse it if someone wants to.
+// ─── NEW CHANGE AC: Fixed a leftover useEffect that was silently re-collapsing the
+//            Instructor description every time a course loaded, overriding NEW CHANGE AB's
+//            default-open state before the page ever rendered.
+// ─── NEW CHANGE AD: Instructor stat cards (Total Rating / Reviews / Students / Courses) —
+//            on narrower Android phones the label text no longer has any risk of fracturing
+//            mid-word ("TO"/"TAL", "RA"/"TING"); it now only ever wraps at a real word space,
+//            and the icon stacks above the value/label instead of beside it at the smallest
+//            size, freeing up enough width for the label to render cleanly.
+// ─── NEW CHANGE AE: A video block from the Instructor Dashboard can now carry more than one
+//            video link (added there via "+ Add Another Video"). A block with just one link
+//            still renders as the same single video card as before; a block with 2+ links
+//            renders as a slider (left/right arrows + dots) under that one shared
+//            heading/description. A brand new video block started from the top-level
+//            "🎬 Add Video" button is always its own separate card, never merged into another
+//            block's slider. The full-screen video modal still pages through every video on
+//            the profile, in order, regardless of which block or slide it was opened from.
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Volume2, VolumeX, ArrowLeft } from 'lucide-react';
@@ -383,6 +399,15 @@ function buildLegacyDescriptionBlocks(text, media) {
     });
   });
   return blocks;
+}
+
+// A video block may carry several links (`videoUrls`, added via "+ Add
+// Another Video" on the dashboard) or just the older single `videoUrl`
+// string — this always returns a plain array of non-empty URLs regardless
+// of which shape the block was saved with.
+function getBlockVideoUrls(b) {
+  if (Array.isArray(b.videoUrls)) return b.videoUrls.filter(Boolean);
+  return b.videoUrl ? [b.videoUrl] : [];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -757,6 +782,66 @@ function DefaultVideoModal({ isOpen, onClose, videos, startIndex = 0 }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// INSTRUCTOR VIDEO BLOCK — one video link renders as a single clickable card,
+// exactly as before. A block with 2+ links (added via "+ Add Another Video"
+// on the Instructor Dashboard) renders as a slider instead — one card with
+// left/right arrows and dots, sharing the block's one heading/description.
+// Whichever slide is showing opens the full-screen DefaultVideoModal at that
+// exact video's position via clickIndexes[slide].
+// ─────────────────────────────────────────────────────────────────────────────
+function InstructorVideoBlock({ urls, clickIndexes, heading, onOpen }) {
+  const [slide, setSlide] = useState(0);
+  const isSlider = urls.length > 1;
+  const ytId = getYouTubeId(urls[slide]);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={() => onOpen(clickIndexes[slide])}
+        className="relative block w-full aspect-video rounded-xl overflow-hidden border border-[#ece6dd] shadow-sm hover:shadow-md transition cursor-pointer bg-[#2d2416] p-0"
+      >
+        {ytId && (
+          <img src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`} alt={heading || 'Video'} className="absolute inset-0 w-full h-full object-cover" />
+        )}
+        <div className="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center">
+          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-[#e8540a] flex items-center justify-center shadow-lg">
+            <Play size={16} className="text-white ml-0.5" fill="currentColor" />
+          </div>
+        </div>
+      </button>
+
+      {isSlider && (
+        <>
+          {slide > 0 && (
+            <button
+              onClick={() => setSlide((s) => s - 1)}
+              aria-label="Previous video"
+              className="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center text-white transition border-none cursor-pointer"
+            >
+              <ChevronLeft size={18} />
+            </button>
+          )}
+          {slide < urls.length - 1 && (
+            <button
+              onClick={() => setSlide((s) => s + 1)}
+              aria-label="Next video"
+              className="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center text-white transition border-none cursor-pointer"
+            >
+              <ChevronRight size={18} />
+            </button>
+          )}
+          <div className="absolute bottom-2 left-0 right-0 flex items-center justify-center gap-1.5">
+            {urls.map((_, i) => (
+              <span key={i} className={`w-1.5 h-1.5 rounded-full transition ${i === slide ? 'bg-white' : 'bg-white/40'}`} />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // STUDENT TESTIMONIALS — same 2-column waterfall grid, downward-scrolling.
 // ─────────────────────────────────────────────────────────────────────────────
 function AutoSlideImageTestimonials({ imageTestimonials, onImageClick, isPaused }) {
@@ -1109,7 +1194,13 @@ export default function CourseLandingPage() {
   useEffect(() => {
     setLocalNewReviews([]);
     setShowFullInstructorBio(false);
-    setShowFullInstructorDescription(false);
+    // NEW CHANGE AC: this was resetting the Instructor description back to
+    // collapsed (false) every time courseData loaded — which is exactly why
+    // "default open" never actually showed up, no matter what the useState
+    // default above said. This effect fires right after the course data
+    // arrives, so it was winning every time. Reset to true (open) instead,
+    // matching the new default.
+    setShowFullInstructorDescription(true);
   }, [courseData?._id]);
 
   const sections = courseData?.sections || [];
@@ -1286,15 +1377,31 @@ export default function CourseLandingPage() {
   const instructorImages = (instructor.descriptionBlocks || [])
     .filter((b) => b.type === 'image' && b.imageUrl)
     .map((b) => ({ imageUrl: b.imageUrl, author: b.heading || '' }));
-  const instructorVideos = (instructor.descriptionBlocks || [])
-    .filter((b) => b.type === 'video' && b.videoUrl);
 
-  // The same blocks, in original order, each tagged with its click-through
-  // index into instructorImages/instructorVideos above (text blocks are left
-  // untagged — they render as plain paragraphs).
+  // NEW: a video block can now hold several links (added via "+ Add Another
+  // Video" on the Instructor Dashboard) instead of just one — getBlockVideoUrls
+  // reads either shape: the new `videoUrls` array, or the older single
+  // `videoUrl` string, so nothing breaks for a block saved before this change.
+  const instructorVideos = (instructor.descriptionBlocks || [])
+    .filter((b) => b.type === 'video')
+    .flatMap((b) => getBlockVideoUrls(b).map((url) => ({ videoUrl: url, author: b.heading || '' })));
+
+  // The same blocks, in original order, each tagged with what it needs to
+  // render: image blocks get a single click-through index into
+  // instructorImages; video blocks get an ARRAY of click-through indexes
+  // (_clickIndexes), one per video link in that block, into instructorVideos
+  // — so InstructorVideoBlock below can render a slider when a block has
+  // more than one link and a single card when it has exactly one, while
+  // every individual video still opens the full-screen modal at the right
+  // spot. Text blocks are left untagged — they render as plain paragraphs.
   let __instrVidIdx = 0, __instrImgIdx = 0;
   const instructorFlowBlocks = (instructor.descriptionBlocks || []).map((b, idx) => {
-    if (b.type === 'video' && b.videoUrl) return { ...b, _key: idx, _kind: 'video', _clickIndex: __instrVidIdx++ };
+    if (b.type === 'video') {
+      const urls = getBlockVideoUrls(b);
+      if (!urls.length) return { ...b, _key: idx, _kind: 'text' };
+      const clickIndexes = urls.map(() => __instrVidIdx++);
+      return { ...b, _key: idx, _kind: 'video', _urls: urls, _clickIndexes: clickIndexes };
+    }
     if (b.type === 'image' && b.imageUrl) return { ...b, _key: idx, _kind: 'image', _clickIndex: __instrImgIdx++ };
     return { ...b, _key: idx, _kind: 'text' };
   });
@@ -1945,8 +2052,21 @@ export default function CourseLandingPage() {
                         )}
                       </div>
 
-                      {/* RIGHT: stat cards — 2x2 grid, Udemy-style */}
-                      <div className="grid grid-cols-2 gap-2.5 sm:gap-3.5 flex-1 min-w-0 pt-1 sm:pt-4 md:pt-6">
+                      {/* RIGHT: stat cards — 2x2 grid, Udemy-style.
+                          NEW CHANGE AD: on Android the icon+gap were eating so much of each
+                          card's already-narrow width that even single words like "Total" or
+                          "Rating" didn't fit — and break-words was then splitting mid-word
+                          ("TO"/"TAL", "RA"/"TING") to force them in, since overflow-wrap:
+                          break-word breaks inside a word once it has no other choice. iPhone
+                          happened to render the same layout just wide enough to never hit that
+                          case, which is why it looked fine there. Real fix: (1) never let text
+                          fracture mid-word — swap break-words for plain wrapping, which only
+                          breaks at the space in "Total Rating" and otherwise lets a card clip
+                          via its own overflow-hidden instead of shredding letters; (2) stack the
+                          icon above the value/label at the smallest size instead of beside it,
+                          so the label gets the card's full width to wrap into on narrow phones,
+                          then return to the icon-beside-text row from sm: up. */}
+                      <div className="grid grid-cols-2 gap-2 sm:gap-3.5 flex-1 min-w-0 pt-1 sm:pt-4 md:pt-6">
                         {[
                           { label: 'Total Rating', value: instructor.rating > 0 ? instructor.rating.toFixed(1) : '0', Icon: Star },
                           { label: 'Reviews', value: formatNumber(instructor.reviews), Icon: MessageCircle },
@@ -1954,21 +2074,15 @@ export default function CourseLandingPage() {
                           { label: 'Courses', value: formatNumber(instructor.courses), Icon: BookOpen },
                         ].map((stat) => {
                           const StatIcon = stat.Icon;
-                          // Only "Total Rating" (two words) is allowed to wrap — it's the
-                          // one that was overflowing the card. The single-word labels
-                          // (Reviews/Students/Courses) go back to whitespace-nowrap, since
-                          // that's how they already fit correctly before — break-words was
-                          // fracturing "Students" into "Student"/"s" on two lines when it
-                          // didn't need to.
-                          const wrapLabel = stat.label.includes(' ');
                           return (
-                            <div key={stat.label} className="flex items-center gap-2 sm:gap-3 bg-white rounded-xl border border-[#ece6dd] px-2.5 sm:px-4 py-2 sm:py-3 overflow-hidden">
-                              <div className="w-7 h-7 sm:w-9 sm:h-9 rounded-full bg-[#fdf0e4] flex items-center justify-center flex-shrink-0">
-                                <StatIcon size={14} className="text-[#e8540a]" fill={StatIcon === Star ? 'currentColor' : 'none'} />
+                            <div key={stat.label} className="flex flex-col sm:flex-row items-center sm:items-center gap-1 sm:gap-3 bg-white rounded-xl border border-[#ece6dd] px-1.5 sm:px-4 py-2 sm:py-3 overflow-hidden text-center sm:text-left">
+                              <div className="w-6 h-6 sm:w-9 sm:h-9 rounded-full bg-[#fdf0e4] flex items-center justify-center flex-shrink-0">
+                                <StatIcon size={12} className="text-[#e8540a] sm:hidden" fill={StatIcon === Star ? 'currentColor' : 'none'} />
+                                <StatIcon size={14} className="text-[#e8540a] hidden sm:block" fill={StatIcon === Star ? 'currentColor' : 'none'} />
                               </div>
-                              <div className="min-w-0 flex-1">
+                              <div className="min-w-0 flex-1 w-full">
                                 <p className="text-sm sm:text-base md:text-lg font-bold text-[#1a1208] leading-tight">{stat.value}</p>
-                                <p className={`text-[10px] sm:text-xs text-[#9e9789] leading-tight ${wrapLabel ? 'break-words' : 'whitespace-nowrap'}`}>{stat.label}</p>
+                                <p className="text-[10px] sm:text-xs text-[#9e9789] leading-tight whitespace-normal break-normal">{stat.label}</p>
                               </div>
                             </div>
                           );
@@ -2002,32 +2116,21 @@ export default function CourseLandingPage() {
                                 }
 
                                 const isVideo = block._kind === 'video';
-                                const ytId = isVideo ? getYouTubeId(block.videoUrl) : null;
-                                const onMediaClick = () => {
-                                  if (isVideo) { setInstructorVideoStartIndex(block._clickIndex); setInstructorVideoOpen(true); }
-                                  else { setInstructorImageStartIndex(block._clickIndex); setInstructorImageOpen(true); }
-                                };
+                                const onImageClick = () => { setInstructorImageStartIndex(block._clickIndex); setInstructorImageOpen(true); };
 
                                 return (
                                   <div key={block._key}>
                                     {block.heading && <p className="text-sm md:text-base font-bold text-[#1a1208] mb-2">{block.heading}</p>}
                                     {isVideo ? (
-                                      <button
-                                        onClick={onMediaClick}
-                                        className="relative block w-full aspect-video rounded-xl overflow-hidden border border-[#ece6dd] shadow-sm hover:shadow-md transition cursor-pointer bg-[#2d2416] p-0"
-                                      >
-                                        {ytId && (
-                                          <img src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`} alt={block.heading || 'Video'} className="absolute inset-0 w-full h-full object-cover" />
-                                        )}
-                                        <div className="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center">
-                                          <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-full bg-[#e8540a] flex items-center justify-center shadow-lg">
-                                            <Play size={16} className="text-white ml-0.5" fill="currentColor" />
-                                          </div>
-                                        </div>
-                                      </button>
+                                      <InstructorVideoBlock
+                                        urls={block._urls}
+                                        clickIndexes={block._clickIndexes}
+                                        heading={block.heading}
+                                        onOpen={(clickIndex) => { setInstructorVideoStartIndex(clickIndex); setInstructorVideoOpen(true); }}
+                                      />
                                     ) : (
                                       <button
-                                        onClick={onMediaClick}
+                                        onClick={onImageClick}
                                         className="block w-full rounded-xl overflow-hidden border border-[#ece6dd] shadow-sm hover:shadow-md transition cursor-pointer bg-white p-0"
                                       >
                                         <img src={block.imageUrl} alt={block.heading || 'Photo'} className="w-full max-h-80 object-cover" />

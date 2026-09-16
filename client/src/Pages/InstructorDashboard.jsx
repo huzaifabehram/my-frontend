@@ -22,6 +22,11 @@
 //          refresh depends on the backend User schema + update route
 //          actually accepting/returning these fields — see the comment
 //          above ProfilePage's handleSave for what to check server-side.
+// UPDATED: A single video block's "+ Add Another Video" button lets it hold
+//          more than one video link under the same heading/description —
+//          Shopify.jsx renders those as a slider. The top-level "🎬 Add
+//          Video" button still always starts a brand new, separate block.
+//          Video link previews in this editor are also a bit larger now.
 // All dummy data is replaced with real API calls via useInstructorCourses hook.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -1679,7 +1684,7 @@ function ProfilePage({ toast }) {
   //    plus a separate media gallery. A block is either:
   //      { type: 'text',  text }
   //      { type: 'image', heading, description, imageUrl }
-  //      { type: 'video', heading, description, videoUrl }
+  //      { type: 'video', heading, description, videoUrls: [url, ...] }
   //    Add text / picture / video blocks with the buttons below, then drag
   //    the ☰ handle to put a photo or video after whichever paragraph you
   //    want — the saved order is exactly what renders on the course landing
@@ -1689,9 +1694,23 @@ function ProfilePage({ toast }) {
   //    SAVED AS: instructorDescriptionBlocks (see NOTE at handleSave below —
   //    the backend User model needs this field added, or it will keep being
   //    silently dropped on save). ─────────────────────────────────────────
+  // NEW: video blocks now hold `videoUrls` (an array) instead of a single
+  // `videoUrl` string, so one block can carry more than one video link — see
+  // "+ Add Another Video" below. Any block saved before this change (or
+  // migrated from the old instructorMedia shape) only has the singular
+  // `videoUrl`; normalizeVideoBlock() upgrades it to `videoUrls: [videoUrl]`
+  // on load so every video block always has the array form to work with,
+  // with exactly one video link if that's all it ever had.
+  function normalizeVideoBlock(b) {
+    if (b.type !== 'video') return b;
+    const videoUrls = Array.isArray(b.videoUrls) && b.videoUrls.length ? b.videoUrls : [b.videoUrl || ''];
+    const { videoUrl, ...rest } = b;
+    return { ...rest, videoUrls };
+  }
+
   function blocksFromUser(u) {
     if (Array.isArray(u?.instructorDescriptionBlocks) && u.instructorDescriptionBlocks.length) {
-      return u.instructorDescriptionBlocks.map(b => ({ id: uid(), ...b }));
+      return u.instructorDescriptionBlocks.map(b => normalizeVideoBlock({ id: uid(), ...b }));
     }
     const migrated = [];
     if (u?.instructorDescription) migrated.push({ id: uid(), type: 'text', text: u.instructorDescription });
@@ -1701,8 +1720,7 @@ function ProfilePage({ toast }) {
         type: m.type === 'video' ? 'video' : 'image',
         heading: m.heading || '',
         description: m.description || '',
-        videoUrl: m.videoUrl || '',
-        imageUrl: m.imageUrl || '',
+        ...(m.type === 'video' ? { videoUrls: [m.videoUrl || ''] } : { imageUrl: m.imageUrl || '' }),
       }));
     }
     return migrated;
@@ -1738,9 +1756,34 @@ function ProfilePage({ toast }) {
 
   // ── Block handlers ───────────────────────────────────────────────────────
   const addTextBlock  = () => setBlocks(p => [...p, { id: uid(), type: 'text', text: '' }]);
-  const addMediaBlock = (type) => setBlocks(p => [...p, { id: uid(), type, heading: '', description: '', videoUrl: '', imageUrl: '', imagePreview: '' }]);
+  const addMediaBlock = (type) => setBlocks(p => [...p, {
+    id: uid(), type, heading: '', description: '',
+    ...(type === 'video' ? { videoUrls: [''] } : { imageUrl: '', imagePreview: '' }),
+  }]);
   const updateBlock   = (id, field, val) => setBlocks(p => p.map(b => b.id === id ? { ...b, [field]: val } : b));
   const deleteBlock   = (id) => { setBlocks(p => p.filter(b => b.id !== id)); toast("Removed", "success"); };
+
+  // ── Multi-video helpers — one video BLOCK can hold several video LINKS.
+  //    On the course page this renders as a slider when there's more than
+  //    one link, and as a plain single video when there's just one — see
+  //    Shopify.jsx. Clicking "+ Add Video" at the top always starts a brand
+  //    new, separate block (unaffected by these — that one just gets its
+  //    own videoUrls: [''] from addMediaBlock above).
+  const addBlockVideoUrl = (blockId) =>
+    setBlocks(p => p.map(b => b.id === blockId ? { ...b, videoUrls: [...(b.videoUrls || ['']), ''] } : b));
+  const updateBlockVideoUrl = (blockId, index, val) =>
+    setBlocks(p => p.map(b => {
+      if (b.id !== blockId) return b;
+      const urls = [...(b.videoUrls || [''])];
+      urls[index] = val;
+      return { ...b, videoUrls: urls };
+    }));
+  const removeBlockVideoUrl = (blockId, index) =>
+    setBlocks(p => p.map(b => {
+      if (b.id !== blockId) return b;
+      const urls = (b.videoUrls || ['']).filter((_, i) => i !== index);
+      return { ...b, videoUrls: urls.length ? urls : [''] }; // always leave one slot to type into
+    }));
 
   const handleBlockImageFile = async (e, id) => {
     const file = e.target.files[0];
@@ -2096,15 +2139,38 @@ function ProfilePage({ toast }) {
                       </div>
                       {block.type === 'video' ? (
                         <div>
-                          <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">Video URL</label>
-                          <input value={block.videoUrl || ""} onChange={e => updateBlock(block.id, "videoUrl", e.target.value)}
-                            placeholder="Paste a YouTube or Bunny.net link"
-                            className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"/>
-                          <p className="text-xs text-gray-400 mt-1">YouTube · Bunny.net (embed supported)</p>
-                          {block.videoUrl && (
-                            <div className="flex justify-end mt-2">
-                              <CompactVideoPreview url={block.videoUrl} width={160} height={90}/>
-                            </div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="text-xs sm:text-sm font-medium text-gray-700 block">
+                              Video URL{(block.videoUrls || ['']).length > 1 ? 's' : ''}
+                            </label>
+                            <button onClick={() => addBlockVideoUrl(block.id)}
+                              className="text-purple-600 hover:text-purple-800 text-xs font-semibold transition">
+                              + Add Another Video
+                            </button>
+                          </div>
+                          <div className="space-y-3">
+                            {(block.videoUrls && block.videoUrls.length ? block.videoUrls : ['']).map((url, idx) => (
+                              <div key={idx} className="flex items-start gap-2">
+                                <div className="flex-1">
+                                  <input value={url} onChange={e => updateBlockVideoUrl(block.id, idx, e.target.value)}
+                                    placeholder="Paste a YouTube or Bunny.net link"
+                                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"/>
+                                  {url && (
+                                    <div className="flex justify-end mt-2">
+                                      <CompactVideoPreview url={url} width={220} height={124}/>
+                                    </div>
+                                  )}
+                                </div>
+                                {(block.videoUrls || []).length > 1 && (
+                                  <button onClick={() => removeBlockVideoUrl(block.id, idx)} title="Remove this video"
+                                    className="text-red-400 hover:text-red-600 transition text-xs px-2 py-2.5 rounded hover:bg-red-50 flex-shrink-0 mt-0.5">✕</button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                          <p className="text-xs text-gray-400 mt-2">YouTube · Bunny.net (embed supported)</p>
+                          {(block.videoUrls || []).filter(Boolean).length > 1 && (
+                            <p className="text-[11px] text-purple-600 mt-1">These {(block.videoUrls || []).filter(Boolean).length} videos will show together as a slider under one heading on your course page.</p>
                           )}
                         </div>
                       ) : (
