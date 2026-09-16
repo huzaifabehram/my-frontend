@@ -836,27 +836,39 @@ function InstructorVideoBlock({ urls, clickIndexes, heading, onOpen }) {
     );
   }
 
+  // NEW CHANGE AJ: was a static grid-cols-2 (both videos small, side by side,
+  // no motion). Facebook-style slider instead — bigger cards in a horizontally
+  // scrollable, snap-to-card row. With exactly 2 videos both are still fully
+  // visible (each ~46% of the row width), just larger than before; with 3+
+  // videos, both/all are reachable by sliding the row rather than shrinking
+  // every card to fit.
   return (
-    <div className="grid grid-cols-2 gap-2 md:gap-3">
-      {urls.map((url, i) => {
-        const ytId = getYouTubeId(url);
-        return (
-          <button
-            key={i}
-            onClick={() => onOpen(clickIndexes[i])}
-            className="relative block w-full aspect-video rounded-xl overflow-hidden border border-[#ece6dd] shadow-sm hover:shadow-md transition cursor-pointer bg-[#2d2416] p-0"
-          >
-            {ytId && (
-              <img src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`} alt={heading || 'Video'} className="absolute inset-0 w-full h-full object-cover" />
-            )}
-            <div className="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center">
-              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#e8540a] flex items-center justify-center shadow-lg">
-                <Play size={14} className="text-white ml-0.5" fill="currentColor" />
+    <div className="relative -mx-1 px-1">
+      <div className="fb-video-slider flex gap-3 md:gap-4 overflow-x-auto snap-x snap-mandatory scroll-smooth pb-1">
+        {urls.map((url, i) => {
+          const ytId = getYouTubeId(url);
+          return (
+            <button
+              key={i}
+              onClick={() => onOpen(clickIndexes[i])}
+              className="relative flex-shrink-0 snap-center block w-[78%] sm:w-[60%] md:w-[47%] aspect-video rounded-xl overflow-hidden border border-[#ece6dd] shadow-sm hover:shadow-md transition cursor-pointer bg-[#2d2416] p-0"
+            >
+              {ytId && (
+                <img src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`} alt={heading || 'Video'} className="absolute inset-0 w-full h-full object-cover" />
+              )}
+              <div className="absolute inset-0 bg-black bg-opacity-20 flex items-center justify-center">
+                <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-full bg-[#e8540a] flex items-center justify-center shadow-lg">
+                  <Play size={20} className="text-white ml-0.5" fill="currentColor" />
+                </div>
               </div>
-            </div>
-          </button>
-        );
-      })}
+            </button>
+          );
+        })}
+      </div>
+      <style>{`
+        .fb-video-slider::-webkit-scrollbar { display: none; }
+        .fb-video-slider { scrollbar-width: none; -ms-overflow-style: none; }
+      `}</style>
     </div>
   );
 }
@@ -1485,7 +1497,13 @@ export default function CourseLandingPage() {
   const discountPct = courseData.originalPrice > courseData.price
     ? Math.round((1 - courseData.price / courseData.originalPrice) * 100)
     : null;
-  const priceLabel = `PKR ${(courseData.price * 280).toLocaleString()}`;
+  // NEW CHANGE AI: was multiplying by an approximate USD→PKR rate (×280),
+  // which showed a fake, inflated number that didn't match what the
+  // instructor actually entered. Course Price / Sale Price are now entered
+  // directly in PKR on the Instructor Dashboard, so this just displays the
+  // real stored value — discountPct above already compares the real
+  // price/originalPrice, so the % off was already correct either way.
+  const priceLabel = `PKR ${courseData.price.toLocaleString()}`;
 
   const hasRealReviews = textReviews.length > 0;
   const displayReviews = hasRealReviews ? textReviews : FALLBACK_REVIEWS;
@@ -1761,7 +1779,7 @@ export default function CourseLandingPage() {
               className="cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0 flex items-center"
               style={{ fontFamily: "'Playfair Display', serif" }}>
               {siteLogoUrl ? (
-                <img src={siteLogoUrl} alt="Logo" className="h-9 md:h-11 lg:h-12 w-auto object-contain" />
+                <img src={siteLogoUrl} alt="Logo" className="h-14 md:h-16 lg:h-20 w-auto object-contain" />
               ) : (
                 <span className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-[#1a1208]">
                   Ler<span className="text-[#e8540a]">ni</span>
@@ -2394,7 +2412,7 @@ export default function CourseLandingPage() {
               <button onClick={() => handleNavigate('/')}
                 className="cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0 block mb-4">
                 {siteLogoUrl ? (
-                  <img src={siteLogoUrl} alt="Logo" className="h-10 md:h-12 w-auto object-contain" />
+                  <img src={siteLogoUrl} alt="Logo" className="h-16 md:h-20 w-auto object-contain" />
                 ) : (
                   <span className="text-xl md:text-2xl font-extrabold text-white" style={{ fontFamily: "'Playfair Display', serif" }}>
                     Ler<span className="text-[#f9c97a]">ni</span>
@@ -2402,11 +2420,13 @@ export default function CourseLandingPage() {
                 )}
               </button>
               <div className="text-xs md:text-sm space-y-2 leading-relaxed">
-                <p>Motiviam Pvt Ltd Building Opposite Attock Petrol Pump Adjacent Baluchistan Marble Ghazikot Mansehra</p>
-                <p>
+                <p className="flex items-start gap-2"><span aria-hidden="true">📍</span><span>Motiviam Pvt Ltd Building Opposite Attock Petrol Pump Adjacent Baluchistan Marble Ghazikot Mansehra</span></p>
+                <p className="flex items-center gap-2">
+                  <span aria-hidden="true">📞</span>
                   <a href="tel:03446199711" className="hover:text-white transition">03446199711</a>
                 </p>
-                <p>
+                <p className="flex items-center gap-2">
+                  <span aria-hidden="true">✉️</span>
                   <a href="mailto:motiviampvtltd@gmail.com" className="hover:text-white transition">motiviampvtltd@gmail.com</a>
                 </p>
               </div>
@@ -2476,7 +2496,7 @@ export default function CourseLandingPage() {
             <button onClick={() => handleNavigate('/')}
               className="text-xl md:text-2xl font-extrabold text-white cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0"
               style={{ fontFamily: "'Playfair Display', serif" }}>
-              {siteLogoUrl ? <img src={siteLogoUrl} alt="Logo" className="h-8 md:h-9 w-auto object-contain" /> : <>Ler<span className="text-[#f9c97a]">ni</span></>}
+              {siteLogoUrl ? <img src={siteLogoUrl} alt="Logo" className="h-12 md:h-14 w-auto object-contain" /> : <>Ler<span className="text-[#f9c97a]">ni</span></>}
             </button>
             <p className="text-xs md:text-sm text-[#6b5e4e]">© {new Date().getFullYear()} Motiviam Pvt Ltd. All rights reserved.</p>
           </div>

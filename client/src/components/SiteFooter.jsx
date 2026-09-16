@@ -52,7 +52,7 @@ export default function SiteFooter() {
             <button onClick={() => handleNavigate('/')}
               className="cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0 block mb-4">
               {siteLogoUrl ? (
-                <img src={siteLogoUrl} alt="Logo" className="h-10 md:h-12 w-auto object-contain" />
+                <img src={siteLogoUrl} alt="Logo" className="h-16 md:h-20 w-auto object-contain" />
               ) : (
                 <span className="text-xl md:text-2xl font-extrabold text-white" style={{ fontFamily: "'Playfair Display', serif" }}>
                   Ler<span className="text-[#f9c97a]">ni</span>
@@ -60,9 +60,9 @@ export default function SiteFooter() {
               )}
             </button>
             <div className="text-xs md:text-sm space-y-2 leading-relaxed">
-              <p>Motiviam Pvt Ltd Building Opposite Attock Petrol Pump Adjacent Baluchistan Marble Ghazikot Mansehra</p>
-              <p><a href="tel:03446199711" className="hover:text-white transition">03446199711</a></p>
-              <p><a href="mailto:motiviampvtltd@gmail.com" className="hover:text-white transition">motiviampvtltd@gmail.com</a></p>
+              <p className="flex items-start gap-2"><span aria-hidden="true">📍</span><span>Motiviam Pvt Ltd Building Opposite Attock Petrol Pump Adjacent Baluchistan Marble Ghazikot Mansehra</span></p>
+              <p className="flex items-center gap-2"><span aria-hidden="true">📞</span><a href="tel:03446199711" className="hover:text-white transition">03446199711</a></p>
+              <p className="flex items-center gap-2"><span aria-hidden="true">✉️</span><a href="mailto:motiviampvtltd@gmail.com" className="hover:text-white transition">motiviampvtltd@gmail.com</a></p>
             </div>
           </div>
 
@@ -127,7 +127,7 @@ export default function SiteFooter() {
           <button onClick={() => handleNavigate('/')}
             className="text-xl md:text-2xl font-extrabold text-white cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0"
             style={{ fontFamily: "'Playfair Display', serif" }}>
-            {siteLogoUrl ? <img src={siteLogoUrl} alt="Logo" className="h-8 md:h-9 w-auto object-contain" /> : <>Ler<span className="text-[#f9c97a]">ni</span></>}
+            {siteLogoUrl ? <img src={siteLogoUrl} alt="Logo" className="h-12 md:h-14 w-auto object-contain" /> : <>Ler<span className="text-[#f9c97a]">ni</span></>}
           </button>
           <p className="text-xs md:text-sm text-[#6b5e4e]">© {new Date().getFullYear()} Motiviam Pvt Ltd. All rights reserved.</p>
         </div>

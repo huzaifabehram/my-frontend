@@ -703,7 +703,7 @@ function CoursesPage({ courses, loading, deleteCourse, togglePublish, toast }) {
                         <div className="w-8 sm:w-10 h-8 sm:h-10 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600 font-bold text-xs sm:text-sm flex-shrink-0">{c.title?.charAt(0)}</div>
                         <div className="min-w-0">
                           <p className="text-xs sm:text-sm font-semibold text-gray-800 truncate max-w-[120px] sm:max-w-[200px]">{c.title}</p>
-                          <p className="text-xs text-gray-400 hidden sm:block">{c.category} · ${c.price}</p>
+                          <p className="text-xs text-gray-400 hidden sm:block">{c.category} · PKR {c.price}</p>
                         </div>
                       </div>
                     </td>
@@ -1169,9 +1169,9 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
           <Input label="Course Title *" value={title} onChange={setTitle} placeholder="e.g. Complete React Bootcamp 2024" className="sm:col-span-2"/>
           <Select label="Category" value={category} onChange={setCategory} options={CATEGORIES}/>
           <Input label="Tags (comma-separated)" value={tags} onChange={setTags} placeholder="React, Node.js, MongoDB"/>
-          <Input label="Course Price (USD)" value={coursePrice} onChange={setCoursePrice} placeholder="89.99" type="number"/>
+          <Input label="Course Price (PKR)" value={coursePrice} onChange={setCoursePrice} placeholder="8999" type="number"/>
           <div>
-            <Input label="Sale Price (USD) — optional" value={salePrice} onChange={setSalePrice} placeholder="e.g. 49.99 — leave blank if not on sale" type="number"/>
+            <Input label="Sale Price (PKR) — optional" value={salePrice} onChange={setSalePrice} placeholder="e.g. 4999 — leave blank if not on sale" type="number"/>
             {(() => {
               const cp = parseFloat(coursePrice) || 0;
               const sp = parseFloat(salePrice) || 0;
@@ -1549,7 +1549,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-800 truncate">{c.title}</p>
-                  <p className="text-xs text-gray-500">{c.category} · ${c.price}</p>
+                  <p className="text-xs text-gray-500">{c.category} · PKR {c.price}</p>
                 </div>
                 <span className="text-xs bg-emerald-100 text-emerald-700 font-semibold px-2 py-0.5 rounded-full flex-shrink-0">Published</span>
                 <span className="text-xs text-gray-400 flex-shrink-0">#{idx + 1}</span>
@@ -1568,7 +1568,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                 className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white">
                 <option value="">— Choose a published course —</option>
                 {publishedCourses.filter(c => !alsoBoughtIds.includes(c._id)).map(c => (
-                  <option key={c._id} value={c._id}>{c.title} (${c.price})</option>
+                  <option key={c._id} value={c._id}>{c.title} (PKR {c.price})</option>
                 ))}
               </select>
             </div>
