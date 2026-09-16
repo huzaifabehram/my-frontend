@@ -28,6 +28,7 @@ import Portals                    from "./Pages/Portals";
 import InstructorDashboard        from "./Pages/InstructorDashboard";
 import SuperAdminsDashboard        from "./Pages/SuperAdminsDashboard";
 import MetaPixelRouteTracker      from "./components/MetaPixelRouteTracker";
+import ScrollToTop                from "./components/ScrollToTop";
 
 // ─── Error boundary: shows a readable message instead of a blank screen ───────
 class ErrorBoundary extends React.Component {
@@ -127,6 +128,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <BrowserRouter>
+        <ScrollToTop />
         <MetaPixelRouteTracker />
         <AuthProvider>
           <CoursesProvider>

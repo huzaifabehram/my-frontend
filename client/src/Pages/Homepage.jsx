@@ -1,201 +1,259 @@
-import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { getAllCourses } from '../services/api';
-import CourseCard from '../components/CourseCard';
-import Loader from '../components/Loader';
+// src/Pages/HomePage.jsx
+// ─── Home Page ──────────────────────────────────────────────────────────────
+// Follows the same branding as the course landing page (Shopify.jsx): cream
+// background, dark hero, burnt-orange accent, Playfair Display + DM Sans.
+// Shows: hero, courses grid (live from CoursesContext), and a services
+// showcase that links through to ServicesPage.jsx.
+//
+// The header below includes a "Services" nav link. The same link needs
+// adding to Shopify.jsx's header so it's reachable from the course page too
+// — see SHOPIFY_NAV_PATCH.md for the exact snippet (that file is huge, so
+// I didn't regenerate the whole thing for a one-line nav addition).
+// ─────────────────────────────────────────────────────────────────────────────
+import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Menu, X, Search, Star, ArrowRight, Megaphone, ShoppingBag, Target, TrendingUp } from 'lucide-react';
+import { useCourses } from '../context/CoursesContext';
+import { useAuth } from '../context/AuthContext';
 
-const CATEGORIES = ['Development', 'Design', 'Business', 'Marketing', 'Data Science', 'Photography'];
+function formatNumber(num) {
+  if (!num) return '0';
+  if (num >= 1_000_000) return (num / 1_000_000).toFixed(1) + 'M';
+  if (num >= 1_000) return (num / 1_000).toFixed(1) + 'K';
+  return String(num);
+}
 
-const StatItem = ({ value, label }) => (
-  <div className="text-center">
-    <p className="text-3xl md:text-4xl font-extrabold font-heading text-white">{value}</p>
-    <p className="text-gray-400 text-sm mt-1">{label}</p>
-  </div>
-);
+// EDIT ME: the two placeholder entries are marked below — swap in your real
+// third/fourth service (or remove them) once you confirm what they are.
+const SERVICES = [
+  {
+    icon: Megaphone,
+    title: 'Digital Marketing',
+    description: 'Facebook, Instagram & Google Ads campaigns built and managed to actually convert — not just get clicks.',
+  },
+  {
+    icon: ShoppingBag,
+    title: 'E-Commerce Store Setup',
+    description: 'Shopify store setup, product listings, and checkout optimization for brands ready to sell online.',
+  },
+  {
+    icon: Target,
+    title: 'Brand Strategy & Positioning',
+    description: 'Positioning, messaging, and a content direction that makes your brand memorable in a crowded market.',
+    placeholder: true,
+  },
+  {
+    icon: TrendingUp,
+    title: 'Paid Ads Management',
+    description: 'Full-funnel ad management across platforms, with reporting that shows exactly what your spend is doing.',
+    placeholder: true,
+  },
+];
 
-const Home = () => {
-  const [featuredCourses, setFeaturedCourses] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const fetchCourses = async () => {
-      try {
-        const { data } = await getAllCourses();
-        setFeaturedCourses(data.slice(0, 8));
-      } catch (error) {
-        console.error(error);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchCourses();
-  }, []);
-
-  const handleSearch = (e) => {
-    e.preventDefault();
-    if (searchQuery.trim()) navigate(`/courses?search=${searchQuery}`);
-  };
-
+function CourseCard({ course, onClick }) {
   return (
-    <div className="page-enter">
-      {/* ── Hero Section ───────────────────────────────────── */}
-      <section className="relative overflow-hidden bg-dark-900">
-        {/* Background gradient */}
-        <div className="absolute inset-0 bg-gradient-to-br from-brand-600/10 via-transparent to-purple-900/10 pointer-events-none" />
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-brand-600/5 rounded-full blur-3xl pointer-events-none" />
-
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-24 md:py-32">
-          <div className="max-w-3xl">
-            <div className="inline-flex items-center gap-2 bg-brand-600/10 border border-brand-600/30 rounded-full px-4 py-1.5 mb-6">
-              <span className="w-2 h-2 rounded-full bg-brand-500 animate-pulse" />
-              <span className="text-brand-400 text-sm font-medium">Learn from the best instructors</span>
-            </div>
-
-            <h1 className="text-4xl md:text-6xl font-extrabold font-heading text-white leading-tight mb-6">
-              Unlock Your
-              <span className="text-gradient block">Full Potential</span>
-              with EduFlow
-            </h1>
-
-            <p className="text-gray-400 text-lg md:text-xl leading-relaxed mb-10 max-w-2xl">
-              Access thousands of expert-led courses in development, design, business and more. Learn at your own pace, anywhere, anytime.
-            </p>
-
-            {/* Search Bar */}
-            <form onSubmit={handleSearch} className="flex flex-col sm:flex-row gap-3 mb-8">
-              <div className="relative flex-1">
-                <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-                <input
-                  type="text"
-                  placeholder="What do you want to learn today?"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full bg-dark-700/80 border border-gray-700 text-gray-100 rounded-xl pl-12 pr-4 py-4 text-base focus:outline-none focus:border-brand-500 placeholder-gray-500 transition-all"
-                />
-              </div>
-              <button type="submit" className="btn-primary px-8 py-4 text-base rounded-xl whitespace-nowrap">
-                Search Courses
-              </button>
-            </form>
-
-            <div className="flex flex-wrap gap-2">
-              <span className="text-gray-500 text-sm self-center">Popular:</span>
-              {['React', 'Python', 'UI/UX', 'Node.js', 'Machine Learning'].map((tag) => (
-                <button
-                  key={tag}
-                  onClick={() => navigate(`/courses?search=${tag}`)}
-                  className="text-xs px-3 py-1.5 rounded-full bg-dark-700 border border-gray-700 text-gray-300 hover:border-brand-500 hover:text-brand-400 transition-all"
-                >
-                  {tag}
-                </button>
+    <div onClick={onClick} className="bg-white border border-[#ece6dd] rounded-2xl overflow-hidden hover:shadow-lg transition cursor-pointer group">
+      <div className="h-36 md:h-44 bg-[#f0ebe3] flex items-center justify-center relative overflow-hidden">
+        {course.thumbnail ? (
+          <img src={course.thumbnail} alt={course.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+        ) : (
+          <span className="text-5xl md:text-6xl">{course.emoji || '📚'}</span>
+        )}
+        {course.bestseller && (
+          <span className="absolute top-3 left-3 bg-[#f9c97a] text-[#7a4a00] font-bold px-2.5 py-1 rounded text-xs">Bestseller</span>
+        )}
+      </div>
+      <div className="p-4">
+        <h3 className="font-bold text-[#1a1208] text-sm md:text-base mb-2 line-clamp-2 group-hover:text-[#e8540a] transition">{course.title}</h3>
+        <p className="text-xs md:text-sm text-[#9e9789] mb-2">{course.instructor || 'Instructor'}</p>
+        {course.rating > 0 && (
+          <div className="flex items-center gap-1 mb-2">
+            <span className="font-bold text-sm text-[#1a1208]">{course.rating}</span>
+            <div className="flex gap-0.5">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <Star key={i} size={12} className="text-[#f9c97a]" fill={i < Math.round(course.rating) ? 'currentColor' : 'none'} />
               ))}
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ── Stats ──────────────────────────────────────────── */}
-      <section className="border-y border-gray-800 bg-dark-800/50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
-            <StatItem value="50K+" label="Active Students" />
-            <StatItem value="1,200+" label="Expert Courses" />
-            <StatItem value="300+" label="Top Instructors" />
-            <StatItem value="4.8★" label="Average Rating" />
-          </div>
-        </div>
-      </section>
-
-      {/* ── Categories ─────────────────────────────────────── */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h2 className="text-2xl md:text-3xl font-extrabold font-heading text-white">Browse Categories</h2>
-            <p className="text-gray-400 mt-1">Find the right topic for you</p>
-          </div>
-          <Link to="/courses" className="text-brand-500 hover:text-brand-400 text-sm font-medium transition-colors">
-            View all →
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {CATEGORIES.map((cat, i) => {
-            const icons = ['💻', '🎨', '📊', '📣', '🧠', '📷'];
-            return (
-              <Link
-                key={cat}
-                to={`/courses?category=${cat}`}
-                className="flex flex-col items-center gap-2 p-4 bg-dark-800 border border-gray-800 rounded-xl hover:border-brand-600/50 hover:bg-dark-700 transition-all group text-center"
-              >
-                <span className="text-2xl">{icons[i]}</span>
-                <span className="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">
-                  {cat}
-                </span>
-              </Link>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* ── Featured Courses ────────────────────────────────── */}
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">
-        <div className="flex items-center justify-between mb-8">
-          <div>
-            <h2 className="text-2xl md:text-3xl font-extrabold font-heading text-white">Featured Courses</h2>
-            <p className="text-gray-400 mt-1">Hand-picked by our team</p>
-          </div>
-          <Link to="/courses" className="text-brand-500 hover:text-brand-400 text-sm font-medium transition-colors">
-            See all courses →
-          </Link>
-        </div>
-
-        {loading ? (
-          <div className="flex justify-center py-20">
-            <Loader size="lg" text="Loading courses..." />
-          </div>
-        ) : featuredCourses.length === 0 ? (
-          <div className="text-center py-20 text-gray-500">
-            <svg className="w-16 h-16 mx-auto mb-4 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-            </svg>
-            <p className="text-lg">No courses yet. Be the first to create one!</p>
-            <Link to="/register" className="btn-primary mt-4 inline-block">Get Started</Link>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-            {featuredCourses.map((course) => (
-              <CourseCard key={course._id} course={course} />
-            ))}
+            <span className="text-xs text-[#9e9789]">({formatNumber(course.reviews)})</span>
           </div>
         )}
-      </section>
-
-      {/* ── CTA Banner ──────────────────────────────────────── */}
-      <section className="bg-gradient-to-r from-brand-700 to-brand-600">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
-          <h2 className="text-3xl md:text-4xl font-extrabold font-heading text-white mb-4">
-            Ready to start teaching?
-          </h2>
-          <p className="text-red-100 text-lg mb-8 max-w-xl mx-auto">
-            Join thousands of instructors sharing their knowledge and earning on EduFlow.
-          </p>
-          <Link
-            to="/register?role=instructor"
-            className="inline-flex items-center gap-2 bg-white text-brand-600 hover:bg-red-50 font-bold py-3 px-8 rounded-xl transition-all shadow-lg"
-          >
-            Become an Instructor
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
-            </svg>
-          </Link>
-        </div>
-      </section>
+        <p className="text-base md:text-lg font-bold text-[#1a1208]" style={{ fontFamily: "'Playfair Display', serif" }}>PKR {course.price}</p>
+      </div>
     </div>
   );
-};
+}
 
-export default Home;
+function ServiceCard({ service, onClick }) {
+  const Icon = service.icon;
+  return (
+    <div onClick={onClick} className="bg-white border border-[#ece6dd] rounded-2xl p-6 hover:shadow-lg hover:border-[#ddd5c4] transition cursor-pointer group relative">
+      {service.placeholder && (
+        <span className="absolute top-3 right-3 text-[9px] font-bold uppercase tracking-wide bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">Placeholder</span>
+      )}
+      <div className="w-12 h-12 rounded-xl bg-[#fdf0e4] flex items-center justify-center mb-4 group-hover:bg-[#e8540a] transition-colors">
+        <Icon size={22} className="text-[#e8540a] group-hover:text-white transition-colors" />
+      </div>
+      <h3 className="font-bold text-[#1a1208] text-base md:text-lg mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>{service.title}</h3>
+      <p className="text-sm text-[#6b5e4e] leading-relaxed mb-3">{service.description}</p>
+      <span className="inline-flex items-center gap-1 text-sm font-semibold text-[#e8540a] group-hover:gap-2 transition-all">
+        Learn more <ArrowRight size={14} />
+      </span>
+    </div>
+  );
+}
+
+export default function HomePage() {
+  const navigate = useNavigate();
+  const { courses } = useCourses();
+  const { user } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const featuredCourses = useMemo(
+    () => courses.filter((c) => c.status === 'published').slice(0, 8),
+    [courses]
+  );
+
+  const handleNavigate = (path) => { setMobileMenuOpen(false); navigate(path); };
+
+  return (
+    <div className="min-h-screen bg-[#FDFAF6] overflow-x-hidden w-full" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+
+      {/* HEADER */}
+      <header className="sticky top-0 z-40 bg-white shadow-sm w-full border-b border-[#ece6dd]">
+        <div className="max-w-7xl mx-auto px-4 lg:px-6 py-3 md:py-4 flex items-center justify-between">
+          <button className="lg:hidden p-2 -ml-2 bg-transparent border-none cursor-pointer text-[#1a1208]" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Toggle navigation menu">
+            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
+          </button>
+          <div className="absolute left-1/2 transform -translate-x-1/2 lg:relative lg:left-auto lg:transform-none">
+            <button onClick={() => handleNavigate('/')} className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-[#1a1208] cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0" style={{ fontFamily: "'Playfair Display', serif" }}>
+              Ler<span className="text-[#e8540a]">ni</span>
+            </button>
+          </div>
+          <nav className="hidden lg:flex items-center gap-8 flex-1 ml-12">
+            <button onClick={() => handleNavigate('/courses')} className="text-base text-[#3d3020] hover:text-[#e8540a] transition bg-transparent border-none cursor-pointer p-0 font-medium">Courses</button>
+            <button onClick={() => handleNavigate('/services')} className="text-base text-[#3d3020] hover:text-[#e8540a] transition bg-transparent border-none cursor-pointer p-0 font-medium">Services</button>
+            <button onClick={() => handleNavigate('/instructor')} className="text-base text-[#3d3020] hover:text-[#e8540a] transition bg-transparent border-none cursor-pointer p-0 font-medium">Instructor</button>
+          </nav>
+          <div className="flex items-center gap-2 md:gap-3">
+            <Search className="hidden lg:block text-[#9e9789] cursor-pointer hover:text-[#1a1208] transition" size={22} />
+            {!user && (
+              <button onClick={() => handleNavigate('/auth/login')} className="px-4 md:px-6 py-2 md:py-2.5 bg-[#e8540a] text-white rounded-lg hover:bg-[#c94708] transition font-semibold border-none cursor-pointer text-sm md:text-base shadow-sm">Log In</button>
+            )}
+          </div>
+        </div>
+        {mobileMenuOpen && (
+          <>
+            <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setMobileMenuOpen(false)} />
+            <div className="fixed top-0 left-0 h-full w-64 bg-[#1a1208] z-50 lg:hidden shadow-2xl">
+              <div className="p-6 space-y-4">
+                <div className="flex justify-between items-center mb-6">
+                  <span className="text-xl font-bold text-white" style={{ fontFamily: "'Playfair Display', serif" }}>Menu</span>
+                  <button onClick={() => setMobileMenuOpen(false)} className="p-2 hover:bg-white/10 rounded-lg transition bg-transparent border-none cursor-pointer text-white"><X size={24} /></button>
+                </div>
+                <button onClick={() => handleNavigate('/courses')} className="block w-full text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base">Courses</button>
+                <button onClick={() => handleNavigate('/services')} className="block w-full text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base">Services</button>
+                <button onClick={() => handleNavigate('/instructor')} className="block w-full text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base">Instructor</button>
+              </div>
+            </div>
+          </>
+        )}
+      </header>
+
+      {/* HERO */}
+      <section className="w-full bg-[#1a1208] text-white py-14 md:py-20 lg:py-28 overflow-hidden">
+        <div className="max-w-5xl mx-auto px-4 lg:px-6 text-center">
+          <p className="text-[#f9c97a] font-semibold text-sm md:text-base mb-4">Digital Marketing &amp; E-Commerce, taught by practitioners</p>
+          <h1 className="text-3xl md:text-5xl lg:text-6xl font-bold text-white mb-5 leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>
+            Learn what actually grows a business online
+          </h1>
+          <p className="text-lg md:text-xl text-[#c8bfaf] mb-8 max-w-2xl mx-auto leading-relaxed">
+            Courses and hands-on services in digital marketing and e-commerce — trusted by 60,000+ students.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-3 justify-center">
+            <button onClick={() => handleNavigate('/courses')} className="px-7 py-3.5 bg-[#e8540a] hover:bg-[#c94708] text-white rounded-xl font-bold transition border-none cursor-pointer text-base shadow-lg">
+              Browse Courses
+            </button>
+            <button onClick={() => handleNavigate('/services')} className="px-7 py-3.5 bg-white/10 hover:bg-white/20 text-white rounded-xl font-bold transition border border-white/20 cursor-pointer text-base backdrop-blur-sm">
+              Explore Services
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* COURSES */}
+      <section className="w-full bg-white py-12 md:py-16 lg:py-20">
+        <div className="max-w-7xl mx-auto px-4 lg:px-6">
+          <div className="flex items-end justify-between mb-8 flex-wrap gap-3">
+            <div>
+              <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#1a1208] mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>Our Courses</h2>
+              <p className="text-[#9e9789] text-sm md:text-base">Practical, project-based, taught in Urdu</p>
+            </div>
+            <button onClick={() => handleNavigate('/courses')} className="text-[#e8540a] hover:text-[#c94708] font-semibold text-sm md:text-base bg-transparent border-none cursor-pointer flex items-center gap-1">
+              View all <ArrowRight size={16} />
+            </button>
+          </div>
+          {featuredCourses.length === 0 ? (
+            <p className="text-[#9e9789] text-center py-12">Courses are on their way — check back soon.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+              {featuredCourses.map((c) => (
+                <CourseCard key={c._id} course={c} onClick={() => navigate(`/course/${c._id}`)} />
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* SERVICES */}
+      <section className="w-full bg-[#f8f4ed] py-12 md:py-16 lg:py-20 border-t border-[#ece6dd]">
+        <div className="max-w-7xl mx-auto px-4 lg:px-6">
+          <div className="flex items-end justify-between mb-8 flex-wrap gap-3">
+            <div>
+              <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#1a1208] mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>Our Services</h2>
+              <p className="text-[#9e9789] text-sm md:text-base">Done-for-you work, for brands who'd rather we handle it</p>
+            </div>
+            <button onClick={() => handleNavigate('/services')} className="text-[#e8540a] hover:text-[#c94708] font-semibold text-sm md:text-base bg-transparent border-none cursor-pointer flex items-center gap-1">
+              View all services <ArrowRight size={16} />
+            </button>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+            {SERVICES.map((s) => (
+              <ServiceCard key={s.title} service={s} onClick={() => handleNavigate('/services')} />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer className="bg-[#1a1208] text-[#9e8e7a] py-8 md:py-12 w-full border-t border-[#2d2416]">
+        <div className="max-w-7xl mx-auto px-4 lg:px-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 md:gap-8 mb-8 md:mb-12">
+            {[
+              { title: 'Lerni', links: ['About', 'Press', 'Contact', 'Careers'] },
+              { title: 'Community', links: ['Learners', 'Partners', 'Developers', 'Beta Testers'] },
+              { title: 'Teaching', links: ['Become Instructor', 'Teaching Center', 'Resources'] },
+              { title: 'Services', links: ['Digital Marketing', 'E-Commerce Setup', 'Brand Strategy', 'Paid Ads'] },
+              { title: 'Support', links: ['Help Center', 'Get the App', 'FAQ', 'Accessibility'] },
+              { title: 'Legal', links: ['Terms', 'Privacy Policy', 'Cookie Settings', 'Sitemap'] },
+            ].map((col) => (
+              <div key={col.title}>
+                <h3 className="font-bold text-[#f9c97a] mb-3 md:mb-4 text-xs md:text-sm uppercase tracking-wide">{col.title}</h3>
+                <ul className="space-y-1.5 md:space-y-2 text-xs md:text-sm">
+                  {col.links.map((link) => (
+                    <li key={link}><button onClick={() => handleNavigate(col.title === 'Services' ? '/services' : '/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-[#9e8e7a] p-0">{link}</button></li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-col md:flex-row justify-between items-center pt-6 md:pt-8 border-t border-[#2d2416]">
+            <button onClick={() => handleNavigate('/')} className="text-xl md:text-2xl font-extrabold text-white cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0 mb-4 md:mb-0" style={{ fontFamily: "'Playfair Display', serif" }}>
+              Ler<span className="text-[#f9c97a]">ni</span>
+            </button>
+            <p className="text-xs md:text-sm text-[#6b5e4e]">© 2024 Lerni, Inc. All rights reserved.</p>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+}

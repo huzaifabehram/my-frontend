@@ -1167,15 +1167,19 @@ export default function CourseLandingPage() {
   const [instructorVideoStartIndex, setInstructorVideoStartIndex] = useState(0);
 
   // ── FOOTER — site logo (Super Admin → Settings), FAQ accordion, newsletter ──
-  const [siteLogoUrl, setSiteLogoUrl] = useState('');
+  const [siteLogoUrl, setSiteLogoUrl] = useState('');       // header logo
+  const [footerLogoUrl, setFooterLogoUrl] = useState('');   // NEW CHANGE AK: separate footer logo
   const [openFooterTab, setOpenFooterTab] = useState(null); // 'about' | 'policies' | 'contact' | null
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterStatus, setNewsletterStatus] = useState('idle'); // idle | sending | sent | error
 
   useEffect(() => {
     api.get('/settings')
-      .then((res) => setSiteLogoUrl(res.data?.logoUrl || ''))
-      .catch(() => {}); // logo is optional — footer falls back to the text wordmark
+      .then((res) => {
+        setSiteLogoUrl(res.data?.logoUrl || '');
+        setFooterLogoUrl(res.data?.footerLogoUrl || '');
+      })
+      .catch(() => {}); // logo is optional — falls back to the text wordmark
   }, [api]);
 
   const handleNewsletterSubmit = (e) => {
@@ -2411,8 +2415,8 @@ export default function CourseLandingPage() {
             <div>
               <button onClick={() => handleNavigate('/')}
                 className="cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0 block mb-4">
-                {siteLogoUrl ? (
-                  <img src={siteLogoUrl} alt="Logo" className="h-16 md:h-20 w-auto object-contain" />
+                {footerLogoUrl ? (
+                  <img src={footerLogoUrl} alt="Logo" className="h-16 md:h-20 w-auto object-contain" />
                 ) : (
                   <span className="text-xl md:text-2xl font-extrabold text-white" style={{ fontFamily: "'Playfair Display', serif" }}>
                     Ler<span className="text-[#f9c97a]">ni</span>
@@ -2496,7 +2500,7 @@ export default function CourseLandingPage() {
             <button onClick={() => handleNavigate('/')}
               className="text-xl md:text-2xl font-extrabold text-white cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0"
               style={{ fontFamily: "'Playfair Display', serif" }}>
-              {siteLogoUrl ? <img src={siteLogoUrl} alt="Logo" className="h-12 md:h-14 w-auto object-contain" /> : <>Ler<span className="text-[#f9c97a]">ni</span></>}
+              {footerLogoUrl ? <img src={footerLogoUrl} alt="Logo" className="h-12 md:h-14 w-auto object-contain" /> : <>Ler<span className="text-[#f9c97a]">ni</span></>}
             </button>
             <p className="text-xs md:text-sm text-[#6b5e4e]">© {new Date().getFullYear()} Motiviam Pvt Ltd. All rights reserved.</p>
           </div>

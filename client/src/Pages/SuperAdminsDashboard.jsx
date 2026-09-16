@@ -534,20 +534,15 @@ function CoursesPage({ courses, loading }) {
 // PAGE: SETTINGS — site logo upload (Cloudinary)
 // ─────────────────────────────────────────────────────────────────────────────
 
-function SettingsPage({ toast }) {
+// NEW CHANGE AK: one small reusable upload box, used twice below — once for
+// the header logo, once for the footer logo. Each posts to the same
+// /admin/settings/logo endpoint with a different `target` so the backend
+// knows which of the two slots to update.
+function LogoUploadBox({ toast, target, label, description, initialUrl, onUploaded }) {
   const { API: api } = useAuth();
-  const [logoUrl, setLogoUrl] = useState("");
   const [preview, setPreview] = useState("");
-  const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const fileRef = React.useRef();
-
-  useEffect(() => {
-    api.get("/settings")
-      .then((res) => setLogoUrl(res.data?.logoUrl || ""))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [api]);
 
   const handleFile = async (e) => {
     const file = e.target.files[0];
@@ -559,19 +554,71 @@ function SettingsPage({ toast }) {
     try {
       const formData = new FormData();
       formData.append("image", file);
+      formData.append("target", target);
       const res = await api.post("/admin/settings/logo", formData);
-      const url = res.data?.logoUrl;
+      const url = target === "footer" ? res.data?.footerLogoUrl : res.data?.logoUrl;
       if (!url) { toast("Upload succeeded but no URL returned.", "error"); return; }
-      setLogoUrl(url);
-      toast("Logo updated — it'll show on course pages and the footer right away.", "success");
+      onUploaded(url);
+      toast(`${label} updated.`, "success");
     } catch (err) {
-      toast(err.response?.data?.message || "Could not upload logo.", "error");
+      toast(err.response?.data?.message || `Could not upload ${label.toLowerCase()}.`, "error");
     } finally {
       setUploading(false);
     }
   };
 
-  const current = preview || logoUrl;
+  const current = preview || initialUrl;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm space-y-4">
+      <h3 className="font-bold text-gray-800">{label}</h3>
+      <p className="text-xs sm:text-sm text-gray-500">{description}</p>
+      <div className="flex items-start gap-4">
+        <div className="w-28 h-28 flex-shrink-0 relative">
+          <div className="w-full h-full bg-gray-50 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-rose-400 transition cursor-pointer flex items-center justify-center"
+            onClick={() => fileRef.current?.click()}>
+            {current ? (
+              <img src={current} alt={`${label} preview`} className="w-full h-full object-contain p-2" />
+            ) : (
+              <div className="text-center px-2">
+                <span className="text-2xl block mb-1">🖼️</span>
+                <p className="text-[10px] text-gray-400">Click to upload</p>
+              </div>
+            )}
+            {uploading && (
+              <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
+                <span className="w-5 h-5 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+          </div>
+          <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+        </div>
+        <div className="flex-1 pt-1">
+          <Btn size="sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
+            {initialUrl ? `Replace ${label}` : `Upload ${label}`}
+          </Btn>
+          <p className="text-xs text-gray-400 mt-2">PNG, JPG, WebP or SVG. Square or wide logos both work — it's shown at a fixed height.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SettingsPage({ toast }) {
+  const { API: api } = useAuth();
+  const [logoUrl, setLogoUrl] = useState("");
+  const [footerLogoUrl, setFooterLogoUrl] = useState("");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get("/settings")
+      .then((res) => {
+        setLogoUrl(res.data?.logoUrl || "");
+        setFooterLogoUrl(res.data?.footerLogoUrl || "");
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [api]);
 
   return (
     <div className="space-y-4 sm:space-y-6 max-w-xl">
@@ -579,41 +626,28 @@ function SettingsPage({ toast }) {
         <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900">Settings</h2>
         <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Site-wide branding, stored in the same Cloudinary account as every other image.</p>
       </div>
-      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm space-y-4">
-        <h3 className="font-bold text-gray-800">Site Logo</h3>
-        <p className="text-xs sm:text-sm text-gray-500">Shown in the header and footer of every course landing page, and on the new footer pages (About, Privacy Policy, Return Policy, Contact Us).</p>
-        {loading ? (
-          <div className="text-sm text-gray-400">Loading…</div>
-        ) : (
-          <div className="flex items-start gap-4">
-            <div className="w-28 h-28 flex-shrink-0 relative">
-              <div className="w-full h-full bg-gray-50 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-rose-400 transition cursor-pointer flex items-center justify-center"
-                onClick={() => fileRef.current?.click()}>
-                {current ? (
-                  <img src={current} alt="Logo preview" className="w-full h-full object-contain p-2" />
-                ) : (
-                  <div className="text-center px-2">
-                    <span className="text-2xl block mb-1">🖼️</span>
-                    <p className="text-[10px] text-gray-400">Click to upload</p>
-                  </div>
-                )}
-                {uploading && (
-                  <div className="absolute inset-0 bg-white/70 flex items-center justify-center">
-                    <span className="w-5 h-5 border-2 border-rose-600 border-t-transparent rounded-full animate-spin" />
-                  </div>
-                )}
-              </div>
-              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
-            </div>
-            <div className="flex-1 pt-1">
-              <Btn size="sm" onClick={() => fileRef.current?.click()} disabled={uploading}>
-                {logoUrl ? "Replace Logo" : "Upload Logo"}
-              </Btn>
-              <p className="text-xs text-gray-400 mt-2">PNG, JPG, WebP or SVG. Square or wide logos both work — it's shown at a fixed height.</p>
-            </div>
-          </div>
-        )}
-      </div>
+      {loading ? (
+        <div className="text-sm text-gray-400">Loading…</div>
+      ) : (
+        <>
+          <LogoUploadBox
+            toast={toast}
+            target="header"
+            label="Header Logo"
+            description="Shown in the header (top nav) of every page — course pages, About, Privacy Policy, Return Policy, Contact Us."
+            initialUrl={logoUrl}
+            onUploaded={setLogoUrl}
+          />
+          <LogoUploadBox
+            toast={toast}
+            target="footer"
+            label="Footer Logo"
+            description="Shown in the footer only. Use a transparent-background version here if the header logo has a white background — it'll blend into the dark footer instead of showing as a white box."
+            initialUrl={footerLogoUrl}
+            onUploaded={setFooterLogoUrl}
+          />
+        </>
+      )}
     </div>
   );
 }

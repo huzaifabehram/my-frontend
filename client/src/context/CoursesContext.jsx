@@ -56,8 +56,23 @@ export function normalizeCourse(raw, index) {
   });
 
   const totalLectures = sections.reduce((a, s) => a + s.lectures, 0);
-  const rawPrice    = Number(source.price)         || 0;
-  const rawDiscount = Number(source.discountPrice) || rawPrice;
+  // NEW CHANGE AL: this used to assume an OLDER backend shape — `price` as
+  // the full/original price and `discountPrice` as the sale price — and
+  // flipped them into `{ price: discountPrice, originalPrice: price }`.
+  // The backend no longer sends `discountPrice` at all (it now sends the
+  // real charged amount directly as `price`, plus `originalPrice` as the
+  // reference/strikethrough price, only when a sale is active). Because
+  // `discountPrice` was always missing, `rawDiscount` silently fell back to
+  // `rawPrice` every time — which made `price` come out right by accident,
+  // but overwrote the real `originalPrice` from the backend with that same
+  // value on EVERY course, so `originalPrice` always equalled `price` and
+  // the course page could never detect a sale or show a % off. Reading the
+  // two fields directly, matching what the backend actually sends now, fixes
+  // both the price and the % off in one place.
+  const rawPrice = Number(source.price) || 0;
+  const rawOriginalPrice = source.originalPrice != null && Number(source.originalPrice) > 0
+    ? Number(source.originalPrice)
+    : null;
   const students    = Number(source.studentsEnrolled) || 0;
 
   const inst = source.instructor;
@@ -174,9 +189,9 @@ export function normalizeCourse(raw, index) {
     reviews:          reviewCount,
     studentsEnrolled: students,
     students,
-    price:            rawDiscount,
-    originalPrice:    rawPrice,
-    discountPrice:    rawDiscount,
+    price:            rawPrice,
+    originalPrice:    rawOriginalPrice,
+    discountPrice:    rawPrice,
     revenue:          Number(source.revenue) || 0,
 
     category:   source.category || "General",
