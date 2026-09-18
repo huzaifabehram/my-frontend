@@ -193,7 +193,7 @@
 //            Motiviam Pvt Ltd address/phone/email; replaced the old 6-column link grid with a
 //            3-tab FAQ-style accordion (About / Policies / Contact Us, chevron flips open↔closed);
 //            added a newsletter box outside the tabs that posts to the backend.
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Volume2, ArrowLeft } from 'lucide-react';
 import { useCourses } from '../context/CoursesContext';
@@ -1403,7 +1403,20 @@ export default function CourseLandingPage() {
   // which already closes the modal itself) and close the modal to match —
   // this is what makes Back land back on this same course page instead of
   // continuing on to wherever the visitor came from.
-  useEffect(() => {
+  //
+  // NEW: this is useLayoutEffect rather than useEffect on purpose. Closing
+  // via the X button updates state synchronously inside the click handler,
+  // so the heavy preview video (a YouTube/Bunny iframe) unmounts in the
+  // very same paint. A plain useEffect here would instead run AFTER the
+  // browser had already painted one frame with the video still open (React
+  // Router updates `location` on the popstate event, that render paints
+  // with isPreviewOpen still true, and only the *following* effect closes
+  // it) — an extra frame where a heavy video iframe is still actively
+  // decoding, right as everything is trying to settle after the
+  // navigation. That's what was making the announcement bar visibly
+  // stutter specifically after Back, but not after the X button.
+  // useLayoutEffect closes it before that first paint instead.
+  useLayoutEffect(() => {
     if (isPreviewOpen && !location.state?.coursePreviewOpen) {
       setIsPreviewOpen(false);
       setCurrentVideo('');
@@ -1849,7 +1862,11 @@ export default function CourseLandingPage() {
           of the page (was reading the unused `discountPrice` field before,
           so this never actually reflected what the instructor set). */}
       {discountPct > 0 && (
-        <div className="bg-[#1a1208] py-2 md:py-3 w-full overflow-hidden">
+        // NEW: CSS `contain` isolates this bar's rendering from whatever
+        // else is happening on the page — a defensive measure so a layout/
+        // paint burst elsewhere (like the preview modal tearing down)
+        // can't force this bar's own animation to be recomputed in lockstep.
+        <div className="bg-[#1a1208] py-2 md:py-3 w-full overflow-hidden" style={{ contain: 'layout style paint' }}>
           <style>{`
             @keyframes announcement-marquee {
               0%   { transform: translateX(0); }

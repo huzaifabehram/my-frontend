@@ -50,6 +50,7 @@ const PAYMENT_METHOD_DATA = [
     id: 'bank',
     label: 'Bank Transfer',
     icon: Landmark,
+    logoKey: 'ubl', // representative logo for the collapsed selector button — both banks still show individually once expanded
     accounts: [
       { key: 'ubl',    name: 'United Bank Limited', short: 'UBL', color: '#024fa2', accountTitle: 'MOTIVIAM PRIVATE LIMITED', accountNumber: '397856471' },
       { key: 'allied', name: 'Allied Bank',         short: 'ABL', color: '#00693e', accountTitle: 'MOTIVIAM PRIVATE LIMITED', accountNumber: '0011195294040019' },
@@ -59,6 +60,7 @@ const PAYMENT_METHOD_DATA = [
     id: 'jazzcash',
     label: 'JazzCash',
     icon: Smartphone,
+    logoKey: 'jazzcash',
     accounts: [
       { key: 'jazzcash', name: 'JazzCash', short: 'JC', color: '#d8232a', accountTitle: 'Huzaifa Behram', accountNumber: '0324-5463513' },
     ],
@@ -67,11 +69,34 @@ const PAYMENT_METHOD_DATA = [
     id: 'easypaisa',
     label: 'Easypaisa',
     icon: Smartphone,
+    logoKey: 'easypaisa',
     accounts: [
-      { key: 'easypaisa', name: 'Easypaisa', short: 'EP', color: '#00a651', accountTitle: 'Huzaifa Behram', accountNumber: '0344-6199712' },
+      { key: 'easypaisa', name: 'Easypaisa', short: 'EP', color: '#00a651', accountTitle: 'Huzaifa Behram', accountNumber: '0344-6199711' },
     ],
   },
 ];
+
+// The collapsed selector button (before a method is expanded) — shows the
+// real uploaded logo circularly cropped if one's available, otherwise the
+// generic lucide icon it always showed before.
+function MethodIcon({ MIcon, logoUrl, selected }) {
+  const [imgErr, setImgErr] = useState(false);
+  if (logoUrl && !imgErr) {
+    return (
+      <img
+        src={logoUrl}
+        alt=""
+        className="w-10 h-10 rounded-full object-contain bg-white border border-[#ece6dd] flex-shrink-0 p-1.5"
+        onError={() => setImgErr(true)}
+      />
+    );
+  }
+  return (
+    <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${selected ? 'bg-[#e8540a] text-white' : 'bg-[#f0ebe3] text-[#9e9789]'}`}>
+      <MIcon size={18} />
+    </div>
+  );
+}
 
 // Renders the real uploaded logo (passed in as `logoUrl`, fetched from
 // Super Admin → Settings); if it's missing or fails to load, falls back to
@@ -488,9 +513,7 @@ export default function EnrolledPage() {
                             selected ? 'border-[#e8540a] bg-[#fdf2ea] rounded-b-none border-b-0' : 'border-[#ece6dd] bg-white hover:border-[#ddd5c4]'
                           }`}
                         >
-                          <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${selected ? 'bg-[#e8540a] text-white' : 'bg-[#f0ebe3] text-[#9e9789]'}`}>
-                            <MIcon size={18} />
-                          </div>
+                          <MethodIcon MIcon={MIcon} logoUrl={paymentLogos[m.logoKey]} selected={selected} />
                           <p className="font-bold text-[#1a1208] text-sm md:text-base flex-1">{m.label}</p>
                           <div className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${selected ? 'border-[#e8540a]' : 'border-[#ddd5c4]'}`}>
                             {selected && <div className="w-2.5 h-2.5 rounded-full bg-[#e8540a]" />}
