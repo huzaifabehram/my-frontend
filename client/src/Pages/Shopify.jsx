@@ -1139,6 +1139,10 @@ export default function CourseLandingPage() {
   const { API: api, user } = useAuth();
 
   const [mobileMenuOpen,        setMobileMenuOpen]        = useState(false);
+  // NEW: same expandable "Courses" list as the shared SiteHeader.jsx drawer —
+  // this page still has its own separate header/drawer, so the feature has
+  // to be added here too rather than being picked up automatically.
+  const [coursesExpanded,       setCoursesExpanded]       = useState(false);
   const [expandedSection,       setExpandedSection]       = useState([0, 1, 2]);
   const [showFullDescription,   setShowFullDescription]   = useState(false);
   const [showFullInstructorBio, setShowFullInstructorBio] = useState(false);
@@ -1414,12 +1418,13 @@ export default function CourseLandingPage() {
     return () => { window.removeEventListener('keydown', handleKeyDown); document.body.style.overflow = 'unset'; };
   }, [reviewsOverlayOpen, closeReviewsOverlay]);
 
-  // NEW CHANGE (replaces "NEW CHANGE X" below): that earlier change rendered
-  // nothing at all while the course loaded, which is exactly what was
-  // causing the 1-1.5s blank white flash when navigating back to a course
-  // page. Now we render a lightweight skeleton in the same layout/colors as
-  // the real page (dark header bar + hero band) so the page never goes
-  // fully blank — it just fills in once the data arrives.
+  // NEW: extended into a fuller skeleton that fills the whole viewport
+  // (header bar + hero band + a below-the-fold content/sidebar placeholder),
+  // instead of stopping after just the hero. The shorter version still left
+  // a large blank gap underneath it before the real content arrived, which
+  // looked like the page had half-loaded and stalled — this fills that gap
+  // with more placeholder blocks so it reads as one continuous loading
+  // state, closer to how sites like Udemy show a full-page skeleton.
   if (loading || fullCourseLoading) {
     return (
       <div className="min-h-screen w-full bg-[#FDFAF6]">
@@ -1430,6 +1435,20 @@ export default function CourseLandingPage() {
             <div className="h-8 w-2/3 bg-white/10 rounded mb-3" />
             <div className="h-8 w-1/2 bg-white/10 rounded mb-6" />
             <div className="h-4 w-32 bg-white/10 rounded" />
+          </div>
+        </div>
+        <div className="max-w-7xl mx-auto px-4 lg:px-6 py-8 md:py-12">
+          <div className="grid lg:grid-cols-3 gap-6 md:gap-8 animate-pulse">
+            <div className="lg:col-span-2 space-y-4">
+              <div className="h-6 w-1/3 bg-[#ece6dd] rounded" />
+              <div className="h-4 w-full bg-[#ece6dd] rounded" />
+              <div className="h-4 w-5/6 bg-[#ece6dd] rounded" />
+              <div className="h-4 w-4/6 bg-[#ece6dd] rounded" />
+              <div className="h-40 w-full bg-[#ece6dd] rounded-xl mt-6" />
+              <div className="h-4 w-full bg-[#ece6dd] rounded" />
+              <div className="h-4 w-3/4 bg-[#ece6dd] rounded" />
+            </div>
+            <div className="h-72 w-full bg-[#ece6dd] rounded-2xl" />
           </div>
         </div>
       </div>
@@ -1878,7 +1897,35 @@ export default function CourseLandingPage() {
                 </div>
                 {/* NEW CHANGE N: same Home + Services links added to the mobile drawer */}
                 <button onClick={() => handleNavigate('/')} className="block w-full text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base">Home</button>
-                <button onClick={() => handleNavigate('/courses')} className="block w-full text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base">Categories</button>
+                {/* NEW: Courses now expands in place to list every course,
+                    same as the shared SiteHeader.jsx drawer, instead of
+                    navigating straight to the Courses page. */}
+                <div>
+                  <button
+                    onClick={() => setCoursesExpanded(!coursesExpanded)}
+                    className="flex w-full items-center justify-between text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base"
+                  >
+                    Courses
+                    <ChevronDown size={16} className={`transition-transform ${coursesExpanded ? 'rotate-180' : ''}`} />
+                  </button>
+                  {coursesExpanded && (
+                    <div className="pl-3 pb-1 space-y-1 max-h-64 overflow-y-auto">
+                      {courses && courses.length > 0 ? (
+                        courses.map((c) => (
+                          <button
+                            key={c._id || c.id}
+                            onClick={() => handleNavigate(`/course/${c._id || c.id}`)}
+                            className="block w-full text-left text-white/80 hover:text-[#f0a070] bg-transparent border-none cursor-pointer px-3 py-2 rounded-lg hover:bg-white/5 text-sm transition truncate"
+                          >
+                            {c.title}
+                          </button>
+                        ))
+                      ) : (
+                        <p className="text-white/50 text-sm px-3 py-2">No courses yet.</p>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <button onClick={() => handleNavigate('/services')} className="block w-full text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base">Services</button>
                 <button onClick={() => handleNavigate('/instructor')} className="block w-full text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base">Instructor</button>
               </div>
