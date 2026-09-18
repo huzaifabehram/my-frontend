@@ -1,37 +1,40 @@
-// src/Pages/EnrolledPage.jsx  (v1.2)
+// src/Pages/EnrolledPage.jsx  (v1.3)
 // ─────────────────────────────────────────────────────────────────────────────
 // ENROLLMENT PAGE — reached from "Enroll Now" on the course landing page
 // (Shopify.jsx). Two steps:
-//   Step 1: Name, Email, WhatsApp Number
-//   Step 2: Payment method selection + confirmation
+//   Step 1: Name, Email, WhatsApp Number, Password (guests only — this
+//           becomes their student portal login)
+//   Step 2: Payment method selection + screenshot + confirmation
 //
-// Branding matches Shopify.jsx exactly (same header, footer, "Lerni" wordmark,
-// color palette, and fonts) so the flow feels like one continuous site rather
-// than a separate checkout tool.
+// Uses the shared <SiteHeader />/<SiteFooter /> (same ones as About/Privacy/
+// Contact pages) so the real Super Admin logo and course-landing-page-style
+// footer show here too, instead of the old page-local header/footer + text
+// "Lerni" wordmark.
 //
 // Auth handling:
-//   • If the visitor is already logged in, submitting Step 2 enrolls them
-//     immediately (calls enrollCourse) and sends them to /portal.
-//   • If not logged in, Step 1 + Step 2 answers are stashed locally, then the
-//     visitor is sent through the EXISTING /auth/register flow (unchanged).
-//     AuthPages.jsx already finishes enrollment after a successful signup —
-//     see the small addition needed there, described in the setup notes.
+//   • If the visitor is already logged in, "Confirm Enrollment" enrolls them
+//     immediately (calls enrollCourse) and sends them to /thank-you.
+//   • If not logged in, "Confirm Enrollment" registers their account right
+//     here (using the email/password from Step 1), enrolls them, and sends
+//     them to /thank-you — no more detour through a separate register page.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCourses } from '../context/CoursesContext';
 import { enrollCourse } from '../api/courseApi';
-import { trackInitiateCheckout, trackPurchase, setPendingCourse } from '../utils/facebookPixel';
+import { trackInitiateCheckout, trackCompleteRegistration, trackPurchase, setPendingCourse } from '../utils/facebookPixel';
+import SiteHeader from '../components/SiteHeader';
+import SiteFooter from '../components/SiteFooter';
 import {
-  Menu, X, Search, Check, ChevronLeft, ArrowLeft, MessageCircle,
-  Smartphone, Landmark, Loader2, ShieldCheck, User, Mail, LogIn, ImagePlus,
+  Check, ChevronLeft, MessageCircle,
+  Smartphone, Landmark, Loader2, ShieldCheck, User, Mail, Lock, LogIn, ImagePlus,
 } from 'lucide-react';
 
-// Key used to stash Step 1 + Step 2 answers for guests who still need to
-// create an account before the enrollment can be finalized. Read back by
-// AuthPages.jsx once sign-up/sign-in succeeds.
-const INTAKE_STORAGE_KEY = 'lerni_enroll_intake';
+// NEW: Step 1 is now a full sign-up form (name, email, WhatsApp, password) —
+// the email + password entered here become the visitor's actual student
+// portal login, created inline when they confirm enrollment. This removes
+// the old detour through a separate /auth/register page after payment.
 
 const PAYMENT_METHODS = [
   {
@@ -57,15 +60,14 @@ const PAYMENT_METHODS = [
 export default function EnrolledPage() {
   const navigate = useNavigate();
   const { id } = useParams();
-  const { user, API: api } = useAuth();
+  const { user, API: api, register } = useAuth();
   const { courses, getCourse, fetchCourseById } = useCourses();
 
   const [fullCourse, setFullCourse] = useState(null);
   const [courseLoading, setCourseLoading] = useState(true);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState({ name: '', email: '', whatsapp: '' });
+  const [form, setForm] = useState({ name: '', email: '', whatsapp: '', password: '' });
   const [errors, setErrors] = useState({});
   const [paymentMethod, setPaymentMethod] = useState('bank');
   const [screenshotFile, setScreenshotFile] = useState(null);
@@ -113,9 +115,11 @@ export default function EnrolledPage() {
     return fullCourse || getCourse(id);
   }, [id, fullCourse, courses, getCourse]);
 
-  const handleNavigate = (path) => { setMobileMenuOpen(false); navigate(path); };
-
-  const priceLabel = course ? `PKR ${(course.price * 280).toLocaleString()}` : '';
+  // NEW: course.price is already stored in PKR — the old "* 280" here was
+  // treating it as a USD figure and converting it, which is what made the
+  // price on this page's order summary come out wrong (same root cause that
+  // was already fixed on the course landing page and homepage).
+  const priceLabel = course ? `PKR ${Number(course.price || 0).toLocaleString()}` : '';
   const discountPct = course && course.originalPrice > course.price
     ? Math.round((1 - course.price / course.originalPrice) * 100)
     : null;
@@ -133,6 +137,12 @@ export default function EnrolledPage() {
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = 'Enter a valid email address.';
     if (!form.whatsapp.trim()) e.whatsapp = 'WhatsApp number is required.';
     else if (!/^[+\d][\d\s-]{7,14}$/.test(form.whatsapp.trim())) e.whatsapp = 'Enter a valid WhatsApp number, e.g. 03XX-XXXXXXX.';
+    // Password is only collected (and required) for guests — someone already
+    // logged in obviously already has one.
+    if (!user) {
+      if (!form.password) e.password = 'Password is required.';
+      else if (form.password.length < 6) e.password = 'Password must be at least 6 characters.';
+    }
     setErrors(e);
     return Object.keys(e).length === 0;
   }
@@ -202,15 +212,27 @@ export default function EnrolledPage() {
         trackPurchase(course);
         navigate('/thank-you', { replace: true, state: { courseTitle: course.title } });
       } else {
-        // Guest — stash the answers, then reuse the existing sign-up flow.
-        // AuthPages.jsx picks this up once the account is created and sends
-        // them to /thank-you itself (via the redirect param below).
-        setPendingCourse(course);
-        localStorage.setItem(INTAKE_STORAGE_KEY, JSON.stringify(intake));
-        navigate(`/auth/register?redirect=${encodeURIComponent('/thank-you')}&courseId=${courseId}`);
+        // NEW: guest — create their student account right here using the
+        // email + password from Step 1, instead of bouncing them to a
+        // separate /auth/register page after payment. This is what was
+        // sending "Confirm Enrollment" to a login/register screen instead
+        // of the Thank You page — that detour is gone now.
+        await register(form.name.trim(), form.email.trim(), form.password, 'student');
+        trackCompleteRegistration();
+        await enrollCourse(courseId, intake);
+        trackPurchase(course);
+        navigate('/thank-you', { replace: true, state: { courseTitle: course.title } });
       }
     } catch (err) {
-      setSubmitError(err?.response?.data?.message || 'Something went wrong. Please try again.');
+      const message = err?.response?.data?.message || 'Something went wrong. Please try again.';
+      // A duplicate-email registration error is common enough here (visitor
+      // already has an account and didn't notice the "Log In" link above)
+      // that it's worth a slightly more helpful message than the raw one.
+      setSubmitError(
+        /already registered|already exists/i.test(message)
+          ? 'You already have an account with this email — please log in, then continue your enrollment.'
+          : message
+      );
       setSubmitting(false);
     }
   }
@@ -238,51 +260,11 @@ export default function EnrolledPage() {
   return (
     <div className="min-h-screen bg-[#FDFAF6] overflow-x-hidden w-full" style={{ fontFamily: "'DM Sans', sans-serif" }}>
 
-      {/* HEADER — identical to the course landing page */}
-      <header className="sticky top-0 z-40 bg-white shadow-sm w-full border-b border-[#ece6dd]">
-        <div className="max-w-7xl mx-auto px-4 lg:px-6 py-3 md:py-4 flex items-center justify-between">
-          <button
-            className="lg:hidden p-2 -ml-2 bg-transparent border-none cursor-pointer text-[#1a1208]"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-label="Toggle navigation menu"
-          >
-            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
-          <div className="absolute left-1/2 transform -translate-x-1/2 lg:relative lg:left-auto lg:transform-none">
-            <button onClick={() => handleNavigate('/')}
-              className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-[#1a1208] cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0"
-              style={{ fontFamily: "'Playfair Display', serif" }}>
-              Ler<span className="text-[#e8540a]">ni</span>
-            </button>
-          </div>
-          <nav className="hidden lg:flex items-center gap-8 flex-1 ml-12">
-            <button onClick={() => handleNavigate('/courses')} className="text-base text-[#3d3020] hover:text-[#e8540a] transition bg-transparent border-none cursor-pointer p-0 font-medium">Categories</button>
-            <button onClick={() => handleNavigate('/instructor')} className="text-base text-[#3d3020] hover:text-[#e8540a] transition bg-transparent border-none cursor-pointer p-0 font-medium">Instructor</button>
-            <button onClick={() => handleNavigate('/courses')} className="text-base text-[#3d3020] hover:text-[#e8540a] transition bg-transparent border-none cursor-pointer p-0 font-medium">About</button>
-          </nav>
-          <div className="flex items-center gap-2 md:gap-3">
-            <Search className="hidden lg:block text-[#9e9789] cursor-pointer hover:text-[#1a1208] transition" size={22} />
-            {!user && (
-              <button onClick={() => handleNavigate('/auth/login')} className="px-4 md:px-6 py-2 md:py-2.5 bg-[#e8540a] text-white rounded-lg hover:bg-[#c94708] transition font-semibold border-none cursor-pointer text-sm md:text-base shadow-sm">Log In</button>
-            )}
-          </div>
-        </div>
-        {mobileMenuOpen && (
-          <>
-            <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setMobileMenuOpen(false)} />
-            <div className="fixed top-0 left-0 h-full w-64 bg-[#1a1208] z-50 lg:hidden shadow-2xl">
-              <div className="p-6 space-y-4">
-                <div className="flex justify-between items-center mb-6">
-                  <span className="text-xl font-bold text-white" style={{ fontFamily: "'Playfair Display', serif" }}>Menu</span>
-                  <button onClick={() => setMobileMenuOpen(false)} className="p-2 hover:bg-white/10 rounded-lg transition bg-transparent border-none cursor-pointer text-white"><X size={24} /></button>
-                </div>
-                <button onClick={() => handleNavigate('/courses')} className="block w-full text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base">Categories</button>
-                <button onClick={() => handleNavigate('/instructor')} className="block w-full text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base">Instructor</button>
-              </div>
-            </div>
-          </>
-        )}
-      </header>
+      {/* HEADER — NEW: now the same shared header used on About/Privacy/
+          Contact pages, so the real Super Admin logo shows here instead of
+          the "Lerni" text wordmark, and it no longer duplicates the fetch
+          logic in every page that needs a header. */}
+      <SiteHeader />
 
       {/* MAIN */}
       <main className="max-w-5xl mx-auto px-4 lg:px-6 py-8 md:py-12 w-full">
@@ -362,6 +344,29 @@ export default function EnrolledPage() {
                   {errors.whatsapp && <p className="text-red-500 text-xs mt-1">{errors.whatsapp}</p>}
                   <p className="text-xs text-[#9e9789] mt-1.5">Used only for enrollment and payment confirmation.</p>
                 </div>
+
+                {/* NEW: password — only asked of guests. This, together with
+                    the email above, becomes the visitor's actual student
+                    portal login once enrollment is confirmed, so it's called
+                    out clearly rather than looking like just another field. */}
+                {!user && (
+                  <div>
+                    <label htmlFor="enroll-password" className="flex items-center gap-1.5 text-sm font-bold text-[#3d3020] mb-1.5"><Lock size={15} className="text-[#e8540a]" /> Create a Password</label>
+                    <input
+                      id="enroll-password" name="password" type="password" value={form.password} onChange={handleChange}
+                      placeholder="Minimum 6 characters" autoComplete="new-password"
+                      className={`w-full border rounded-xl px-4 py-3 text-base text-[#1a1208] outline-none transition ${errors.password ? 'border-red-400' : 'border-[#ece6dd] focus:border-[#e8540a]'}`}
+                    />
+                    {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
+                    <div className="flex items-start gap-2 bg-[#fdf2ea] border border-[#f5ddc4] rounded-lg px-3 py-2.5 mt-2">
+                      <ShieldCheck size={15} className="text-[#e8540a] flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-[#7a4a00]">
+                        You'll use this <strong>email and password</strong> to log into your student portal
+                        once your enrollment is confirmed — keep it somewhere safe.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 <button
                   onClick={handleContinue}
@@ -469,6 +474,15 @@ export default function EnrolledPage() {
                 {submitError && (
                   <div className="bg-red-50 border border-red-200 rounded-xl p-3.5">
                     <p className="text-red-600 text-sm">{submitError}</p>
+                    {/already have an account/i.test(submitError) && (
+                      <button
+                        type="button"
+                        onClick={handleLoginClick}
+                        className="mt-2 text-red-700 hover:text-red-800 font-bold text-sm underline bg-transparent border-none cursor-pointer p-0"
+                      >
+                        Log In
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -524,38 +538,10 @@ export default function EnrolledPage() {
         </div>
       </main>
 
-      {/* FOOTER — identical to the course landing page */}
-      <footer className="bg-[#1a1208] text-[#9e8e7a] py-8 md:py-12 w-full border-t border-[#2d2416]">
-        <div className="max-w-7xl mx-auto px-4 lg:px-6">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 md:gap-8 mb-8 md:mb-12">
-            {[
-              { title: 'Lerni',     links: ['About', 'Press', 'Contact', 'Careers'] },
-              { title: 'Community', links: ['Learners', 'Partners', 'Developers', 'Beta Testers'] },
-              { title: 'Teaching',  links: ['Become Instructor', 'Teaching Center', 'Resources'] },
-              { title: 'Programs',  links: ['Enterprise', 'Government', 'Lerni Business'] },
-              { title: 'Support',   links: ['Help Center', 'Get the App', 'FAQ', 'Accessibility'] },
-              { title: 'Legal',     links: ['Terms', 'Privacy Policy', 'Cookie Settings', 'Sitemap'] },
-            ].map(col => (
-              <div key={col.title}>
-                <h3 className="font-bold text-[#f9c97a] mb-3 md:mb-4 text-xs md:text-sm uppercase tracking-wide">{col.title}</h3>
-                <ul className="space-y-1.5 md:space-y-2 text-xs md:text-sm">
-                  {col.links.map(link => (
-                    <li key={link}><button onClick={() => handleNavigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-[#9e8e7a] p-0">{link}</button></li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-          <div className="flex flex-col md:flex-row justify-between items-center pt-6 md:pt-8 border-t border-[#2d2416]">
-            <button onClick={() => handleNavigate('/')}
-              className="text-xl md:text-2xl font-extrabold text-white cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0 mb-4 md:mb-0"
-              style={{ fontFamily: "'Playfair Display', serif" }}>
-              Ler<span className="text-[#f9c97a]">ni</span>
-            </button>
-            <p className="text-xs md:text-sm text-[#6b5e4e]">© 2024 Lerni, Inc. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
+      {/* FOOTER — NEW: swapped from this page's own 6-column footer to the
+          same shared footer used on the course landing page (address/phone/
+          email, FAQ accordion, newsletter) with the Super Admin footer logo. */}
+      <SiteFooter />
     </div>
   );
 }

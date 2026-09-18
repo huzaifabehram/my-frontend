@@ -1169,6 +1169,10 @@ export default function CourseLandingPage() {
   // ── FOOTER — site logo (Super Admin → Settings), FAQ accordion, newsletter ──
   const [siteLogoUrl, setSiteLogoUrl] = useState('');       // header logo
   const [footerLogoUrl, setFooterLogoUrl] = useState('');   // NEW CHANGE AK: separate footer logo
+  // NEW: same fix as SiteHeader.jsx/SiteFooter.jsx — don't show the "Lerni"
+  // text wordmark until we actually know whether a real logo is set, so it
+  // no longer flashes on screen before getting swapped for the real logo.
+  const [logoLoaded, setLogoLoaded] = useState(false);
   const [openFooterTab, setOpenFooterTab] = useState(null); // 'about' | 'policies' | 'contact' | null
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterStatus, setNewsletterStatus] = useState('idle'); // idle | sending | sent | error
@@ -1179,7 +1183,8 @@ export default function CourseLandingPage() {
         setSiteLogoUrl(res.data?.logoUrl || '');
         setFooterLogoUrl(res.data?.footerLogoUrl || '');
       })
-      .catch(() => {}); // logo is optional — falls back to the text wordmark
+      .catch(() => {}) // logo is optional — falls back to the text wordmark
+      .finally(() => setLogoLoaded(true));
   }, [api]);
 
   const handleNewsletterSubmit = (e) => {
@@ -1368,11 +1373,26 @@ export default function CourseLandingPage() {
     return () => { window.removeEventListener('keydown', handleKeyDown); document.body.style.overflow = 'unset'; };
   }, [reviewsOverlayOpen, closeReviewsOverlay]);
 
-  // NEW CHANGE X: No custom in-page loading spinner anymore — while the course
-  // is loading we render nothing at all, so the only loading feedback the
-  // visitor sees is the browser's own default tab/address-bar indicator.
+  // NEW CHANGE (replaces "NEW CHANGE X" below): that earlier change rendered
+  // nothing at all while the course loaded, which is exactly what was
+  // causing the 1-1.5s blank white flash when navigating back to a course
+  // page. Now we render a lightweight skeleton in the same layout/colors as
+  // the real page (dark header bar + hero band) so the page never goes
+  // fully blank — it just fills in once the data arrives.
   if (loading || fullCourseLoading) {
-    return null;
+    return (
+      <div className="min-h-screen w-full bg-[#FDFAF6]">
+        <div className="sticky top-0 z-40 bg-white shadow-sm w-full border-b border-[#ece6dd] h-[60px] md:h-[68px]" />
+        <div className="w-full bg-[#1a1208] py-6 md:py-8 lg:py-12">
+          <div className="max-w-7xl mx-auto px-4 lg:px-6 animate-pulse">
+            <div className="h-4 w-40 bg-white/10 rounded mb-4" />
+            <div className="h-8 w-2/3 bg-white/10 rounded mb-3" />
+            <div className="h-8 w-1/2 bg-white/10 rounded mb-6" />
+            <div className="h-4 w-32 bg-white/10 rounded" />
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (!courseData) {
@@ -1782,7 +1802,9 @@ export default function CourseLandingPage() {
             <button onClick={() => handleNavigate('/')}
               className="cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0 flex items-center"
               style={{ fontFamily: "'Playfair Display', serif" }}>
-              {siteLogoUrl ? (
+              {!logoLoaded ? (
+                <span className="inline-block h-14 md:h-16 lg:h-20 w-24" aria-hidden="true" />
+              ) : siteLogoUrl ? (
                 <img src={siteLogoUrl} alt="Logo" className="h-14 md:h-16 lg:h-20 w-auto object-contain" />
               ) : (
                 <span className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-[#1a1208]">
@@ -2415,7 +2437,9 @@ export default function CourseLandingPage() {
             <div>
               <button onClick={() => handleNavigate('/')}
                 className="cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0 block mb-4">
-                {footerLogoUrl ? (
+                {!logoLoaded ? (
+                  <span className="inline-block h-16 md:h-20 w-24" aria-hidden="true" />
+                ) : footerLogoUrl ? (
                   <img src={footerLogoUrl} alt="Logo" className="h-16 md:h-20 w-auto object-contain" />
                 ) : (
                   <span className="text-xl md:text-2xl font-extrabold text-white" style={{ fontFamily: "'Playfair Display', serif" }}>
@@ -2500,7 +2524,7 @@ export default function CourseLandingPage() {
             <button onClick={() => handleNavigate('/')}
               className="text-xl md:text-2xl font-extrabold text-white cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0"
               style={{ fontFamily: "'Playfair Display', serif" }}>
-              {footerLogoUrl ? <img src={footerLogoUrl} alt="Logo" className="h-12 md:h-14 w-auto object-contain" /> : <>Ler<span className="text-[#f9c97a]">ni</span></>}
+              {!logoLoaded ? <span className="inline-block h-12 md:h-14 w-20" aria-hidden="true" /> : footerLogoUrl ? <img src={footerLogoUrl} alt="Logo" className="h-12 md:h-14 w-auto object-contain" /> : <>Ler<span className="text-[#f9c97a]">ni</span></>}
             </button>
             <p className="text-xs md:text-sm text-[#6b5e4e]">© {new Date().getFullYear()} Motiviam Pvt Ltd. All rights reserved.</p>
           </div>

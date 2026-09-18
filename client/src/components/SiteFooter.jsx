@@ -25,6 +25,10 @@ export default function SiteFooter() {
   const handleNavigate = (path) => navigate(path);
 
   const [footerLogoUrl, setFooterLogoUrl] = useState('');
+  // NEW: same "don't show the text wordmark until we know the real logo"
+  // fix as SiteHeader.jsx — stops the "Lerni" flash before the real footer
+  // logo loads in.
+  const [logoLoaded, setLogoLoaded] = useState(false);
   const [openFooterTab, setOpenFooterTab] = useState(null);
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterStatus, setNewsletterStatus] = useState('idle');
@@ -32,7 +36,8 @@ export default function SiteFooter() {
   useEffect(() => {
     api.get('/settings')
       .then((res) => setFooterLogoUrl(res.data?.footerLogoUrl || ''))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setLogoLoaded(true));
   }, [api]);
 
   const handleNewsletterSubmit = (e) => {
@@ -51,7 +56,9 @@ export default function SiteFooter() {
           <div>
             <button onClick={() => handleNavigate('/')}
               className="cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0 block mb-4">
-              {footerLogoUrl ? (
+              {!logoLoaded ? (
+                <span className="inline-block h-16 md:h-20 w-24" aria-hidden="true" />
+              ) : footerLogoUrl ? (
                 <img src={footerLogoUrl} alt="Logo" className="h-16 md:h-20 w-auto object-contain" />
               ) : (
                 <span className="text-xl md:text-2xl font-extrabold text-white" style={{ fontFamily: "'Playfair Display', serif" }}>
@@ -127,7 +134,7 @@ export default function SiteFooter() {
           <button onClick={() => handleNavigate('/')}
             className="text-xl md:text-2xl font-extrabold text-white cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0"
             style={{ fontFamily: "'Playfair Display', serif" }}>
-            {footerLogoUrl ? <img src={footerLogoUrl} alt="Logo" className="h-12 md:h-14 w-auto object-contain" /> : <>Ler<span className="text-[#f9c97a]">ni</span></>}
+            {!logoLoaded ? <span className="inline-block h-12 md:h-14 w-20" aria-hidden="true" /> : footerLogoUrl ? <img src={footerLogoUrl} alt="Logo" className="h-12 md:h-14 w-auto object-contain" /> : <>Ler<span className="text-[#f9c97a]">ni</span></>}
           </button>
           <p className="text-xs md:text-sm text-[#6b5e4e]">© {new Date().getFullYear()} Motiviam Pvt Ltd. All rights reserved.</p>
         </div>

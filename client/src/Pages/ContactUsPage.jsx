@@ -90,19 +90,19 @@ export default function ContactUsPage() {
               <label className="text-sm font-semibold text-[#1a1208] mb-1 block">Name</label>
               <input value={form.name} onChange={(e) => update('name', e.target.value)}
                 placeholder="Your full name"
-                className="w-full border border-[#ece6dd] rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]" />
+                className="w-full border border-[#ece6dd] rounded-lg px-3.5 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-[#e8540a]" />
             </div>
             <div>
               <label className="text-sm font-semibold text-[#1a1208] mb-1 block">Email</label>
               <input type="email" value={form.email} onChange={(e) => update('email', e.target.value)}
                 placeholder="you@example.com"
-                className="w-full border border-[#ece6dd] rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]" />
+                className="w-full border border-[#ece6dd] rounded-lg px-3.5 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-[#e8540a]" />
             </div>
             <div>
               <label className="text-sm font-semibold text-[#1a1208] mb-1 block">Message</label>
               <textarea value={form.message} onChange={(e) => update('message', e.target.value)}
                 placeholder="How can we help?" rows={5}
-                className="w-full border border-[#ece6dd] rounded-lg px-3.5 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a] resize-none" />
+                className="w-full border border-[#ece6dd] rounded-lg px-3.5 py-2.5 text-base focus:outline-none focus:ring-2 focus:ring-[#e8540a] resize-none" />
             </div>
             <button type="submit" disabled={status === 'sending'}
               className="w-full sm:w-auto px-6 py-3 bg-[#e8540a] hover:bg-[#c94708] disabled:opacity-60 text-white rounded-xl font-bold transition border-none cursor-pointer">

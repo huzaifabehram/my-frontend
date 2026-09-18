@@ -18,12 +18,20 @@ export default function SiteHeader() {
   const navigate = useNavigate();
   const { API: api } = useAuth();
   const [siteLogoUrl, setSiteLogoUrl] = useState('');
+  // NEW: tracks whether the /settings fetch has resolved yet. Before it
+  // resolves we render an empty placeholder (same size as the logo) instead
+  // of the "Lerni" text fallback — this is what was causing the "Lerni text
+  // flashes for 2-3 seconds before the real logo loads" flicker: previously
+  // the text wordmark rendered immediately (siteLogoUrl still empty) and
+  // then got swapped for the image once the fetch resolved.
+  const [logoLoaded, setLogoLoaded] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     api.get('/settings')
       .then((res) => setSiteLogoUrl(res.data?.logoUrl || ''))
-      .catch(() => {}); // logo is optional — falls back to the text wordmark
+      .catch(() => {}) // logo is optional — falls back to the text wordmark
+      .finally(() => setLogoLoaded(true));
   }, [api]);
 
   const handleNavigate = (path) => { setMobileMenuOpen(false); navigate(path); };
@@ -42,7 +50,9 @@ export default function SiteHeader() {
           <button onClick={() => handleNavigate('/')}
             className="cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0 flex items-center"
             style={{ fontFamily: "'Playfair Display', serif" }}>
-            {siteLogoUrl ? (
+            {!logoLoaded ? (
+              <span className="inline-block h-14 md:h-16 lg:h-20 w-24" aria-hidden="true" />
+            ) : siteLogoUrl ? (
               <img src={siteLogoUrl} alt="Logo" className="h-14 md:h-16 lg:h-20 w-auto object-contain" />
             ) : (
               <span className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-[#1a1208]">
