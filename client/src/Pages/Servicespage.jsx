@@ -4,10 +4,11 @@
 // nav link in the header (added here, in HomePage.jsx, and — via the patch
 // in SHOPIFY_NAV_PATCH.md — in the course landing page too).
 // ─────────────────────────────────────────────────────────────────────────────
-import React, { useState, useEffect } from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Menu, X, Search, Check, ArrowRight, Megaphone, ShoppingBag, Target, TrendingUp } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
+import { Check, ArrowRight, Megaphone, ShoppingBag, Target, TrendingUp } from 'lucide-react';
+import SiteHeader from '../components/SiteHeader';
+import SiteFooter from '../components/SiteFooter';
 
 // EDIT ME: the two placeholder entries need your real scope/features —
 // everything else here (icons, layout, "Get a quote" link) will just work
@@ -76,58 +77,20 @@ function ServiceRow({ service }) {
 
 export default function ServicesPage() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Route changes don't auto-scroll to top in React Router — this makes sure
   // clicking "Services" from anywhere lands at the top of this page.
   useEffect(() => { window.scrollTo(0, 0); }, []);
 
-  const handleNavigate = (path) => { setMobileMenuOpen(false); navigate(path); };
+  const handleNavigate = (path) => navigate(path);
 
   return (
     <div className="min-h-screen bg-[#FDFAF6] overflow-x-hidden w-full" style={{ fontFamily: "'DM Sans', sans-serif" }}>
 
-      {/* HEADER — same as HomePage.jsx, "Services" shown active */}
-      <header className="sticky top-0 z-40 bg-white shadow-sm w-full border-b border-[#ece6dd]">
-        <div className="max-w-7xl mx-auto px-4 lg:px-6 py-3 md:py-4 flex items-center justify-between">
-          <button className="lg:hidden p-2 -ml-2 bg-transparent border-none cursor-pointer text-[#1a1208]" onClick={() => setMobileMenuOpen(!mobileMenuOpen)} aria-label="Toggle navigation menu">
-            {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
-          </button>
-          <div className="absolute left-1/2 transform -translate-x-1/2 lg:relative lg:left-auto lg:transform-none">
-            <button onClick={() => handleNavigate('/')} className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-[#1a1208] cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0" style={{ fontFamily: "'Playfair Display', serif" }}>
-              Ler<span className="text-[#e8540a]">ni</span>
-            </button>
-          </div>
-          <nav className="hidden lg:flex items-center gap-8 flex-1 ml-12">
-            <button onClick={() => handleNavigate('/courses')} className="text-base text-[#3d3020] hover:text-[#e8540a] transition bg-transparent border-none cursor-pointer p-0 font-medium">Courses</button>
-            <button onClick={() => handleNavigate('/services')} className="text-base text-[#e8540a] transition bg-transparent border-none cursor-pointer p-0 font-bold">Services</button>
-            <button onClick={() => handleNavigate('/instructor')} className="text-base text-[#3d3020] hover:text-[#e8540a] transition bg-transparent border-none cursor-pointer p-0 font-medium">Instructor</button>
-          </nav>
-          <div className="flex items-center gap-2 md:gap-3">
-            <Search className="hidden lg:block text-[#9e9789] cursor-pointer hover:text-[#1a1208] transition" size={22} />
-            {!user && (
-              <button onClick={() => handleNavigate('/auth/login')} className="px-4 md:px-6 py-2 md:py-2.5 bg-[#e8540a] text-white rounded-lg hover:bg-[#c94708] transition font-semibold border-none cursor-pointer text-sm md:text-base shadow-sm">Log In</button>
-            )}
-          </div>
-        </div>
-        {mobileMenuOpen && (
-          <>
-            <div className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden" onClick={() => setMobileMenuOpen(false)} />
-            <div className="fixed top-0 left-0 h-full w-64 bg-[#1a1208] z-50 lg:hidden shadow-2xl">
-              <div className="p-6 space-y-4">
-                <div className="flex justify-between items-center mb-6">
-                  <span className="text-xl font-bold text-white" style={{ fontFamily: "'Playfair Display', serif" }}>Menu</span>
-                  <button onClick={() => setMobileMenuOpen(false)} className="p-2 hover:bg-white/10 rounded-lg transition bg-transparent border-none cursor-pointer text-white"><X size={24} /></button>
-                </div>
-                <button onClick={() => handleNavigate('/courses')} className="block w-full text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base">Courses</button>
-                <button onClick={() => handleNavigate('/services')} className="block w-full text-left text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-bold transition text-base">Services</button>
-                <button onClick={() => handleNavigate('/instructor')} className="block w-full text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base">Instructor</button>
-              </div>
-            </div>
-          </>
-        )}
-      </header>
+      {/* HEADER — NEW: swapped to the same shared header as the rest of the
+          site (real Super Admin logo, expandable Courses list) instead of
+          this page's own separate copy. */}
+      <SiteHeader />
 
       {/* HERO */}
       <section className="w-full bg-[#1a1208] text-white py-12 md:py-16 lg:py-20">
@@ -171,36 +134,9 @@ export default function ServicesPage() {
         </div>
       </section>
 
-      {/* FOOTER — same as HomePage.jsx */}
-      <footer className="bg-[#1a1208] text-[#9e8e7a] py-8 md:py-12 w-full border-t border-[#2d2416]">
-        <div className="max-w-7xl mx-auto px-4 lg:px-6">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6 md:gap-8 mb-8 md:mb-12">
-            {[
-              { title: 'Lerni', links: ['About', 'Press', 'Contact', 'Careers'] },
-              { title: 'Community', links: ['Learners', 'Partners', 'Developers', 'Beta Testers'] },
-              { title: 'Teaching', links: ['Become Instructor', 'Teaching Center', 'Resources'] },
-              { title: 'Services', links: ['Digital Marketing', 'E-Commerce Setup', 'Brand Strategy', 'Paid Ads'] },
-              { title: 'Support', links: ['Help Center', 'Get the App', 'FAQ', 'Accessibility'] },
-              { title: 'Legal', links: ['Terms', 'Privacy Policy', 'Cookie Settings', 'Sitemap'] },
-            ].map((col) => (
-              <div key={col.title}>
-                <h3 className="font-bold text-[#f9c97a] mb-3 md:mb-4 text-xs md:text-sm uppercase tracking-wide">{col.title}</h3>
-                <ul className="space-y-1.5 md:space-y-2 text-xs md:text-sm">
-                  {col.links.map((link) => (
-                    <li key={link}><button onClick={() => handleNavigate('/')} className="hover:text-white transition bg-transparent border-none cursor-pointer text-[#9e8e7a] p-0">{link}</button></li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-          <div className="flex flex-col md:flex-row justify-between items-center pt-6 md:pt-8 border-t border-[#2d2416]">
-            <button onClick={() => handleNavigate('/')} className="text-xl md:text-2xl font-extrabold text-white cursor-pointer hover:opacity-80 transition bg-transparent border-none p-0 mb-4 md:mb-0" style={{ fontFamily: "'Playfair Display', serif" }}>
-              Ler<span className="text-[#f9c97a]">ni</span>
-            </button>
-            <p className="text-xs md:text-sm text-[#6b5e4e]">© 2024 Lerni, Inc. All rights reserved.</p>
-          </div>
-        </div>
-      </footer>
+      {/* FOOTER — NEW: swapped to the same shared footer as the rest of the
+          site instead of this page's own separate copy. */}
+      <SiteFooter />
     </div>
   );
 }

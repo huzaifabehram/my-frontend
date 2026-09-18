@@ -24,18 +24,22 @@ export default function SiteFooter() {
   const { API: api } = useAuth();
   const handleNavigate = (path) => navigate(path);
 
-  const [footerLogoUrl, setFooterLogoUrl] = useState('');
-  // NEW: same "don't show the text wordmark until we know the real logo"
-  // fix as SiteHeader.jsx — stops the "Lerni" flash before the real footer
-  // logo loads in.
-  const [logoLoaded, setLogoLoaded] = useState(false);
+  // NEW: seed from localStorage cache (see SiteHeader.jsx for why) so the
+  // real footer logo can show immediately on this page too, instead of
+  // waiting on a fresh fetch every single time.
+  const [footerLogoUrl, setFooterLogoUrl] = useState(() => { try { return localStorage.getItem('lerni_footer_logo_url') || ''; } catch { return ''; } });
+  const [logoLoaded, setLogoLoaded] = useState(() => { try { return localStorage.getItem('lerni_footer_logo_url') !== null; } catch { return false; } });
   const [openFooterTab, setOpenFooterTab] = useState(null);
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterStatus, setNewsletterStatus] = useState('idle');
 
   useEffect(() => {
     api.get('/settings')
-      .then((res) => setFooterLogoUrl(res.data?.footerLogoUrl || ''))
+      .then((res) => {
+        const url = res.data?.footerLogoUrl || '';
+        setFooterLogoUrl(url);
+        try { localStorage.setItem('lerni_footer_logo_url', url); } catch { /* cache is a nice-to-have */ }
+      })
       .catch(() => {})
       .finally(() => setLogoLoaded(true));
   }, [api]);

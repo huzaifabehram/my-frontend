@@ -345,28 +345,31 @@ export default function EnrolledPage() {
                   <p className="text-xs text-[#9e9789] mt-1.5">Used only for enrollment and payment confirmation.</p>
                 </div>
 
-                {/* NEW: password — only asked of guests. This, together with
-                    the email above, becomes the visitor's actual student
-                    portal login once enrollment is confirmed, so it's called
-                    out clearly rather than looking like just another field. */}
-                {!user && (
-                  <div>
-                    <label htmlFor="enroll-password" className="flex items-center gap-1.5 text-sm font-bold text-[#3d3020] mb-1.5"><Lock size={15} className="text-[#e8540a]" /> Create a Password</label>
-                    <input
-                      id="enroll-password" name="password" type="password" value={form.password} onChange={handleChange}
-                      placeholder="Minimum 6 characters" autoComplete="new-password"
-                      className={`w-full border rounded-xl px-4 py-3 text-base text-[#1a1208] outline-none transition ${errors.password ? 'border-red-400' : 'border-[#ece6dd] focus:border-[#e8540a]'}`}
-                    />
-                    {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
-                    <div className="flex items-start gap-2 bg-[#fdf2ea] border border-[#f5ddc4] rounded-lg px-3 py-2.5 mt-2">
-                      <ShieldCheck size={15} className="text-[#e8540a] flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-[#7a4a00]">
-                        You'll use this <strong>email and password</strong> to log into your student portal
-                        once your enrollment is confirmed — keep it somewhere safe.
-                      </p>
-                    </div>
+                {/* NEW: password field now always shows, regardless of login
+                    state (previously hidden once `user` was set, which
+                    looked like the field "disappeared" the next time the
+                    same person visited this page after registering). If the
+                    visitor is already logged in, this input is simply
+                    ignored on submit — enrollCourse runs directly without
+                    calling register() again (see handleFinalSubmit). */}
+                <div>
+                  <label htmlFor="enroll-password" className="flex items-center gap-1.5 text-sm font-bold text-[#3d3020] mb-1.5"><Lock size={15} className="text-[#e8540a]" /> Create a Password</label>
+                  <input
+                    id="enroll-password" name="password" type="password" value={form.password} onChange={handleChange}
+                    placeholder="Minimum 6 characters" autoComplete="new-password"
+                    className={`w-full border rounded-xl px-4 py-3 text-base text-[#1a1208] outline-none transition ${errors.password ? 'border-red-400' : 'border-[#ece6dd] focus:border-[#e8540a]'}`}
+                  />
+                  {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
+                  <div className="flex items-start gap-2 bg-[#fdf2ea] border border-[#f5ddc4] rounded-lg px-3 py-2.5 mt-2">
+                    <ShieldCheck size={15} className="text-[#e8540a] flex-shrink-0 mt-0.5" />
+                    <p className="text-xs text-[#7a4a00]">
+                      {user
+                        ? "You're already logged in, so this won't be used — enrolling will use your existing account."
+                        : <>You'll use this <strong>email and password</strong> to log into your student portal
+                            once your enrollment is confirmed — keep it somewhere safe.</>}
+                    </p>
                   </div>
-                )}
+                </div>
 
                 <button
                   onClick={handleContinue}

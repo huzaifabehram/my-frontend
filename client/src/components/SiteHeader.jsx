@@ -11,25 +11,37 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Menu, X, Search } from 'lucide-react';
+import { Menu, X, Search, ChevronDown } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useCourses } from '../context/CoursesContext';
 
 export default function SiteHeader() {
   const navigate = useNavigate();
   const { API: api } = useAuth();
-  const [siteLogoUrl, setSiteLogoUrl] = useState('');
-  // NEW: tracks whether the /settings fetch has resolved yet. Before it
-  // resolves we render an empty placeholder (same size as the logo) instead
-  // of the "Lerni" text fallback — this is what was causing the "Lerni text
-  // flashes for 2-3 seconds before the real logo loads" flicker: previously
-  // the text wordmark rendered immediately (siteLogoUrl still empty) and
-  // then got swapped for the image once the fetch resolved.
-  const [logoLoaded, setLogoLoaded] = useState(false);
+  const { courses } = useCourses();
+  // NEW: seed from localStorage (cached the last time ANY page fetched
+  // /settings) so the real logo can show immediately here too, instead of
+  // a blank gap every time you land on a new page. This is what was making
+  // the logo feel like it "loads after a delay" even after the earlier fix
+  // stopped it from flashing the wrong "Lerni" text first.
+  const [siteLogoUrl, setSiteLogoUrl] = useState(() => { try { return localStorage.getItem('lerni_header_logo_url') || ''; } catch { return ''; } });
+  // logoLoaded starts true if a cached value existed — only a genuinely
+  // first-ever visit (nothing cached anywhere yet) shows the blank
+  // placeholder while that first fetch is in flight.
+  const [logoLoaded, setLogoLoaded] = useState(() => { try { return localStorage.getItem('lerni_header_logo_url') !== null; } catch { return false; } });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  // NEW: the "Courses" tab in the mobile drawer now expands in place to
+  // list every course, instead of just navigating straight to the Courses
+  // page — tapping a course in that list is what actually navigates.
+  const [coursesExpanded, setCoursesExpanded] = useState(false);
 
   useEffect(() => {
     api.get('/settings')
-      .then((res) => setSiteLogoUrl(res.data?.logoUrl || ''))
+      .then((res) => {
+        const url = res.data?.logoUrl || '';
+        setSiteLogoUrl(url);
+        try { localStorage.setItem('lerni_header_logo_url', url); } catch { /* cache is a nice-to-have */ }
+      })
       .catch(() => {}) // logo is optional — falls back to the text wordmark
       .finally(() => setLogoLoaded(true));
   }, [api]);
@@ -83,7 +95,34 @@ export default function SiteHeader() {
                 <button onClick={() => setMobileMenuOpen(false)} className="p-2 hover:bg-white/10 rounded-lg transition bg-transparent border-none cursor-pointer text-white"><X size={24} /></button>
               </div>
               <button onClick={() => handleNavigate('/')} className="block w-full text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base">Home</button>
-              <button onClick={() => handleNavigate('/courses')} className="block w-full text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base">Categories</button>
+              {/* NEW: Courses — expands in place to list every course; tapping
+                  a course navigates straight to its course page. */}
+              <div>
+                <button
+                  onClick={() => setCoursesExpanded(!coursesExpanded)}
+                  className="flex w-full items-center justify-between text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base"
+                >
+                  Courses
+                  <ChevronDown size={16} className={`transition-transform ${coursesExpanded ? 'rotate-180' : ''}`} />
+                </button>
+                {coursesExpanded && (
+                  <div className="pl-3 pb-1 space-y-1 max-h-64 overflow-y-auto">
+                    {courses && courses.length > 0 ? (
+                      courses.map((c) => (
+                        <button
+                          key={c._id || c.id}
+                          onClick={() => handleNavigate(`/course/${c._id || c.id}`)}
+                          className="block w-full text-left text-white/80 hover:text-[#f0a070] bg-transparent border-none cursor-pointer px-3 py-2 rounded-lg hover:bg-white/5 text-sm transition truncate"
+                        >
+                          {c.title}
+                        </button>
+                      ))
+                    ) : (
+                      <p className="text-white/50 text-sm px-3 py-2">No courses yet.</p>
+                    )}
+                  </div>
+                )}
+              </div>
               <button onClick={() => handleNavigate('/services')} className="block w-full text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base">Services</button>
               <button onClick={() => handleNavigate('/instructor')} className="block w-full text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base">Instructor</button>
               <button onClick={() => handleNavigate('/about')} className="block w-full text-left text-white hover:text-[#f0a070] bg-transparent border-none cursor-pointer p-3 rounded-lg hover:bg-white/5 font-medium transition text-base">About</button>

@@ -194,7 +194,7 @@
 //            3-tab FAQ-style accordion (About / Policies / Contact Us, chevron flips open↔closed);
 //            added a newsletter box outside the tabs that posts to the backend.
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useLocation } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Volume2, VolumeX, ArrowLeft } from 'lucide-react';
 import { useCourses } from '../context/CoursesContext';
 import { useAuth } from '../context/AuthContext';
@@ -1133,6 +1133,7 @@ function PreviewVideoWithTracking({ url, course, lecture }) {
 
 export default function CourseLandingPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { id }   = useParams();
   const { courses, loading, getCourse, fetchCourseById } = useCourses();
   const { API: api, user } = useAuth();
@@ -1167,12 +1168,20 @@ export default function CourseLandingPage() {
   const [instructorVideoStartIndex, setInstructorVideoStartIndex] = useState(0);
 
   // ── FOOTER — site logo (Super Admin → Settings), FAQ accordion, newsletter ──
-  const [siteLogoUrl, setSiteLogoUrl] = useState('');       // header logo
-  const [footerLogoUrl, setFooterLogoUrl] = useState('');   // NEW CHANGE AK: separate footer logo
-  // NEW: same fix as SiteHeader.jsx/SiteFooter.jsx — don't show the "Lerni"
-  // text wordmark until we actually know whether a real logo is set, so it
-  // no longer flashes on screen before getting swapped for the real logo.
-  const [logoLoaded, setLogoLoaded] = useState(false);
+  // NEW: initialize from localStorage (cached from whichever page fetched
+  // /settings most recently) so the real logo can show INSTANTLY on this
+  // page too, instead of always waiting on a fresh network round-trip. This
+  // is what was making the logo feel like it "loads after a delay" every
+  // time you moved between pages — each page used to start from blank every
+  // time. We still re-fetch in the background below to catch any change.
+  const [siteLogoUrl, setSiteLogoUrl] = useState(() => { try { return localStorage.getItem('lerni_header_logo_url') || ''; } catch { return ''; } });
+  const [footerLogoUrl, setFooterLogoUrl] = useState(() => { try { return localStorage.getItem('lerni_footer_logo_url') || ''; } catch { return ''; } });
+  // logoLoaded starts true if we had a cached value to show immediately;
+  // only a first-ever visit (nothing cached yet) shows the blank placeholder
+  // while the very first fetch is in flight.
+  const [logoLoaded, setLogoLoaded] = useState(() => {
+    try { return localStorage.getItem('lerni_header_logo_url') !== null || localStorage.getItem('lerni_footer_logo_url') !== null; } catch { return false; }
+  });
   const [openFooterTab, setOpenFooterTab] = useState(null); // 'about' | 'policies' | 'contact' | null
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterStatus, setNewsletterStatus] = useState('idle'); // idle | sending | sent | error
@@ -1180,8 +1189,14 @@ export default function CourseLandingPage() {
   useEffect(() => {
     api.get('/settings')
       .then((res) => {
-        setSiteLogoUrl(res.data?.logoUrl || '');
-        setFooterLogoUrl(res.data?.footerLogoUrl || '');
+        const header = res.data?.logoUrl || '';
+        const footer = res.data?.footerLogoUrl || '';
+        setSiteLogoUrl(header);
+        setFooterLogoUrl(footer);
+        try {
+          localStorage.setItem('lerni_header_logo_url', header);
+          localStorage.setItem('lerni_footer_logo_url', footer);
+        } catch { /* storage unavailable — cache is a nice-to-have, not required */ }
       })
       .catch(() => {}) // logo is optional — falls back to the text wordmark
       .finally(() => setLogoLoaded(true));
@@ -1313,6 +1328,13 @@ export default function CourseLandingPage() {
     setMobileMenuOpen(false);
   }, [courseData, navigate]);
 
+  // NEW: opening the Free Lecture Preview modal now pushes an extra history
+  // entry on the SAME course page. Previously nothing was pushed here, so
+  // pressing the browser Back button while the preview was open just fell
+  // through to whatever page came before this course page in history (the
+  // Courses page, most of the time) — instead of simply closing the preview
+  // and staying on this course. Pushing a marked entry means Back pops that
+  // entry first (handled by the effect below, and by handleClosePreview).
   const handlePreviewClick  = () => {
     setCurrentVideo(courseData?.previewVideoUrl || '');
     setActivePreviewLecture({
@@ -1321,17 +1343,36 @@ export default function CourseLandingPage() {
       title: `${courseData?.title || 'Course'} Preview`,
     });
     setIsPreviewOpen(true);
+    navigate(location.pathname + location.search, { state: { ...(location.state || {}), coursePreviewOpen: true } });
   };
   const handleClosePreview  = () => {
     setIsPreviewOpen(false);
     setCurrentVideo('');
     setActivePreviewLecture(null);
+    // Pop the history entry we pushed when opening, if we're still on it —
+    // keeps Back/Forward in sync with an explicit close (via the X button
+    // or Escape), not just a browser Back press.
+    if (location.state?.coursePreviewOpen) navigate(-1);
   };
   const handleLectureClick  = (lecture) => {
     setCurrentVideo(lecture.videoUrl);
     setActivePreviewLecture(lecture);
     setIsPreviewOpen(true);
+    navigate(location.pathname + location.search, { state: { ...(location.state || {}), coursePreviewOpen: true } });
   };
+
+  // Detect a browser Back/Forward press that leaves the "preview open"
+  // history entry (rather than an explicit close via the X/Escape above,
+  // which already closes the modal itself) and close the modal to match —
+  // this is what makes Back land back on this same course page instead of
+  // continuing on to wherever the visitor came from.
+  useEffect(() => {
+    if (isPreviewOpen && !location.state?.coursePreviewOpen) {
+      setIsPreviewOpen(false);
+      setCurrentVideo('');
+      setActivePreviewLecture(null);
+    }
+  }, [location]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const handleKeyDown = (e) => { if (e.key === 'Escape' && isPreviewOpen) handleClosePreview(); };

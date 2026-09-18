@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useCourses } from "../context/CoursesContext";
 import { enrollCourse } from "../api/courseApi";
 import SiteHeader from "../components/SiteHeader";
 import SiteFooter from "../components/SiteFooter";
@@ -17,6 +18,7 @@ export default function AuthPage({ mode = "login" }) {
   const navigate            = useNavigate();
   const [searchParams]      = useSearchParams();          // ← reads ?redirect=
   const { login, register } = useAuth();
+  const { courses }         = useCourses();
   const isLogin             = mode === "login";
 
   const [form, setForm] = useState({
@@ -139,8 +141,21 @@ export default function AuthPage({ mode = "login" }) {
   // Step 1. Otherwise (a generic visit to the login page) send them to
   // Courses, since picking a course to enroll in is how sign-up starts now.
   // Register mode itself is left reachable (e.g. for instructor sign-up).
+  // NEW: "Register free" (shown only in login mode) now sends the visitor
+  // back into the enrollment flow instead of this page's own register form.
+  // If we know which course they were trying to enroll in (courseId is in
+  // the URL — EnrolledPage.jsx's "Already have an account? Log In" link
+  // passes this), send them straight back to that course's enrollment
+  // Step 1. Otherwise (a generic visit to the login page, e.g. via the
+  // header's "Log In" button with no course in context) fall back to the
+  // first course in the catalog — the requirement is that this link always
+  // opens an enrollment page, never the Courses listing. Only if the
+  // catalog is completely empty does it fall back to Courses at all.
+  // Register mode itself is left reachable (e.g. for instructor sign-up).
   const courseIdParam = searchParams.get("courseId");
-  const registerFreeLink = courseIdParam ? `/course/${courseIdParam}/enroll` : "/courses";
+  const fallbackCourseId = courses && courses.length > 0 ? (courses[0]._id || courses[0].id) : null;
+  const targetCourseId = courseIdParam || fallbackCourseId;
+  const registerFreeLink = targetCourseId ? `/course/${targetCourseId}/enroll` : "/courses";
 
   return (
     <div className="min-h-screen bg-[#FDFAF6] flex flex-col" style={{ fontFamily: "'DM Sans', sans-serif" }}>
