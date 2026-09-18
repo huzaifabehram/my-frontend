@@ -45,6 +45,10 @@ export function normalizeCourse(raw, index) {
       type:     lec.type     || "video",
       preview:  Boolean(lec.free || lec.preview),
       videoUrl: lec.videoUrl || "",
+      // NEW: per-lecture downloadable resources (instructor-uploaded, via
+      // the Course editor) — was silently dropped here before, so the
+      // Resources tab in the Student Portal had nothing real to show.
+      resources: Array.isArray(lec.resources) ? lec.resources : [],
     }));
     return {
       _id:          sec._id || sec.id || Math.random().toString(36).slice(2),
