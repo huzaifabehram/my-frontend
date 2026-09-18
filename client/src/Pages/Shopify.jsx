@@ -195,7 +195,7 @@
 //            added a newsletter box outside the tabs that posts to the backend.
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router-dom';
-import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Volume2, VolumeX, ArrowLeft } from 'lucide-react';
+import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Volume2, ArrowLeft } from 'lucide-react';
 import { useCourses } from '../context/CoursesContext';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -571,6 +571,30 @@ function VideoPlayer({ url, className = "", isReelsStyle = false, autoPlay = fal
 // drift apart, however many items are passed in.
 // ─────────────────────────────────────────────────────────────────────────────
 function TwoColumnWaterfall({ items, itemHeight = 260, gap = 12, renderItem, baseDuration = 26, isPaused = false }) {
+  // NEW: pause the scroll animation whenever this section is scrolled out of
+  // the viewport, on top of the existing isPaused (lightbox open) check.
+  // Two of these run on the page (Student Testimonials + Video Reviews),
+  // each animating two columns — if both keep animating continuously even
+  // while off-screen (e.g. while a visitor is up at the hero, or inside the
+  // Free Lecture Preview overlay), that's continuous compositor work
+  // fighting with everything else on the page for the same frame budget,
+  // which is what was showing up as the announcement bar and other
+  // sections "hanging"/stuttering. Pausing off-screen sections frees that
+  // budget up for whatever's actually visible.
+  const containerRef = useRef(null);
+  const [inView, setInView] = useState(true);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      ([entry]) => setInView(entry.isIntersecting),
+      { threshold: 0.05 }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+  const effectivePaused = isPaused || !inView;
+
   const columns = useMemo(() => {
     if (items.length === 0) return [[], []];
     const colLen = Math.ceil(items.length / 2);
@@ -590,7 +614,7 @@ function TwoColumnWaterfall({ items, itemHeight = 260, gap = 12, renderItem, bas
   const capHeight = Math.round(viewportHeight * 0.24);
 
   return (
-    <div className="relative">
+    <div className="relative" ref={containerRef}>
       <style>{`
         @keyframes waterfall-scroll-down {
           0%   { transform: translateY(calc(-1 * var(--scroll-distance, 50%))); }
@@ -626,7 +650,7 @@ function TwoColumnWaterfall({ items, itemHeight = 260, gap = 12, renderItem, bas
                 style={{
                   gap: `${gap}px`,
                   animation: `waterfall-scroll-down ${baseDuration}s linear infinite`,
-                  animationPlayState: isPaused ? 'paused' : 'running',
+                  animationPlayState: effectivePaused ? 'paused' : 'running',
                   '--scroll-distance': `${oneCopyHeight}px`,
                   willChange: 'transform',
                 }}
@@ -692,36 +716,38 @@ function VideoReviewsSlider({ videoTestimonials, onCardClick, isPaused }) {
             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onCardClick(originalIndex); } }}
             className="w-full h-full rounded-xl overflow-hidden relative shadow-lg cursor-pointer group"
           >
+            {/* NEW: this tile used to embed a LIVE autoplaying YouTube
+                iframe (autoplay=1&loop=1) at all times, even while scrolled
+                off-screen — and with the waterfall's loop rendering each
+                testimonial twice, that meant several YouTube players
+                silently autoplaying simultaneously in the background the
+                entire time this page was open. That's exactly the kind of
+                thing that starves the main thread/GPU and shows up as
+                stutter everywhere else on the page (the announcement bar,
+                the scroll animation itself). Now this tile just shows
+                YouTube's own static thumbnail with a play button — the
+                actual video only ever loads/plays once the visitor taps it
+                (via onCardClick, which opens the real player below). */}
             {ytId ? (
-              // `object-cover` has no effect on <iframe> — CSS object-fit only
-              // applies to replaced elements like <img>/<video>. Without this,
-              // YouTube's own player letterboxes the video to fit the iframe's
-              // box, which reads as extra empty space at the edges of the
-              // tile (this was the "extra spacing at the bottom" bug). Fix:
-              // oversize the iframe and center+crop it manually, the same
-              // effect object-fit:cover would have given a real video element.
-              <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <iframe
-                  src={`https://www.youtube.com/embed/${ytId}?autoplay=1&mute=1&loop=1&playlist=${ytId}&controls=0&playsinline=1`}
-                  className="absolute top-1/2 left-1/2"
-                  style={{ border: 'none', width: '300%', height: '300%', transform: 'translate(-50%, -50%)' }}
-                  allow="autoplay; encrypted-media"
-                  title="Video testimonial"
-                />
-              </div>
+              <img
+                src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`}
+                alt="Video testimonial"
+                className="absolute inset-0 w-full h-full object-cover"
+                loading="lazy"
+              />
             ) : (
               <video
                 src={testimonial.videoUrl}
                 className="w-full h-full object-cover"
-                autoPlay
                 muted
-                loop
                 playsInline
                 preload="metadata"
               />
             )}
-            <div className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 flex items-center justify-center pointer-events-none">
-              <VolumeX size={14} className="text-white" />
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <div className="w-12 h-12 md:w-14 md:h-14 rounded-full bg-black/50 flex items-center justify-center group-hover:bg-black/70 transition">
+                <Play size={22} className="text-white ml-0.5" fill="white" />
+              </div>
             </div>
             <div className="absolute bottom-0 left-0 right-0 h-14 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
           </div>

@@ -36,18 +36,23 @@ import {
 // portal login, created inline when they confirm enrollment. This removes
 // the old detour through a separate /auth/register page after payment.
 
-// NEW: each method now lists one or more full accounts (bank/service name +
-// logo badge, account title, account number) instead of one crammed line of
+// NEW: each method lists one or more full accounts (bank/service name +
+// logo, account title, account number) instead of one crammed line of
 // "Bank Name • Account Title • Account #" — laid out on separate lines so
-// it's actually easy to read and copy from while making a transfer.
-const PAYMENT_METHODS = [
+// it's actually easy to read and copy from while making a transfer. The
+// `key` on each account matches a field from Super Admin → Settings, where
+// the real logo for each is uploaded (same Cloudinary flow as the header/
+// footer logo) — see the paymentLogos fetch below. If a logo hasn't been
+// uploaded yet, AccountLogo falls back to a colored initials badge instead
+// of a broken image.
+const PAYMENT_METHOD_DATA = [
   {
     id: 'bank',
     label: 'Bank Transfer',
     icon: Landmark,
     accounts: [
-      { name: 'United Bank Limited', short: 'UBL', color: '#024fa2', accountTitle: 'MOTIVIAM PRIVATE LIMITED', accountNumber: '397856471' },
-      { name: 'Allied Bank',         short: 'ABL', color: '#00693e', accountTitle: 'MOTIVIAM PRIVATE LIMITED', accountNumber: '0011195294040019' },
+      { key: 'ubl',    name: 'United Bank Limited', short: 'UBL', color: '#024fa2', accountTitle: 'MOTIVIAM PRIVATE LIMITED', accountNumber: '397856471' },
+      { key: 'allied', name: 'Allied Bank',         short: 'ABL', color: '#00693e', accountTitle: 'MOTIVIAM PRIVATE LIMITED', accountNumber: '0011195294040019' },
     ],
   },
   {
@@ -55,7 +60,7 @@ const PAYMENT_METHODS = [
     label: 'JazzCash',
     icon: Smartphone,
     accounts: [
-      { name: 'JazzCash', short: 'JC', color: '#d8232a', accountTitle: 'Huzaifa Behram', accountNumber: '0324-5463513' },
+      { key: 'jazzcash', name: 'JazzCash', short: 'JC', color: '#d8232a', accountTitle: 'Huzaifa Behram', accountNumber: '0324-5463513' },
     ],
   },
   {
@@ -63,10 +68,35 @@ const PAYMENT_METHODS = [
     label: 'Easypaisa',
     icon: Smartphone,
     accounts: [
-      { name: 'Easypaisa', short: 'EP', color: '#00a651', accountTitle: 'Huzaifa Behram', accountNumber: '0344-6199712' },
+      { key: 'easypaisa', name: 'Easypaisa', short: 'EP', color: '#00a651', accountTitle: 'Huzaifa Behram', accountNumber: '0344-6199712' },
     ],
   },
 ];
+
+// Renders the real uploaded logo (passed in as `logoUrl`, fetched from
+// Super Admin → Settings); if it's missing or fails to load, falls back to
+// a colored initials badge instead of a broken image icon.
+function AccountLogo({ acc, logoUrl }) {
+  const [imgErr, setImgErr] = useState(false);
+  if (logoUrl && !imgErr) {
+    return (
+      <img
+        src={logoUrl}
+        alt={acc.name}
+        className="w-9 h-9 rounded-lg object-contain bg-white border border-[#ece6dd] flex-shrink-0 p-1"
+        onError={() => setImgErr(true)}
+      />
+    );
+  }
+  return (
+    <span
+      className="w-9 h-9 rounded-lg flex items-center justify-center text-white text-[10px] font-extrabold flex-shrink-0"
+      style={{ backgroundColor: acc.color }}
+    >
+      {acc.short}
+    </span>
+  );
+}
 
 export default function EnrolledPage() {
   const navigate = useNavigate();
@@ -87,6 +117,41 @@ export default function EnrolledPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const fileInputRef = useRef(null);
+
+  // NEW: real payment-method logos, uploaded from Super Admin → Settings
+  // (same Cloudinary flow as the header/footer logo) instead of bundled
+  // static image files. Seeded from localStorage so they show instantly on
+  // return visits — same caching pattern as the header/footer logo — then
+  // refreshed in the background in case they've changed.
+  const [paymentLogos, setPaymentLogos] = useState(() => {
+    try {
+      return {
+        ubl:       localStorage.getItem('lerni_payment_logo_ubl')       || '',
+        allied:    localStorage.getItem('lerni_payment_logo_allied')    || '',
+        jazzcash:  localStorage.getItem('lerni_payment_logo_jazzcash')  || '',
+        easypaisa: localStorage.getItem('lerni_payment_logo_easypaisa') || '',
+      };
+    } catch { return { ubl: '', allied: '', jazzcash: '', easypaisa: '' }; }
+  });
+  useEffect(() => {
+    api.get('/settings')
+      .then((res) => {
+        const next = {
+          ubl:       res.data?.paymentLogoUbl       || '',
+          allied:    res.data?.paymentLogoAllied    || '',
+          jazzcash:  res.data?.paymentLogoJazzcash  || '',
+          easypaisa: res.data?.paymentLogoEasypaisa || '',
+        };
+        setPaymentLogos(next);
+        try {
+          localStorage.setItem('lerni_payment_logo_ubl', next.ubl);
+          localStorage.setItem('lerni_payment_logo_allied', next.allied);
+          localStorage.setItem('lerni_payment_logo_jazzcash', next.jazzcash);
+          localStorage.setItem('lerni_payment_logo_easypaisa', next.easypaisa);
+        } catch { /* cache is a nice-to-have */ }
+      })
+      .catch(() => {}); // logos are optional — falls back to colored initials
+  }, [api]);
 
   // Prefill from the logged-in account, if any — same fields still editable.
   useEffect(() => {
@@ -411,7 +476,7 @@ export default function EnrolledPage() {
                 </p>
 
                 <div className="space-y-3">
-                  {PAYMENT_METHODS.map((m) => {
+                  {PAYMENT_METHOD_DATA.map((m) => {
                     const MIcon = m.icon;
                     const selected = paymentMethod === m.id;
                     return (
@@ -441,17 +506,15 @@ export default function EnrolledPage() {
                             {m.accounts.map((acc, i) => (
                               <div key={i} className="bg-white border border-[#ece6dd] rounded-lg p-3">
                                 <div className="flex items-center gap-2 mb-2 pb-2 border-b border-[#f0ebe3]">
-                                  <span
-                                    className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-[10px] font-extrabold flex-shrink-0"
-                                    style={{ backgroundColor: acc.color }}
-                                  >
-                                    {acc.short}
-                                  </span>
+                                  <AccountLogo acc={acc} logoUrl={paymentLogos[acc.key]} />
                                   <span className="font-bold text-[#1a1208] text-sm">{acc.name}</span>
                                 </div>
-                                <div className="space-y-1 text-xs md:text-sm">
+                                <div className="space-y-1.5 text-xs md:text-sm">
                                   <p><span className="text-[#9e9789]">Account Title: </span><span className="font-semibold text-[#3d3020]">{acc.accountTitle}</span></p>
-                                  <p><span className="text-[#9e9789]">Account Number: </span><span className="font-semibold text-[#1a1208] font-mono">{acc.accountNumber}</span></p>
+                                  {/* NEW: account number made bold and a size
+                                      larger — it's the number people actually
+                                      need to copy, so it should stand out. */}
+                                  <p><span className="text-[#9e9789]">Account Number: </span><span className="font-bold text-[#1a1208] font-mono text-sm md:text-base">{acc.accountNumber}</span></p>
                                 </div>
                               </div>
                             ))}

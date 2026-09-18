@@ -534,10 +534,18 @@ function CoursesPage({ courses, loading }) {
 // PAGE: SETTINGS — site logo upload (Cloudinary)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// NEW CHANGE AK: one small reusable upload box, used twice below — once for
-// the header logo, once for the footer logo. Each posts to the same
-// /admin/settings/logo endpoint with a different `target` so the backend
-// knows which of the two slots to update.
+// NEW CHANGE AK: one small reusable upload box, used for the header logo,
+// footer logo, and now the four payment-method logos too. Each posts to the
+// same /admin/settings/logo endpoint with a different `target` so the
+// backend knows which slot to update.
+const SETTINGS_FIELD_BY_TARGET = {
+  header:            "logoUrl",
+  footer:             "footerLogoUrl",
+  payment_ubl:        "paymentLogoUbl",
+  payment_allied:     "paymentLogoAllied",
+  payment_jazzcash:   "paymentLogoJazzcash",
+  payment_easypaisa:  "paymentLogoEasypaisa",
+};
 function LogoUploadBox({ toast, target, label, description, initialUrl, onUploaded }) {
   const { API: api } = useAuth();
   const [preview, setPreview] = useState("");
@@ -556,7 +564,7 @@ function LogoUploadBox({ toast, target, label, description, initialUrl, onUpload
       formData.append("image", file);
       formData.append("target", target);
       const res = await api.post("/admin/settings/logo", formData);
-      const url = target === "footer" ? res.data?.footerLogoUrl : res.data?.logoUrl;
+      const url = res.data?.[SETTINGS_FIELD_BY_TARGET[target] || "logoUrl"];
       if (!url) { toast("Upload succeeded but no URL returned.", "error"); return; }
       onUploaded(url);
       toast(`${label} updated.`, "success");
@@ -608,6 +616,10 @@ function SettingsPage({ toast }) {
   const { API: api } = useAuth();
   const [logoUrl, setLogoUrl] = useState("");
   const [footerLogoUrl, setFooterLogoUrl] = useState("");
+  const [paymentLogoUbl, setPaymentLogoUbl] = useState("");
+  const [paymentLogoAllied, setPaymentLogoAllied] = useState("");
+  const [paymentLogoJazzcash, setPaymentLogoJazzcash] = useState("");
+  const [paymentLogoEasypaisa, setPaymentLogoEasypaisa] = useState("");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -615,6 +627,10 @@ function SettingsPage({ toast }) {
       .then((res) => {
         setLogoUrl(res.data?.logoUrl || "");
         setFooterLogoUrl(res.data?.footerLogoUrl || "");
+        setPaymentLogoUbl(res.data?.paymentLogoUbl || "");
+        setPaymentLogoAllied(res.data?.paymentLogoAllied || "");
+        setPaymentLogoJazzcash(res.data?.paymentLogoJazzcash || "");
+        setPaymentLogoEasypaisa(res.data?.paymentLogoEasypaisa || "");
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -645,6 +661,43 @@ function SettingsPage({ toast }) {
             description="Shown in the footer only. Use a transparent-background version here if the header logo has a white background — it'll blend into the dark footer instead of showing as a white box."
             initialUrl={footerLogoUrl}
             onUploaded={setFooterLogoUrl}
+          />
+
+          <div className="pt-2">
+            <h3 className="font-bold text-gray-800 text-sm sm:text-base">Payment Method Logos</h3>
+            <p className="text-xs sm:text-sm text-gray-500 mt-0.5 mb-3">Shown on the Enrollment page next to each payment option.</p>
+          </div>
+          <LogoUploadBox
+            toast={toast}
+            target="payment_ubl"
+            label="United Bank Limited Logo"
+            description="Shown next to the United Bank Limited account under Bank Transfer on the Enrollment page."
+            initialUrl={paymentLogoUbl}
+            onUploaded={setPaymentLogoUbl}
+          />
+          <LogoUploadBox
+            toast={toast}
+            target="payment_allied"
+            label="Allied Bank Logo"
+            description="Shown next to the Allied Bank account under Bank Transfer on the Enrollment page."
+            initialUrl={paymentLogoAllied}
+            onUploaded={setPaymentLogoAllied}
+          />
+          <LogoUploadBox
+            toast={toast}
+            target="payment_jazzcash"
+            label="JazzCash Logo"
+            description="Shown next to the JazzCash payment option on the Enrollment page."
+            initialUrl={paymentLogoJazzcash}
+            onUploaded={setPaymentLogoJazzcash}
+          />
+          <LogoUploadBox
+            toast={toast}
+            target="payment_easypaisa"
+            label="Easypaisa Logo"
+            description="Shown next to the Easypaisa payment option on the Enrollment page."
+            initialUrl={paymentLogoEasypaisa}
+            onUploaded={setPaymentLogoEasypaisa}
           />
         </>
       )}
