@@ -645,31 +645,28 @@ function TwoColumnWaterfall({ items, itemHeight = 260, gap = 12, renderItem, bas
           );
         })}
 
-        {/* PROGRESSIVE BLUR CAPS — a real blur (not just opacity) that fades in as
-            content approaches each edge and fades back out toward the center, so
-            content genuinely transitions sharp → blurred → gone, not a hard cut.
-            Implemented as a backdrop-blur layer whose own alpha is masked by a
-            gradient, so the blur strength itself tapers smoothly with distance
-            from the edge instead of applying uniformly. Sits above the columns
-            but is pointer-events-none so clicks still reach the tiles underneath. */}
+        {/* EDGE FADE — was a backdrop-blur layer before, but backdrop-filter
+            has to be recomputed every single frame while the content behind
+            it is actively moving (it can't be cached like a normal blur),
+            and with two of these waterfalls plus the marquee bar all
+            animating at once, that was the main cause of the whole page
+            feeling like it was hanging/stuttering while scrolling — not
+            just this section, but the announcement bar too, since it was
+            eating the browser's whole rendering budget. A plain gradient
+            fade (mask only, no backdrop-blur) looks close enough and costs
+            almost nothing to render. */}
         <div
           className="absolute top-0 left-0 right-0 pointer-events-none"
           style={{
             height: `${capHeight}px`,
-            backdropFilter: 'blur(6px)',
-            WebkitBackdropFilter: 'blur(6px)',
-            WebkitMaskImage: 'linear-gradient(to bottom, black 0%, transparent 100%)',
-            maskImage: 'linear-gradient(to bottom, black 0%, transparent 100%)',
+            background: 'linear-gradient(to bottom, #FDFAF6 0%, transparent 100%)',
           }}
         />
         <div
           className="absolute bottom-0 left-0 right-0 pointer-events-none"
           style={{
             height: `${capHeight}px`,
-            backdropFilter: 'blur(6px)',
-            WebkitBackdropFilter: 'blur(6px)',
-            WebkitMaskImage: 'linear-gradient(to top, black 0%, transparent 100%)',
-            maskImage: 'linear-gradient(to top, black 0%, transparent 100%)',
+            background: 'linear-gradient(to top, #FDFAF6 0%, transparent 100%)',
           }}
         />
       </div>
@@ -1332,13 +1329,19 @@ export default function CourseLandingPage() {
     setMobileMenuOpen(false);
   }, [courseData, navigate]);
 
-  // NEW: opening the Free Lecture Preview modal now pushes an extra history
-  // entry on the SAME course page. Previously nothing was pushed here, so
-  // pressing the browser Back button while the preview was open just fell
-  // through to whatever page came before this course page in history (the
-  // Courses page, most of the time) — instead of simply closing the preview
-  // and staying on this course. Pushing a marked entry means Back pops that
-  // entry first (handled by the effect below, and by handleClosePreview).
+  // NEW: opening the Free Lecture Preview modal for the first time pushes an
+  // extra history entry on the SAME course page. Previously nothing was
+  // pushed here, so pressing the browser Back button while the preview was
+  // open just fell through to whatever page came before this course page in
+  // history (the Courses page, most of the time) — instead of simply
+  // closing the preview and staying on this course. Pushing a marked entry
+  // means Back pops that entry first (handled by the effect below, and by
+  // handleClosePreview). The `if (!location.state?.coursePreviewOpen)` guard
+  // on both handlers below is important: it makes sure switching between
+  // lectures while the preview is ALREADY open just swaps the video in
+  // place, instead of pushing ANOTHER history entry per lecture — which was
+  // the bug where clicking through 3 lectures meant pressing Back 3 times to
+  // get back to the course page instead of once.
   const handlePreviewClick  = () => {
     setCurrentVideo(courseData?.previewVideoUrl || '');
     setActivePreviewLecture({
@@ -1347,22 +1350,26 @@ export default function CourseLandingPage() {
       title: `${courseData?.title || 'Course'} Preview`,
     });
     setIsPreviewOpen(true);
-    navigate(location.pathname + location.search, { state: { ...(location.state || {}), coursePreviewOpen: true } });
+    if (!location.state?.coursePreviewOpen) {
+      navigate(location.pathname + location.search, { state: { ...(location.state || {}), coursePreviewOpen: true } });
+    }
   };
   const handleClosePreview  = () => {
     setIsPreviewOpen(false);
     setCurrentVideo('');
     setActivePreviewLecture(null);
-    // Pop the history entry we pushed when opening, if we're still on it —
-    // keeps Back/Forward in sync with an explicit close (via the X button
-    // or Escape), not just a browser Back press.
+    // Pop the ONE history entry we pushed when opening, if we're still on
+    // it — keeps Back/Forward in sync with an explicit close (via the X
+    // button or Escape), not just a browser Back press.
     if (location.state?.coursePreviewOpen) navigate(-1);
   };
   const handleLectureClick  = (lecture) => {
     setCurrentVideo(lecture.videoUrl);
     setActivePreviewLecture(lecture);
     setIsPreviewOpen(true);
-    navigate(location.pathname + location.search, { state: { ...(location.state || {}), coursePreviewOpen: true } });
+    if (!location.state?.coursePreviewOpen) {
+      navigate(location.pathname + location.search, { state: { ...(location.state || {}), coursePreviewOpen: true } });
+    }
   };
 
   // Detect a browser Back/Forward press that leaves the "preview open"
@@ -1957,7 +1964,7 @@ export default function CourseLandingPage() {
                   </span>
                 )}
                 {courseData.level && (
-                  <span className="inline-block bg-[#e8540a] text-white font-semibold px-3 md:px-4 py-1.5 md:py-2 rounded text-sm">{courseData.level}</span>
+                  <span className="inline-block bg-[#e8540a] text-white font-semibold px-3 md:px-4 py-1.5 md:py-2 rounded text-sm">Beginner to Advanced</span>
                 )}
               </div>
               <h1 className="text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-bold text-white mb-3 md:mb-4 leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>{courseData.title}</h1>

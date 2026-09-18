@@ -36,24 +36,35 @@ import {
 // portal login, created inline when they confirm enrollment. This removes
 // the old detour through a separate /auth/register page after payment.
 
+// NEW: each method now lists one or more full accounts (bank/service name +
+// logo badge, account title, account number) instead of one crammed line of
+// "Bank Name • Account Title • Account #" — laid out on separate lines so
+// it's actually easy to read and copy from while making a transfer.
 const PAYMENT_METHODS = [
   {
     id: 'bank',
     label: 'Bank Transfer',
     icon: Landmark,
-    detail: 'Bank Alfalah • Account Title: Let\'s Grow • Account #: 8318-1010223870',
+    accounts: [
+      { name: 'United Bank Limited', short: 'UBL', color: '#024fa2', accountTitle: 'MOTIVIAM PRIVATE LIMITED', accountNumber: '397856471' },
+      { name: 'Allied Bank',         short: 'ABL', color: '#00693e', accountTitle: 'MOTIVIAM PRIVATE LIMITED', accountNumber: '0011195294040019' },
+    ],
   },
   {
     id: 'jazzcash',
     label: 'JazzCash',
     icon: Smartphone,
-    detail: 'Send to: 0324-5463513 • Account Title: Huzaifa Behram',
+    accounts: [
+      { name: 'JazzCash', short: 'JC', color: '#d8232a', accountTitle: 'Huzaifa Behram', accountNumber: '0324-5463513' },
+    ],
   },
   {
     id: 'easypaisa',
     label: 'Easypaisa',
     icon: Smartphone,
-    detail: 'Send to: 0344-6199712 • Account Title: Huzaifa Behram',
+    accounts: [
+      { name: 'Easypaisa', short: 'EP', color: '#00a651', accountTitle: 'Huzaifa Behram', accountNumber: '0344-6199712' },
+    ],
   },
 ];
 
@@ -404,25 +415,49 @@ export default function EnrolledPage() {
                     const MIcon = m.icon;
                     const selected = paymentMethod === m.id;
                     return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => setPaymentMethod(m.id)}
-                        className={`w-full text-left border rounded-xl p-4 flex items-start gap-3 transition cursor-pointer ${
-                          selected ? 'border-[#e8540a] bg-[#fdf2ea]' : 'border-[#ece6dd] bg-white hover:border-[#ddd5c4]'
-                        }`}
-                      >
-                        <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${selected ? 'bg-[#e8540a] text-white' : 'bg-[#f0ebe3] text-[#9e9789]'}`}>
-                          <MIcon size={18} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <p className="font-bold text-[#1a1208] text-sm md:text-base">{m.label}</p>
-                          {selected && <p className="text-xs md:text-sm text-[#6b5e4e] mt-1 break-words">{m.detail}</p>}
-                        </div>
-                        <div className={`w-5 h-5 rounded-full border-2 flex-shrink-0 mt-1 flex items-center justify-center ${selected ? 'border-[#e8540a]' : 'border-[#ddd5c4]'}`}>
-                          {selected && <div className="w-2.5 h-2.5 rounded-full bg-[#e8540a]" />}
-                        </div>
-                      </button>
+                      <div key={m.id}>
+                        <button
+                          type="button"
+                          onClick={() => setPaymentMethod(m.id)}
+                          className={`w-full text-left border rounded-xl p-4 flex items-center gap-3 transition cursor-pointer ${
+                            selected ? 'border-[#e8540a] bg-[#fdf2ea] rounded-b-none border-b-0' : 'border-[#ece6dd] bg-white hover:border-[#ddd5c4]'
+                          }`}
+                        >
+                          <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${selected ? 'bg-[#e8540a] text-white' : 'bg-[#f0ebe3] text-[#9e9789]'}`}>
+                            <MIcon size={18} />
+                          </div>
+                          <p className="font-bold text-[#1a1208] text-sm md:text-base flex-1">{m.label}</p>
+                          <div className={`w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${selected ? 'border-[#e8540a]' : 'border-[#ddd5c4]'}`}>
+                            {selected && <div className="w-2.5 h-2.5 rounded-full bg-[#e8540a]" />}
+                          </div>
+                        </button>
+
+                        {/* Account details — each on its own line (name/logo,
+                            account title, account number), instead of the
+                            old single crammed line. "Bank Transfer" lists
+                            both accounts; JazzCash/Easypaisa list their one. */}
+                        {selected && (
+                          <div className="border border-t-0 border-[#e8540a] bg-[#fdf2ea] rounded-b-xl px-4 pb-4 pt-1 space-y-3">
+                            {m.accounts.map((acc, i) => (
+                              <div key={i} className="bg-white border border-[#ece6dd] rounded-lg p-3">
+                                <div className="flex items-center gap-2 mb-2 pb-2 border-b border-[#f0ebe3]">
+                                  <span
+                                    className="w-8 h-8 rounded-lg flex items-center justify-center text-white text-[10px] font-extrabold flex-shrink-0"
+                                    style={{ backgroundColor: acc.color }}
+                                  >
+                                    {acc.short}
+                                  </span>
+                                  <span className="font-bold text-[#1a1208] text-sm">{acc.name}</span>
+                                </div>
+                                <div className="space-y-1 text-xs md:text-sm">
+                                  <p><span className="text-[#9e9789]">Account Title: </span><span className="font-semibold text-[#3d3020]">{acc.accountTitle}</span></p>
+                                  <p><span className="text-[#9e9789]">Account Number: </span><span className="font-semibold text-[#1a1208] font-mono">{acc.accountNumber}</span></p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
