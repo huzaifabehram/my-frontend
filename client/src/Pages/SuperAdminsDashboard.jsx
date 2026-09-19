@@ -186,6 +186,7 @@ const NAV_ITEMS = [
   { to: "/superadmin/courses",      label: "Courses",       icon: "📚" },
   { to: "/superadmin/verifications", label: "Verifications", icon: "🧾", badge: true },
   { to: "/superadmin/messages",     label: "Messages",      icon: "✉️" },
+  { to: "/superadmin/automation",   label: "Automation Workflow", icon: "⚡" },
   { to: "/superadmin/settings",     label: "Settings",      icon: "⚙️" },
 ];
 
@@ -612,6 +613,339 @@ function LogoUploadBox({ toast, target, label, description, initialUrl, onUpload
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTOMATION WORKFLOW — Super Admin panel
+// ─────────────────────────────────────────────────────────────────────────────
+// A real, working GoHighLevel-style automation builder scoped to the events
+// that actually happen on this platform. Triggers fire from real backend
+// events (see server.js: runWorkflows() calls in registration, enrollment,
+// verify/reject, progress/mark, contact, newsletter). Actions: send an
+// email (real SMTP send if the server has SMTP_* env vars configured —
+// otherwise skipped and logged, never faked), call a webhook (POSTs the
+// trigger's data to any URL — this is the bridge to WhatsApp/SMS/Zapier/
+// Make/n8n providers without needing their credentials here), add/remove a
+// tag on the student, create a real in-app notification, or wait/delay
+// (genuinely pauses and resumes later, not an instant no-op).
+
+const TRIGGER_LABELS = {
+  student_registered:     "Student Registered",
+  enrollment_created:     "Enrollment Created (Payment Pending)",
+  payment_verified:       "Payment Verified",
+  payment_rejected:       "Payment Rejected",
+  lecture_completed:      "Lecture Completed",
+  course_completed:       "Course Completed",
+  contact_form_submitted: "Contact Form Submitted",
+  newsletter_subscribed:  "Newsletter Subscribed",
+};
+
+const ACTION_LABELS = {
+  send_email:  "Send Email",
+  webhook:     "Call Webhook",
+  add_tag:     "Add Tag",
+  remove_tag:  "Remove Tag",
+  notify:      "Send In-App Notification",
+  delay:       "Wait / Delay",
+};
+
+// Fields available on the trigger's context object — used for condition
+// pickers and shown as a hint for the {{field}} syntax in email/notify text.
+const CONTEXT_FIELDS = ["studentName", "studentEmail", "courseTitle", "amount", "reason", "lectureId", "name", "email", "message"];
+
+function emptyStep(type) {
+  if (type === "condition") return { type: "condition", conditionField: "courseTitle", conditionOperator: "equals", conditionValue: "" };
+  return { type: "action", actionType: "notify", params: {} };
+}
+
+function WorkflowStepEditor({ step, index, total, meta, onChange, onChangeParam, onRemove, onMove }) {
+  return (
+    <div className="border border-gray-200 rounded-xl p-3 bg-gray-50">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-bold text-gray-500">Step {index + 1} — {step.type === "condition" ? "Condition" : "Action"}</span>
+        <div className="flex items-center gap-2">
+          <button onClick={() => onMove(-1)} disabled={index === 0} className="text-gray-400 hover:text-gray-700 disabled:opacity-30 text-xs px-1 bg-transparent border-none cursor-pointer">↑</button>
+          <button onClick={() => onMove(1)} disabled={index === total - 1} className="text-gray-400 hover:text-gray-700 disabled:opacity-30 text-xs px-1 bg-transparent border-none cursor-pointer">↓</button>
+          <button onClick={onRemove} className="text-red-400 hover:text-red-600 text-xs px-1 bg-transparent border-none cursor-pointer">✕ Remove</button>
+        </div>
+      </div>
+
+      {step.type === "condition" ? (
+        <div className="grid grid-cols-3 gap-2">
+          <select value={step.conditionField} onChange={(e) => onChange({ conditionField: e.target.value })} className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+            {CONTEXT_FIELDS.map((f) => <option key={f} value={f}>{f}</option>)}
+          </select>
+          <select value={step.conditionOperator} onChange={(e) => onChange({ conditionOperator: e.target.value })} className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+            <option value="equals">equals</option>
+            <option value="not_equals">not equals</option>
+            <option value="contains">contains</option>
+          </select>
+          <input value={step.conditionValue} onChange={(e) => onChange({ conditionValue: e.target.value })} placeholder="value" className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <select value={step.actionType} onChange={(e) => onChange({ actionType: e.target.value, params: {} })} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+            {(meta.actionTypes || []).map((t) => <option key={t} value={t}>{ACTION_LABELS[t] || t}</option>)}
+          </select>
+
+          {step.actionType === "send_email" && (
+            <>
+              {!meta.emailConfigured && <p className="text-[11px] text-amber-600">SMTP isn't configured on the server yet — this step will be skipped (and logged) until it is.</p>}
+              <input value={step.params.to || ""} onChange={(e) => onChangeParam("to", e.target.value)} placeholder="To (default: {{studentEmail}})" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+              <input value={step.params.subject || ""} onChange={(e) => onChangeParam("subject", e.target.value)} placeholder="Subject" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+              <textarea value={step.params.body || ""} onChange={(e) => onChangeParam("body", e.target.value)} placeholder="Body — use {{studentName}}, {{courseTitle}}, etc." rows={3} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs resize-none" />
+            </>
+          )}
+          {step.actionType === "webhook" && (
+            <input value={step.params.url || ""} onChange={(e) => onChangeParam("url", e.target.value)} placeholder="https://…  (Zapier / Make / n8n / your WhatsApp or SMS provider)" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+          )}
+          {(step.actionType === "add_tag" || step.actionType === "remove_tag") && (
+            <input value={step.params.tag || ""} onChange={(e) => onChangeParam("tag", e.target.value)} placeholder="Tag name" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+          )}
+          {step.actionType === "notify" && (
+            <>
+              <input value={step.params.title || ""} onChange={(e) => onChangeParam("title", e.target.value)} placeholder="Notification title" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+              <textarea value={step.params.message || ""} onChange={(e) => onChangeParam("message", e.target.value)} placeholder="Message — use {{studentName}}, {{courseTitle}}, etc." rows={2} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs resize-none" />
+            </>
+          )}
+          {step.actionType === "delay" && (
+            <input type="number" min="1" value={step.params.minutes || ""} onChange={(e) => onChangeParam("minutes", e.target.value)} placeholder="Minutes to wait" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WorkflowEditorModal({ workflow, meta, onClose, onSaved, toast }) {
+  const { API: api } = useAuth();
+  const [name, setName] = useState(workflow?.name || "");
+  const [trigger, setTrigger] = useState(workflow?.trigger || meta.triggers?.[0] || "");
+  const [active, setActive] = useState(workflow?.active !== false);
+  const [steps, setSteps] = useState(workflow?.steps?.map((s) => ({ ...s, params: { ...(s.params || {}) } })) || []);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    document.body.style.overflow = "hidden";
+    const handleKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", handleKey);
+    return () => { document.body.style.overflow = "unset"; window.removeEventListener("keydown", handleKey); };
+  }, [onClose]);
+
+  const addStep = (type) => setSteps((prev) => [...prev, emptyStep(type)]);
+  const updateStep = (i, patch) => setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
+  const updateStepParam = (i, key, value) => setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, params: { ...s.params, [key]: value } } : s)));
+  const removeStep = (i) => setSteps((prev) => prev.filter((_, idx) => idx !== i));
+  const moveStep = (i, dir) => setSteps((prev) => {
+    const next = [...prev];
+    const j = i + dir;
+    if (j < 0 || j >= next.length) return prev;
+    [next[i], next[j]] = [next[j], next[i]];
+    return next;
+  });
+
+  const save = async () => {
+    if (!name.trim()) { toast("Name is required", "error"); return; }
+    setSaving(true);
+    try {
+      const payload = { name: name.trim(), trigger, active, steps };
+      const res = workflow
+        ? await api.put(`/admin/workflows/${workflow._id}`, payload)
+        : await api.post("/admin/workflows", payload);
+      onSaved(res.data);
+    } catch (err) {
+      toast(err.response?.data?.message || "Failed to save workflow", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl p-5 sm:p-6 max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <h3 className="font-bold text-gray-900 mb-4">{workflow ? "Edit Workflow" : "New Workflow"}</h3>
+
+        <div className="space-y-4 mb-5">
+          <div>
+            <label className="block text-xs font-bold text-gray-600 mb-1">Name</label>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Welcome new students"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-600 mb-1">Trigger — when this workflow runs</label>
+            <select value={trigger} onChange={(e) => setTrigger(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-rose-500">
+              {(meta.triggers || []).map((t) => <option key={t} value={t}>{TRIGGER_LABELS[t] || t}</option>)}
+            </select>
+          </div>
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="w-4 h-4 accent-rose-600" />
+            <span className="text-sm text-gray-700">Active</span>
+          </label>
+        </div>
+
+        <div className="border-t border-gray-100 pt-4">
+          <p className="text-xs font-bold text-gray-600 mb-3">Steps — run in order, top to bottom. A Condition stops the workflow here if it doesn't match.</p>
+          <div className="space-y-3">
+            {steps.map((step, i) => (
+              <WorkflowStepEditor key={i} step={step} index={i} total={steps.length} meta={meta}
+                onChange={(patch) => updateStep(i, patch)}
+                onChangeParam={(key, value) => updateStepParam(i, key, value)}
+                onRemove={() => removeStep(i)}
+                onMove={(dir) => moveStep(i, dir)} />
+            ))}
+            {steps.length === 0 && <p className="text-xs text-gray-400 italic">No steps yet — add one below.</p>}
+          </div>
+          <div className="flex gap-2 mt-3">
+            <Btn variant="secondary" size="sm" onClick={() => addStep("condition")}>+ Condition</Btn>
+            <Btn variant="secondary" size="sm" onClick={() => addStep("action")}>+ Action</Btn>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-gray-100">
+          <Btn variant="secondary" onClick={onClose}>Cancel</Btn>
+          <Btn onClick={save} disabled={saving}>{saving ? "Saving…" : "Save Workflow"}</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AutomationWorkflowPage({ toast }) {
+  const { API: api } = useAuth();
+  const [workflows, setWorkflows] = useState([]);
+  const [meta, setMeta] = useState({ triggers: [], actionTypes: [], emailConfigured: false });
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null); // null | "new" | workflow object
+  const [historyFor, setHistoryFor] = useState(null);
+  const [runs, setRuns] = useState([]);
+  const [runsLoading, setRunsLoading] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([api.get("/admin/workflows"), api.get("/admin/workflows/meta")])
+      .then(([wRes, mRes]) => { setWorkflows(wRes.data || []); setMeta(mRes.data || {}); })
+      .catch(() => toast("Failed to load workflows", "error"))
+      .finally(() => setLoading(false));
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { load(); }, [load]);
+
+  const toggleActive = async (wf) => {
+    try {
+      const res = await api.put(`/admin/workflows/${wf._id}`, { active: !wf.active });
+      setWorkflows((prev) => prev.map((w) => (w._id === wf._id ? res.data : w)));
+    } catch { toast("Failed to update workflow", "error"); }
+  };
+
+  const deleteWorkflow = async (wf) => {
+    if (!window.confirm(`Delete "${wf.name}"? This can't be undone.`)) return;
+    try {
+      await api.delete(`/admin/workflows/${wf._id}`);
+      setWorkflows((prev) => prev.filter((w) => w._id !== wf._id));
+      toast("Workflow deleted", "success");
+    } catch { toast("Failed to delete workflow", "error"); }
+  };
+
+  const testRun = async (wf) => {
+    try {
+      await api.post(`/admin/workflows/${wf._id}/test`);
+      toast(`Test run completed for "${wf.name}" — check History for the log`, "success");
+      load();
+    } catch (err) { toast(err.response?.data?.message || "Test run failed", "error"); }
+  };
+
+  const openHistory = async (wf) => {
+    setHistoryFor(wf);
+    setRunsLoading(true);
+    try {
+      const res = await api.get(`/admin/workflows/${wf._id}/runs`);
+      setRuns(res.data || []);
+    } catch { toast("Failed to load run history", "error"); }
+    finally { setRunsLoading(false); }
+  };
+
+  return (
+    <div>
+      <SectionHeader title="Automation Workflow" action={<Btn onClick={() => setEditing("new")}>+ New Workflow</Btn>} />
+
+      {!meta.emailConfigured && (
+        <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
+          Email sending isn't configured on the server yet — add <code className="bg-amber-100 px-1 rounded">SMTP_HOST</code>, <code className="bg-amber-100 px-1 rounded">SMTP_PORT</code>, <code className="bg-amber-100 px-1 rounded">SMTP_USER</code>, <code className="bg-amber-100 px-1 rounded">SMTP_PASS</code> (and optionally <code className="bg-amber-100 px-1 rounded">SMTP_FROM</code>) to your server's .env to enable the "Send Email" action. Every other action — webhook, tags, in-app notifications, delay — already works without it.
+        </div>
+      )}
+
+      {loading ? (
+        <p className="text-sm text-gray-400">Loading…</p>
+      ) : workflows.length === 0 ? (
+        <EmptyState icon="⚡" title="No workflows yet"
+          body="Create your first automation — e.g. notify a student when their payment is rejected, or tag someone once they complete a course."
+          action={<Btn onClick={() => setEditing("new")}>+ New Workflow</Btn>} />
+      ) : (
+        <div className="space-y-3">
+          {workflows.map((wf) => (
+            <div key={wf._id} className="bg-white rounded-xl border border-gray-100 p-4 flex flex-col sm:flex-row sm:items-center gap-3 shadow-sm">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-bold text-gray-900">{wf.name}</p>
+                  <StatusBadge status={wf.active ? "active" : "suspended"} />
+                </div>
+                <p className="text-xs text-gray-500 mt-1">
+                  Trigger: {TRIGGER_LABELS[wf.trigger] || wf.trigger} • {wf.steps?.length || 0} step{(wf.steps?.length || 0) === 1 ? "" : "s"} • Ran {wf.runCount || 0} time{(wf.runCount || 0) === 1 ? "" : "s"}
+                  {wf.lastRunAt ? ` • last ${new Date(wf.lastRunAt).toLocaleString()}` : ""}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Btn variant="secondary" size="sm" onClick={() => toggleActive(wf)}>{wf.active ? "Pause" : "Activate"}</Btn>
+                <Btn variant="secondary" size="sm" onClick={() => testRun(wf)}>Test Run</Btn>
+                <Btn variant="secondary" size="sm" onClick={() => openHistory(wf)}>History</Btn>
+                <Btn variant="secondary" size="sm" onClick={() => setEditing(wf)}>Edit</Btn>
+                <Btn variant="danger" size="sm" onClick={() => deleteWorkflow(wf)}>Delete</Btn>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {editing && (
+        <WorkflowEditorModal
+          workflow={editing === "new" ? null : editing}
+          meta={meta}
+          onClose={() => setEditing(null)}
+          onSaved={(saved) => {
+            setWorkflows((prev) => (editing === "new" ? [saved, ...prev] : prev.map((w) => (w._id === saved._id ? saved : w))));
+            setEditing(null);
+            toast("Workflow saved", "success");
+          }}
+          toast={toast}
+        />
+      )}
+
+      {historyFor && (
+        <Modal title={`Run History — ${historyFor.name}`} onClose={() => setHistoryFor(null)}>
+          {runsLoading ? (
+            <p className="text-sm text-gray-500">Loading…</p>
+          ) : runs.length === 0 ? (
+            <p className="text-sm text-gray-500">No runs yet.</p>
+          ) : (
+            <div className="space-y-3 max-h-96 overflow-y-auto">
+              {runs.map((r) => (
+                <div key={r._id} className="border border-gray-100 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-1">
+                    <StatusBadge status={r.status === "success" ? "verified" : r.status === "failed" ? "rejected" : r.status === "waiting" ? "pending" : "draft"} />
+                    <span className="text-xs text-gray-400">{new Date(r.createdAt).toLocaleString()}</span>
+                  </div>
+                  {r.summary && <p className="text-xs font-semibold text-gray-700 mb-1">{r.summary}</p>}
+                  <ul className="text-xs text-gray-500 space-y-0.5">
+                    {(r.log || []).map((line, i) => <li key={i}>• {line}</li>)}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          )}
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 function SettingsPage({ toast }) {
   const { API: api } = useAuth();
   const [logoUrl, setLogoUrl] = useState("");
@@ -813,14 +1147,15 @@ function RejectReasonForm({ studentName, onCancel, onConfirm, busy }) {
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-600">
-        Let {studentName || "the student"} know why this payment couldn't be verified (optional, but helpful).
+        Let {studentName || "the student"} know why this payment couldn't be verified — this shows up on their
+        Student Portal, so be specific. A reason is required.
       </p>
       <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3}
-        placeholder="e.g. Screenshot doesn't match the amount due"
+        placeholder="e.g. Fake screenshot of payment, or screenshot doesn't match the amount due"
         className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-rose-500 resize-none" />
       <div className="flex gap-2 justify-end">
         <Btn variant="secondary" onClick={onCancel}>Cancel</Btn>
-        <Btn variant="danger" onClick={() => onConfirm(reason)} disabled={busy}>{busy ? "Rejecting…" : "Reject enrollment"}</Btn>
+        <Btn variant="danger" onClick={() => onConfirm(reason)} disabled={busy || !reason.trim()}>{busy ? "Rejecting…" : "Reject enrollment"}</Btn>
       </div>
     </div>
   );
@@ -910,8 +1245,8 @@ function VerificationsPage({ enrollments, verifyEnrollment, rejectEnrollment, to
                       </Btn>
                     </div>
                   )}
-                  {tab === "rejected" && e.rejectedReason && (
-                    <p className="text-xs text-red-500 italic">Reason: {e.rejectedReason}</p>
+                  {tab === "rejected" && e.rejectionReason && (
+                    <p className="text-xs text-red-500 italic">Reason: {e.rejectionReason}</p>
                   )}
                 </div>
               </div>
@@ -992,6 +1327,7 @@ export default function SuperAdminDashboard() {
           <Route path="courses" element={<CoursesPage courses={courses} loading={loading} />} />
           <Route path="verifications" element={<VerificationsPage enrollments={enrollments} verifyEnrollment={verifyEnrollment} rejectEnrollment={rejectEnrollment} toast={toast} />} />
           <Route path="messages" element={<MessagesPage />} />
+          <Route path="automation" element={<AutomationWorkflowPage toast={toast} />} />
           <Route path="settings" element={<SettingsPage toast={toast} />} />
           <Route path="*" element={<Navigate to="" replace />} />
         </Routes>
