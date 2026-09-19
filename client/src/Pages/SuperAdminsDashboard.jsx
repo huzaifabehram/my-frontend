@@ -19,8 +19,8 @@
 // the main dashboard's batched fetch.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import React, { useState, useEffect, useMemo, useCallback } from "react";
-import { Routes, Route, NavLink, useNavigate, Navigate } from "react-router-dom";
+import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { Routes, Route, NavLink, useNavigate, useParams, Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useSuperAdminData } from "../hooks/useSuperAdminData";
 
@@ -187,6 +187,7 @@ const NAV_ITEMS = [
   { to: "/superadmin/verifications", label: "Verifications", icon: "🧾", badge: true },
   { to: "/superadmin/messages",     label: "Messages",      icon: "✉️" },
   { to: "/superadmin/automation",   label: "Automation Workflow", icon: "⚡" },
+  { to: "/superadmin/pipeline",     label: "Pipeline",      icon: "📊" },
   { to: "/superadmin/settings",     label: "Settings",      icon: "⚙️" },
 ];
 
@@ -616,51 +617,113 @@ function LogoUploadBox({ toast, target, label, description, initialUrl, onUpload
 // ─────────────────────────────────────────────────────────────────────────────
 // AUTOMATION WORKFLOW — Super Admin panel
 // ─────────────────────────────────────────────────────────────────────────────
-// A real, working GoHighLevel-style automation builder scoped to the events
-// that actually happen on this platform. Triggers fire from real backend
-// events (see server.js: runWorkflows() calls in registration, enrollment,
-// verify/reject, progress/mark, contact, newsletter). Actions: send an
-// email (real SMTP send if the server has SMTP_* env vars configured —
-// otherwise skipped and logged, never faked), call a webhook (POSTs the
-// trigger's data to any URL — this is the bridge to WhatsApp/SMS/Zapier/
-// Make/n8n providers without needing their credentials here), add/remove a
-// tag on the student, create a real in-app notification, or wait/delay
-// (genuinely pauses and resumes later, not an instant no-op).
+// A real, working GoHighLevel-style automation builder scoped to events that
+// actually happen on this platform (see runWorkflows() call sites in
+// server.js). Each workflow gets its own full page (not a modal) —
+// /superadmin/automation/new or /superadmin/automation/:id — with a trigger
+// picker, an ordered action/condition list, Publish/Unpublish, a Test Run
+// button, and its run history on the same page.
+//
+// Honest capability notes (also shown inline in the UI where relevant):
+//   • send_email needs SMTP_* env vars on the server — shows a banner if unset
+//   • send_whatsapp needs WHATSAPP_PHONE_NUMBER_ID + WHATSAPP_ACCESS_TOKEN
+//     (Meta WhatsApp Cloud API) — same kind of banner
+//   • customer_replied only fires once your provider's inbound webhook is
+//     pointed at POST /api/inbound/message — it can't fire on its own
+//   • video_tracking, appointment triggers, and site-wide page-view
+//     tracking are NOT in the trigger list — they'd need features (%-watched
+//     tracking, a booking system, sitewide analytics calls) that don't exist
+//     on this platform yet, so they're left out rather than faked
 
 const TRIGGER_LABELS = {
-  student_registered:     "Student Registered",
-  enrollment_created:     "Enrollment Created (Payment Pending)",
-  payment_verified:       "Payment Verified",
-  payment_rejected:       "Payment Rejected",
-  lecture_completed:      "Lecture Completed",
-  course_completed:       "Course Completed",
-  contact_form_submitted: "Contact Form Submitted",
-  newsletter_subscribed:  "Newsletter Subscribed",
+  form_submitted:          "Form Submitted",
+  new_sign_up:             "New Sign Up",
+  enrollment_created:      "Enrollment Created (Payment Pending)",
+  payment_received:        "Payment Received",
+  offer_access_granted:    "Offer Access Granted",
+  payment_rejected:        "Payment Rejected",
+  lesson_started:          "Lesson Started",
+  lesson_completed:        "Lesson Completed",
+  category_started:        "Category Started",
+  category_completed:      "Category Completed",
+  newsletter_subscribed:   "Newsletter Subscribed",
+  opportunity_created:     "Opportunity Created",
+  opportunity_status_changed: "Opportunity Status Changed",
+  link_clicked:            "Link Clicked",
+  email_sent:              "Email Sent",
+  whatsapp_sent:           "WhatsApp Message Sent",
+  customer_replied:        "Customer Replied  (needs your provider's inbound webhook — see Settings)",
 };
 
 const ACTION_LABELS = {
-  send_email:  "Send Email",
-  webhook:     "Call Webhook",
-  add_tag:     "Add Tag",
-  remove_tag:  "Remove Tag",
-  notify:      "Send In-App Notification",
-  delay:       "Wait / Delay",
+  create_contact:        "Create Contact",
+  add_contact_tag:       "Add Contact Tag",
+  remove_contact_tag:    "Remove Contact Tag",
+  assign_user:           "Assign To User",
+  remove_assigned_user:  "Remove Assigned User",
+  add_note:              "Add to Notes",
+  internal_notification: "Send Internal Notification",
+  notify_student:        "Send Student Notification",
+  wait:                  "Wait",
+  send_email:            "Send Email",
+  send_whatsapp:         "Send WhatsApp Message",
+  add_to_pipeline:       "Add to Pipeline",
+  update_opportunity_stage: "Update Opportunity Stage",
+  webhook:               "Call Webhook",
 };
 
-// Fields available on the trigger's context object — used for condition
-// pickers and shown as a hint for the {{field}} syntax in email/notify text.
-const CONTEXT_FIELDS = ["studentName", "studentEmail", "courseTitle", "amount", "reason", "lectureId", "name", "email", "message"];
+const CONTEXT_FIELDS = ["studentName", "studentEmail", "courseTitle", "amount", "reason", "lectureId", "category", "name", "email", "message"];
 
 function emptyStep(type) {
   if (type === "condition") return { type: "condition", conditionField: "courseTitle", conditionOperator: "equals", conditionValue: "" };
-  return { type: "action", actionType: "notify", params: {} };
+  return { type: "action", actionType: "notify_student", params: {} };
 }
 
-function WorkflowStepEditor({ step, index, total, meta, onChange, onChangeParam, onRemove, onMove }) {
+// Wraps/inserts text into a plain <textarea> at the cursor — used for Bold,
+// variable insertion, and the [[Label|url]] tracked-link syntax the backend
+// rewrites into a real clickable, click-tracked link at send time.
+function RichMessageEditor({ value, onChange, boldTag = ["<b>", "</b>"], rows = 4, placeholder }) {
+  const ref = useRef(null);
+  const wrap = (before, after) => {
+    const el = ref.current;
+    if (!el) return;
+    const start = el.selectionStart, end = el.selectionEnd;
+    const next = value.slice(0, start) + before + value.slice(start, end) + after + value.slice(end);
+    onChange(next);
+    requestAnimationFrame(() => { el.focus(); el.setSelectionRange(start + before.length, end + before.length); });
+  };
+  const insertAtCursor = (text) => {
+    const el = ref.current;
+    const start = el ? el.selectionStart : value.length;
+    onChange(value.slice(0, start) + text + value.slice(start));
+  };
   return (
-    <div className="border border-gray-200 rounded-xl p-3 bg-gray-50">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-bold text-gray-500">Step {index + 1} — {step.type === "condition" ? "Condition" : "Action"}</span>
+    <div>
+      <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
+        <button type="button" onClick={() => wrap(boldTag[0], boldTag[1])} title="Bold" className="text-xs font-extrabold border border-gray-200 rounded px-2 py-1 bg-white hover:bg-gray-50 cursor-pointer">B</button>
+        <select onChange={(e) => { if (e.target.value) insertAtCursor(`{{${e.target.value}}}`); e.target.value = ""; }} defaultValue=""
+          className="text-xs border border-gray-200 rounded px-2 py-1 bg-white cursor-pointer">
+          <option value="" disabled>Insert variable…</option>
+          {CONTEXT_FIELDS.map((f) => <option key={f} value={f}>{`{{${f}}}`}</option>)}
+        </select>
+        <button type="button" onClick={() => {
+          const label = window.prompt("Link text?"); if (!label) return;
+          const url = window.prompt("Link URL?"); if (!url) return;
+          insertAtCursor(`[[${label}|${url}]]`);
+        }} title="Insert tracked link" className="text-xs border border-gray-200 rounded px-2 py-1 bg-white hover:bg-gray-50 cursor-pointer">🔗 Link</button>
+      </div>
+      <textarea ref={ref} value={value} onChange={(e) => onChange(e.target.value)} rows={rows} placeholder={placeholder}
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-rose-500" />
+    </div>
+  );
+}
+
+function WorkflowStepEditor({ step, index, total, meta, assignableUsers, onChange, onChangeParam, onRemove, onMove }) {
+  const p = step.params || {};
+  return (
+    <div className="border border-gray-200 rounded-xl p-4 bg-gray-50">
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs font-bold text-gray-500">Step {index + 1} — {step.type === "condition" ? "Condition" : ACTION_LABELS[step.actionType] || "Action"}</span>
         <div className="flex items-center gap-2">
           <button onClick={() => onMove(-1)} disabled={index === 0} className="text-gray-400 hover:text-gray-700 disabled:opacity-30 text-xs px-1 bg-transparent border-none cursor-pointer">↑</button>
           <button onClick={() => onMove(1)} disabled={index === total - 1} className="text-gray-400 hover:text-gray-700 disabled:opacity-30 text-xs px-1 bg-transparent border-none cursor-pointer">↓</button>
@@ -681,33 +744,93 @@ function WorkflowStepEditor({ step, index, total, meta, onChange, onChangeParam,
           <input value={step.conditionValue} onChange={(e) => onChange({ conditionValue: e.target.value })} placeholder="value" className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-2.5">
           <select value={step.actionType} onChange={(e) => onChange({ actionType: e.target.value, params: {} })} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
             {(meta.actionTypes || []).map((t) => <option key={t} value={t}>{ACTION_LABELS[t] || t}</option>)}
           </select>
 
+          {step.actionType === "create_contact" && (
+            <>
+              <input value={p.name || ""} onChange={(e) => onChangeParam("name", e.target.value)} placeholder="Name (default: {{studentName}} / {{name}})" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+              <input value={p.email || ""} onChange={(e) => onChangeParam("email", e.target.value)} placeholder="Email (default: {{studentEmail}} / {{email}})" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+              <p className="text-[11px] text-gray-400">A contact is matched/created by email — running this again for the same email just updates it.</p>
+            </>
+          )}
+
+          {(step.actionType === "add_contact_tag" || step.actionType === "remove_contact_tag") && (
+            <input value={p.tag || ""} onChange={(e) => onChangeParam("tag", e.target.value)} placeholder="Tag name" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+          )}
+
+          {step.actionType === "assign_user" && (
+            <select value={p.userId || ""} onChange={(e) => onChangeParam("userId", e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+              <option value="">Choose a user…</option>
+              {(assignableUsers || []).map((u) => <option key={u._id} value={u._id}>{u.name} ({u.role})</option>)}
+            </select>
+          )}
+
+          {step.actionType === "add_note" && (
+            <textarea value={p.text || ""} onChange={(e) => onChangeParam("text", e.target.value)} rows={2} placeholder="Note text — use {{studentName}}, {{courseTitle}}, etc." className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs resize-none" />
+          )}
+
+          {step.actionType === "internal_notification" && (
+            <textarea value={p.message || ""} onChange={(e) => onChangeParam("message", e.target.value)} rows={2} placeholder="Message shown to your admin team" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs resize-none" />
+          )}
+
+          {step.actionType === "notify_student" && (
+            <>
+              <input value={p.title || ""} onChange={(e) => onChangeParam("title", e.target.value)} placeholder="Notification title" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+              <textarea value={p.message || ""} onChange={(e) => onChangeParam("message", e.target.value)} rows={2} placeholder="Message — use {{studentName}}, {{courseTitle}}, etc." className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs resize-none" />
+            </>
+          )}
+
+          {step.actionType === "wait" && (
+            <div className="flex gap-2">
+              <input type="number" min="1" value={p.amount || ""} onChange={(e) => onChangeParam("amount", e.target.value)} placeholder="Amount" className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+              <select value={p.unit || "minutes"} onChange={(e) => onChangeParam("unit", e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+                {["seconds", "minutes", "hours", "days", "weeks", "years"].map((u) => <option key={u} value={u}>{u}</option>)}
+              </select>
+            </div>
+          )}
+
           {step.actionType === "send_email" && (
             <>
-              {!meta.emailConfigured && <p className="text-[11px] text-amber-600">SMTP isn't configured on the server yet — this step will be skipped (and logged) until it is.</p>}
-              <input value={step.params.to || ""} onChange={(e) => onChangeParam("to", e.target.value)} placeholder="To (default: {{studentEmail}})" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
-              <input value={step.params.subject || ""} onChange={(e) => onChangeParam("subject", e.target.value)} placeholder="Subject" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
-              <textarea value={step.params.body || ""} onChange={(e) => onChangeParam("body", e.target.value)} placeholder="Body — use {{studentName}}, {{courseTitle}}, etc." rows={3} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs resize-none" />
+              {!meta.emailConfigured && <p className="text-[11px] text-amber-600">SMTP isn't configured yet — this step will be skipped (and logged) until it is. See the guide below.</p>}
+              <input value={p.to || ""} onChange={(e) => onChangeParam("to", e.target.value)} placeholder="To (default: {{studentEmail}})" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+              <input value={p.subject || ""} onChange={(e) => onChangeParam("subject", e.target.value)} placeholder="Subject" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+              <RichMessageEditor value={p.body || ""} onChange={(v) => onChangeParam("body", v)} boldTag={["<b>", "</b>"]} rows={4} placeholder="Email body…" />
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <input value={p.buttonText || ""} onChange={(e) => onChangeParam("buttonText", e.target.value)} placeholder="Button text (optional)" className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+                <input value={p.buttonUrl || ""} onChange={(e) => onChangeParam("buttonUrl", e.target.value)} placeholder="Button URL (optional)" className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+              </div>
             </>
           )}
-          {step.actionType === "webhook" && (
-            <input value={step.params.url || ""} onChange={(e) => onChangeParam("url", e.target.value)} placeholder="https://…  (Zapier / Make / n8n / your WhatsApp or SMS provider)" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
-          )}
-          {(step.actionType === "add_tag" || step.actionType === "remove_tag") && (
-            <input value={step.params.tag || ""} onChange={(e) => onChangeParam("tag", e.target.value)} placeholder="Tag name" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
-          )}
-          {step.actionType === "notify" && (
+
+          {step.actionType === "send_whatsapp" && (
             <>
-              <input value={step.params.title || ""} onChange={(e) => onChangeParam("title", e.target.value)} placeholder="Notification title" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
-              <textarea value={step.params.message || ""} onChange={(e) => onChangeParam("message", e.target.value)} placeholder="Message — use {{studentName}}, {{courseTitle}}, etc." rows={2} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs resize-none" />
+              {!meta.whatsappConfigured && <p className="text-[11px] text-amber-600">WhatsApp isn't configured yet — this step will be skipped (and logged) until it is. See the guide below.</p>}
+              <input value={p.to || ""} onChange={(e) => onChangeParam("to", e.target.value)} placeholder="To (default: {{whatsapp}})" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+              <RichMessageEditor value={p.message || ""} onChange={(v) => onChangeParam("message", v)} boldTag={["*", "*"]} rows={4} placeholder="WhatsApp message… (WhatsApp itself renders *text* as bold)" />
             </>
           )}
-          {step.actionType === "delay" && (
-            <input type="number" min="1" value={step.params.minutes || ""} onChange={(e) => onChangeParam("minutes", e.target.value)} placeholder="Minutes to wait" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+
+          {step.actionType === "add_to_pipeline" && (
+            <>
+              <select value={p.stage || (meta.pipelineStages || [])[0] || ""} onChange={(e) => onChangeParam("stage", e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+                {(meta.pipelineStages || []).map((s) => <option key={s} value={s}>{s}</option>)}
+              </select>
+              <input value={p.title || ""} onChange={(e) => onChangeParam("title", e.target.value)} placeholder="Opportunity title (default: course title)" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+              <input type="number" value={p.value || ""} onChange={(e) => onChangeParam("value", e.target.value)} placeholder="Value (PKR, optional)" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+            </>
+          )}
+
+          {step.actionType === "update_opportunity_stage" && (
+            <select value={p.stage || (meta.pipelineStages || [])[0] || ""} onChange={(e) => onChangeParam("stage", e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+              {(meta.pipelineStages || []).map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
+
+          {step.actionType === "webhook" && (
+            <input value={p.url || ""} onChange={(e) => onChangeParam("url", e.target.value)} placeholder="https://…  (Zapier / Make / n8n / your own endpoint)" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
           )}
         </div>
       )}
@@ -715,122 +838,21 @@ function WorkflowStepEditor({ step, index, total, meta, onChange, onChangeParam,
   );
 }
 
-function WorkflowEditorModal({ workflow, meta, onClose, onSaved, toast }) {
-  const { API: api } = useAuth();
-  const [name, setName] = useState(workflow?.name || "");
-  const [trigger, setTrigger] = useState(workflow?.trigger || meta.triggers?.[0] || "");
-  const [active, setActive] = useState(workflow?.active !== false);
-  const [steps, setSteps] = useState(workflow?.steps?.map((s) => ({ ...s, params: { ...(s.params || {}) } })) || []);
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    document.body.style.overflow = "hidden";
-    const handleKey = (e) => { if (e.key === "Escape") onClose(); };
-    window.addEventListener("keydown", handleKey);
-    return () => { document.body.style.overflow = "unset"; window.removeEventListener("keydown", handleKey); };
-  }, [onClose]);
-
-  const addStep = (type) => setSteps((prev) => [...prev, emptyStep(type)]);
-  const updateStep = (i, patch) => setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
-  const updateStepParam = (i, key, value) => setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, params: { ...s.params, [key]: value } } : s)));
-  const removeStep = (i) => setSteps((prev) => prev.filter((_, idx) => idx !== i));
-  const moveStep = (i, dir) => setSteps((prev) => {
-    const next = [...prev];
-    const j = i + dir;
-    if (j < 0 || j >= next.length) return prev;
-    [next[i], next[j]] = [next[j], next[i]];
-    return next;
-  });
-
-  const save = async () => {
-    if (!name.trim()) { toast("Name is required", "error"); return; }
-    setSaving(true);
-    try {
-      const payload = { name: name.trim(), trigger, active, steps };
-      const res = workflow
-        ? await api.put(`/admin/workflows/${workflow._id}`, payload)
-        : await api.post("/admin/workflows", payload);
-      onSaved(res.data);
-    } catch (err) {
-      toast(err.response?.data?.message || "Failed to save workflow", "error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl p-5 sm:p-6 max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-bold text-gray-900 mb-4">{workflow ? "Edit Workflow" : "New Workflow"}</h3>
-
-        <div className="space-y-4 mb-5">
-          <div>
-            <label className="block text-xs font-bold text-gray-600 mb-1">Name</label>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Welcome new students"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-gray-600 mb-1">Trigger — when this workflow runs</label>
-            <select value={trigger} onChange={(e) => setTrigger(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-rose-500">
-              {(meta.triggers || []).map((t) => <option key={t} value={t}>{TRIGGER_LABELS[t] || t}</option>)}
-            </select>
-          </div>
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} className="w-4 h-4 accent-rose-600" />
-            <span className="text-sm text-gray-700">Active</span>
-          </label>
-        </div>
-
-        <div className="border-t border-gray-100 pt-4">
-          <p className="text-xs font-bold text-gray-600 mb-3">Steps — run in order, top to bottom. A Condition stops the workflow here if it doesn't match.</p>
-          <div className="space-y-3">
-            {steps.map((step, i) => (
-              <WorkflowStepEditor key={i} step={step} index={i} total={steps.length} meta={meta}
-                onChange={(patch) => updateStep(i, patch)}
-                onChangeParam={(key, value) => updateStepParam(i, key, value)}
-                onRemove={() => removeStep(i)}
-                onMove={(dir) => moveStep(i, dir)} />
-            ))}
-            {steps.length === 0 && <p className="text-xs text-gray-400 italic">No steps yet — add one below.</p>}
-          </div>
-          <div className="flex gap-2 mt-3">
-            <Btn variant="secondary" size="sm" onClick={() => addStep("condition")}>+ Condition</Btn>
-            <Btn variant="secondary" size="sm" onClick={() => addStep("action")}>+ Action</Btn>
-          </div>
-        </div>
-
-        <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-gray-100">
-          <Btn variant="secondary" onClick={onClose}>Cancel</Btn>
-          <Btn onClick={save} disabled={saving}>{saving ? "Saving…" : "Save Workflow"}</Btn>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function AutomationWorkflowPage({ toast }) {
+function AutomationWorkflowListPage({ toast, navigate }) {
   const { API: api } = useAuth();
   const [workflows, setWorkflows] = useState([]);
-  const [meta, setMeta] = useState({ triggers: [], actionTypes: [], emailConfigured: false });
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(null); // null | "new" | workflow object
-  const [historyFor, setHistoryFor] = useState(null);
-  const [runs, setRuns] = useState([]);
-  const [runsLoading, setRunsLoading] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
-    Promise.all([api.get("/admin/workflows"), api.get("/admin/workflows/meta")])
-      .then(([wRes, mRes]) => { setWorkflows(wRes.data || []); setMeta(mRes.data || {}); })
-      .catch(() => toast("Failed to load workflows", "error"))
-      .finally(() => setLoading(false));
+    api.get("/admin/workflows").then((res) => setWorkflows(res.data || [])).catch(() => toast("Failed to load workflows", "error")).finally(() => setLoading(false));
   }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 
-  const toggleActive = async (wf) => {
+  const togglePublished = async (wf) => {
     try {
-      const res = await api.put(`/admin/workflows/${wf._id}`, { active: !wf.active });
+      const res = await api.put(`/admin/workflows/${wf._id}`, { published: !wf.published });
       setWorkflows((prev) => prev.map((w) => (w._id === wf._id ? res.data : w)));
     } catch { toast("Failed to update workflow", "error"); }
   };
@@ -844,48 +866,23 @@ function AutomationWorkflowPage({ toast }) {
     } catch { toast("Failed to delete workflow", "error"); }
   };
 
-  const testRun = async (wf) => {
-    try {
-      await api.post(`/admin/workflows/${wf._id}/test`);
-      toast(`Test run completed for "${wf.name}" — check History for the log`, "success");
-      load();
-    } catch (err) { toast(err.response?.data?.message || "Test run failed", "error"); }
-  };
-
-  const openHistory = async (wf) => {
-    setHistoryFor(wf);
-    setRunsLoading(true);
-    try {
-      const res = await api.get(`/admin/workflows/${wf._id}/runs`);
-      setRuns(res.data || []);
-    } catch { toast("Failed to load run history", "error"); }
-    finally { setRunsLoading(false); }
-  };
-
   return (
     <div>
-      <SectionHeader title="Automation Workflow" action={<Btn onClick={() => setEditing("new")}>+ New Workflow</Btn>} />
-
-      {!meta.emailConfigured && (
-        <div className="mb-4 bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-700">
-          Email sending isn't configured on the server yet — add <code className="bg-amber-100 px-1 rounded">SMTP_HOST</code>, <code className="bg-amber-100 px-1 rounded">SMTP_PORT</code>, <code className="bg-amber-100 px-1 rounded">SMTP_USER</code>, <code className="bg-amber-100 px-1 rounded">SMTP_PASS</code> (and optionally <code className="bg-amber-100 px-1 rounded">SMTP_FROM</code>) to your server's .env to enable the "Send Email" action. Every other action — webhook, tags, in-app notifications, delay — already works without it.
-        </div>
-      )}
-
+      <SectionHeader title="Automation Workflow" action={<Btn onClick={() => navigate("/superadmin/automation/new")}>+ New Workflow</Btn>} />
       {loading ? (
         <p className="text-sm text-gray-400">Loading…</p>
       ) : workflows.length === 0 ? (
         <EmptyState icon="⚡" title="No workflows yet"
-          body="Create your first automation — e.g. notify a student when their payment is rejected, or tag someone once they complete a course."
-          action={<Btn onClick={() => setEditing("new")}>+ New Workflow</Btn>} />
+          body="Create your first automation — pick a trigger, then add the actions that should run when it fires."
+          action={<Btn onClick={() => navigate("/superadmin/automation/new")}>+ New Workflow</Btn>} />
       ) : (
         <div className="space-y-3">
           {workflows.map((wf) => (
             <div key={wf._id} className="bg-white rounded-xl border border-gray-100 p-4 flex flex-col sm:flex-row sm:items-center gap-3 shadow-sm">
-              <div className="flex-1 min-w-0">
+              <div className="flex-1 min-w-0 cursor-pointer" onClick={() => navigate(`/superadmin/automation/${wf._id}`)}>
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="font-bold text-gray-900">{wf.name}</p>
-                  <StatusBadge status={wf.active ? "active" : "suspended"} />
+                  <StatusBadge status={wf.published ? "active" : "draft"} />
                 </div>
                 <p className="text-xs text-gray-500 mt-1">
                   Trigger: {TRIGGER_LABELS[wf.trigger] || wf.trigger} • {wf.steps?.length || 0} step{(wf.steps?.length || 0) === 1 ? "" : "s"} • Ran {wf.runCount || 0} time{(wf.runCount || 0) === 1 ? "" : "s"}
@@ -893,37 +890,186 @@ function AutomationWorkflowPage({ toast }) {
                 </p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
-                <Btn variant="secondary" size="sm" onClick={() => toggleActive(wf)}>{wf.active ? "Pause" : "Activate"}</Btn>
-                <Btn variant="secondary" size="sm" onClick={() => testRun(wf)}>Test Run</Btn>
-                <Btn variant="secondary" size="sm" onClick={() => openHistory(wf)}>History</Btn>
-                <Btn variant="secondary" size="sm" onClick={() => setEditing(wf)}>Edit</Btn>
+                <Btn variant="secondary" size="sm" onClick={() => togglePublished(wf)}>{wf.published ? "Unpublish" : "Publish"}</Btn>
+                <Btn variant="secondary" size="sm" onClick={() => navigate(`/superadmin/automation/${wf._id}`)}>Open</Btn>
                 <Btn variant="danger" size="sm" onClick={() => deleteWorkflow(wf)}>Delete</Btn>
               </div>
             </div>
           ))}
         </div>
       )}
+    </div>
+  );
+}
 
-      {editing && (
-        <WorkflowEditorModal
-          workflow={editing === "new" ? null : editing}
-          meta={meta}
-          onClose={() => setEditing(null)}
-          onSaved={(saved) => {
-            setWorkflows((prev) => (editing === "new" ? [saved, ...prev] : prev.map((w) => (w._id === saved._id ? saved : w))));
-            setEditing(null);
-            toast("Workflow saved", "success");
-          }}
-          toast={toast}
-        />
+function TriggerPickerModal({ meta, onPick, onClose }) {
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <h3 className="font-bold text-gray-900 mb-4">New Trigger</h3>
+        <div className="space-y-1.5">
+          {(meta.triggers || []).map((t) => (
+            <button key={t} onClick={() => onPick(t)} className="w-full text-left px-3 py-2.5 rounded-lg text-sm text-gray-700 hover:bg-rose-50 hover:text-rose-700 bg-transparent border border-gray-100 cursor-pointer transition">
+              {TRIGGER_LABELS[t] || t}
+            </button>
+          ))}
+        </div>
+        <Btn variant="secondary" onClick={onClose} className="mt-4 w-full justify-center">Cancel</Btn>
+      </div>
+    </div>
+  );
+}
+
+// Full dedicated page — /superadmin/automation/new or /superadmin/automation/:id
+function AutomationWorkflowEditorPage({ toast, navigate, workflowId }) {
+  const { API: api } = useAuth();
+  const isNew = workflowId === "new";
+  const [loaded, setLoaded] = useState(isNew);
+  const [name, setName] = useState("");
+  const [trigger, setTrigger] = useState("");
+  const [published, setPublished] = useState(false);
+  const [steps, setSteps] = useState([]);
+  const [runCount, setRunCount] = useState(0);
+  const [lastRunAt, setLastRunAt] = useState(null);
+  const [meta, setMeta] = useState({ triggers: [], actionTypes: [], emailConfigured: false, whatsappConfigured: false, pipelineStages: [] });
+  const [assignableUsers, setAssignableUsers] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [showTriggerPicker, setShowTriggerPicker] = useState(false);
+  const [runs, setRuns] = useState([]);
+  const [runsLoading, setRunsLoading] = useState(false);
+
+  useEffect(() => {
+    Promise.all([api.get("/admin/workflows/meta"), api.get("/admin/assignable-users")])
+      .then(([mRes, uRes]) => { setMeta(mRes.data || {}); setAssignableUsers(uRes.data || []); })
+      .catch(() => {});
+  }, [api]);
+
+  useEffect(() => {
+    if (isNew) return;
+    api.get(`/admin/workflows/${workflowId}`)
+      .then((res) => {
+        const wf = res.data;
+        setName(wf.name); setTrigger(wf.trigger); setPublished(!!wf.published);
+        setSteps(wf.steps?.map((s) => ({ ...s, params: { ...(s.params || {}) } })) || []);
+        setRunCount(wf.runCount || 0); setLastRunAt(wf.lastRunAt);
+      })
+      .catch(() => toast("Failed to load workflow", "error"))
+      .finally(() => setLoaded(true));
+  }, [workflowId, isNew]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadRuns = useCallback(() => {
+    if (isNew) return;
+    setRunsLoading(true);
+    api.get(`/admin/workflows/${workflowId}/runs`).then((res) => setRuns(res.data || [])).catch(() => {}).finally(() => setRunsLoading(false));
+  }, [api, workflowId, isNew]);
+  useEffect(() => { loadRuns(); }, [loadRuns]);
+
+  const addStep = (type) => setSteps((prev) => [...prev, emptyStep(type)]);
+  const updateStep = (i, patch) => setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
+  const updateStepParam = (i, key, value) => setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, params: { ...s.params, [key]: value } } : s)));
+  const removeStep = (i) => setSteps((prev) => prev.filter((_, idx) => idx !== i));
+  const moveStep = (i, dir) => setSteps((prev) => {
+    const next = [...prev];
+    const j = i + dir;
+    if (j < 0 || j >= next.length) return prev;
+    [next[i], next[j]] = [next[j], next[i]];
+    return next;
+  });
+
+  const save = async (publishOverride) => {
+    if (!name.trim()) { toast("Name is required", "error"); return; }
+    if (!trigger) { toast("Choose a trigger first", "error"); return; }
+    setSaving(true);
+    try {
+      const payload = { name: name.trim(), trigger, steps, published: publishOverride !== undefined ? publishOverride : published };
+      const res = isNew ? await api.post("/admin/workflows", payload) : await api.put(`/admin/workflows/${workflowId}`, payload);
+      setPublished(res.data.published);
+      toast("Workflow saved", "success");
+      if (isNew) navigate(`/superadmin/automation/${res.data._id}`);
+    } catch (err) {
+      toast(err.response?.data?.message || "Failed to save workflow", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const testRun = async () => {
+    if (isNew) { toast("Save the workflow first", "error"); return; }
+    try {
+      await api.post(`/admin/workflows/${workflowId}/test`);
+      toast("Test run completed — see History below", "success");
+      loadRuns();
+    } catch (err) { toast(err.response?.data?.message || "Test run failed", "error"); }
+  };
+
+  if (!loaded) return <p className="text-sm text-gray-400">Loading…</p>;
+
+  return (
+    <div className="max-w-3xl">
+      <div className="flex items-center gap-2 mb-5">
+        <button onClick={() => navigate("/superadmin/automation")} className="text-gray-400 hover:text-gray-700 bg-transparent border-none cursor-pointer text-lg">←</button>
+        <h2 className="text-lg sm:text-xl font-bold text-gray-900">{isNew ? "New Workflow" : "Edit Workflow"}</h2>
+        {!isNew && <StatusBadge status={published ? "active" : "draft"} />}
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 mb-5 space-y-4">
+        <div>
+          <label className="block text-xs font-bold text-gray-600 mb-1">Workflow Name</label>
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Welcome new students"
+            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-gray-600 mb-1">Trigger</label>
+          {trigger ? (
+            <div className="flex items-center gap-2">
+              <span className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50">{TRIGGER_LABELS[trigger] || trigger}</span>
+              <Btn variant="secondary" size="sm" onClick={() => setShowTriggerPicker(true)}>Change</Btn>
+            </div>
+          ) : (
+            <Btn onClick={() => setShowTriggerPicker(true)}>+ New Trigger</Btn>
+          )}
+        </div>
+      </div>
+
+      {trigger && (
+        <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 mb-5">
+          <p className="text-xs font-bold text-gray-600 mb-3">Actions — run in order, top to bottom. A Condition stops the workflow here if it doesn't match.</p>
+          <div className="space-y-3">
+            {steps.map((step, i) => (
+              <WorkflowStepEditor key={i} step={step} index={i} total={steps.length} meta={meta} assignableUsers={assignableUsers}
+                onChange={(patch) => updateStep(i, patch)}
+                onChangeParam={(key, value) => updateStepParam(i, key, value)}
+                onRemove={() => removeStep(i)}
+                onMove={(dir) => moveStep(i, dir)} />
+            ))}
+            {steps.length === 0 && <p className="text-xs text-gray-400 italic">No actions yet — add one below. As soon as one is added, this workflow will run it whenever the trigger fires.</p>}
+          </div>
+          <div className="flex gap-2 mt-3">
+            <Btn variant="secondary" size="sm" onClick={() => addStep("condition")}>+ Condition</Btn>
+            <Btn variant="secondary" size="sm" onClick={() => addStep("action")}>+ Action</Btn>
+          </div>
+        </div>
       )}
 
-      {historyFor && (
-        <Modal title={`Run History — ${historyFor.name}`} onClose={() => setHistoryFor(null)}>
+      <div className="flex flex-wrap items-center gap-2 mb-8">
+        <Btn onClick={() => save()} disabled={saving}>{saving ? "Saving…" : "Save"}</Btn>
+        {!isNew && (
+          <>
+            <Btn variant={published ? "secondary" : "success"} onClick={() => save(!published)} disabled={saving}>{published ? "Unpublish" : "Publish"}</Btn>
+            <Btn variant="secondary" onClick={testRun}>Test Run</Btn>
+          </>
+        )}
+        <span className="text-xs text-gray-400 ml-1">{!isNew && `Ran ${runCount} time${runCount === 1 ? "" : "s"}${lastRunAt ? ` • last ${new Date(lastRunAt).toLocaleString()}` : ""}`}</span>
+      </div>
+
+      {!isNew && (
+        <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5">
+          <h3 className="font-bold text-gray-900 text-sm mb-3">Run History</h3>
           {runsLoading ? (
-            <p className="text-sm text-gray-500">Loading…</p>
+            <p className="text-sm text-gray-400">Loading…</p>
           ) : runs.length === 0 ? (
-            <p className="text-sm text-gray-500">No runs yet.</p>
+            <p className="text-sm text-gray-400">No runs yet.</p>
           ) : (
             <div className="space-y-3 max-h-96 overflow-y-auto">
               {runs.map((r) => (
@@ -940,7 +1086,169 @@ function AutomationWorkflowPage({ toast }) {
               ))}
             </div>
           )}
-        </Modal>
+        </div>
+      )}
+
+      {showTriggerPicker && (
+        <TriggerPickerModal meta={meta} onClose={() => setShowTriggerPicker(false)} onPick={(t) => { setTrigger(t); setShowTriggerPicker(false); }} />
+      )}
+    </div>
+  );
+}
+
+function AutomationWorkflowPage({ toast }) {
+  const navigate = useNavigate();
+  const { id } = useParams();
+  return id
+    ? <AutomationWorkflowEditorPage toast={toast} navigate={navigate} workflowId={id} />
+    : <AutomationWorkflowListPage toast={toast} navigate={navigate} />;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PIPELINE — Super Admin panel (Contacts + Opportunities)
+// ─────────────────────────────────────────────────────────────────────────────
+// Populated by workflow actions (Create Contact, Add to Pipeline, Update
+// Opportunity Stage) — see AutomationWorkflowPage above. Moving a card's
+// stage here also fires opportunity_status_changed, same as a workflow
+// doing it, so both directions stay interlinked.
+
+function PipelinePage({ toast }) {
+  const { API: api } = useAuth();
+  const [tab, setTab] = useState("opportunities"); // opportunities | contacts
+  const [opportunities, setOpportunities] = useState([]);
+  const [contacts, setContacts] = useState([]);
+  const [stages, setStages] = useState([]);
+  const [assignableUsers, setAssignableUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [noteDrafts, setNoteDrafts] = useState({});
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([api.get("/admin/opportunities"), api.get("/admin/contacts"), api.get("/admin/workflows/meta"), api.get("/admin/assignable-users")])
+      .then(([oRes, cRes, mRes, uRes]) => {
+        setOpportunities(oRes.data || []); setContacts(cRes.data || []);
+        setStages(mRes.data?.pipelineStages || []); setAssignableUsers(uRes.data || []);
+      })
+      .catch(() => toast("Failed to load pipeline", "error"))
+      .finally(() => setLoading(false));
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { load(); }, [load]);
+
+  const changeStage = async (opp, stage) => {
+    try {
+      const res = await api.patch(`/admin/opportunities/${opp._id}/stage`, { stage });
+      setOpportunities((prev) => prev.map((o) => (o._id === opp._id ? res.data : o)));
+    } catch { toast("Failed to update stage", "error"); }
+  };
+
+  const addNote = async (contact) => {
+    const text = (noteDrafts[contact._id] || "").trim();
+    if (!text) return;
+    try {
+      const res = await api.post(`/admin/contacts/${contact._id}/notes`, { text });
+      setContacts((prev) => prev.map((c) => (c._id === contact._id ? res.data : c)));
+      setNoteDrafts((prev) => ({ ...prev, [contact._id]: "" }));
+    } catch { toast("Failed to add note", "error"); }
+  };
+
+  const assignContact = async (contact, userId) => {
+    try {
+      const res = await api.patch(`/admin/contacts/${contact._id}/assign`, { userId: userId || null });
+      setContacts((prev) => prev.map((c) => (c._id === contact._id ? res.data : c)));
+    } catch { toast("Failed to assign", "error"); }
+  };
+
+  const exportCsv = (kind) => {
+    const url = `${api.defaults.baseURL}/admin/${kind}/export.csv`;
+    const token = localStorage.getItem("token");
+    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.blob())
+      .then((blob) => {
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `${kind}.csv`;
+        link.click();
+      })
+      .catch(() => toast("Export failed", "error"));
+  };
+
+  const opportunitiesByStage = useMemo(() => {
+    const grouped = {};
+    for (const s of stages) grouped[s] = [];
+    for (const o of opportunities) (grouped[o.stage] || (grouped[o.stage] = [])).push(o);
+    return grouped;
+  }, [opportunities, stages]);
+
+  return (
+    <div>
+      <SectionHeader title="Pipeline"
+        action={<Btn variant="secondary" onClick={() => exportCsv(tab === "opportunities" ? "opportunities" : "contacts")}>Download CSV</Btn>} />
+
+      <div className="flex gap-2 mb-5">
+        <Btn variant={tab === "opportunities" ? "primary" : "secondary"} size="sm" onClick={() => setTab("opportunities")}>Opportunities</Btn>
+        <Btn variant={tab === "contacts" ? "primary" : "secondary"} size="sm" onClick={() => setTab("contacts")}>Contacts</Btn>
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-gray-400">Loading…</p>
+      ) : tab === "opportunities" ? (
+        opportunities.length === 0 ? (
+          <EmptyState icon="📊" title="No opportunities yet" body='Add an "Add to Pipeline" action to a workflow — e.g. when a form is submitted — to start populating this.' />
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {stages.map((stage) => (
+              <div key={stage} className="bg-gray-50 rounded-xl p-3">
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2 px-1">{stage} ({(opportunitiesByStage[stage] || []).length})</p>
+                <div className="space-y-2">
+                  {(opportunitiesByStage[stage] || []).map((o) => (
+                    <div key={o._id} className="bg-white rounded-lg border border-gray-100 p-3">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{o.contact?.name || o.contact?.email || "Unknown"}</p>
+                      <p className="text-xs text-gray-500 mb-2 truncate">{o.title} {o.value > 0 ? `• PKR ${o.value.toLocaleString()}` : ""}</p>
+                      <select value={o.stage} onChange={(e) => changeStage(o, e.target.value)} className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1 bg-white">
+                        {stages.map((s) => <option key={s} value={s}>{s}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      ) : contacts.length === 0 ? (
+        <EmptyState icon="👤" title="No contacts yet" body='Add a "Create Contact" action to a workflow — e.g. when the contact form is submitted — to start populating this.' />
+      ) : (
+        <div className="space-y-3">
+          {contacts.map((c) => (
+            <div key={c._id} className="bg-white rounded-xl border border-gray-100 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                <div>
+                  <p className="font-bold text-gray-900">{c.name || "(no name)"}</p>
+                  <p className="text-xs text-gray-500">{c.email} {c.phone ? `• ${c.phone}` : ""}</p>
+                </div>
+                <select value={c.assignedTo?._id || ""} onChange={(e) => assignContact(c, e.target.value)} className="text-xs border border-gray-200 rounded-lg px-2 py-1.5 bg-white">
+                  <option value="">Unassigned</option>
+                  {assignableUsers.map((u) => <option key={u._id} value={u._id}>{u.name} ({u.role})</option>)}
+                </select>
+              </div>
+              {c.tags?.length > 0 && (
+                <div className="flex flex-wrap gap-1 mb-2">
+                  {c.tags.map((t) => <span key={t} className="text-[10px] font-semibold bg-rose-50 text-rose-600 px-2 py-0.5 rounded-full">{t}</span>)}
+                </div>
+              )}
+              {c.notes?.length > 0 && (
+                <div className="space-y-1 mb-2">
+                  {c.notes.map((n, i) => <p key={i} className="text-xs text-gray-500">• {n.text}</p>)}
+                </div>
+              )}
+              <div className="flex gap-2">
+                <input value={noteDrafts[c._id] || ""} onChange={(e) => setNoteDrafts((p) => ({ ...p, [c._id]: e.target.value }))}
+                  placeholder="Add a note…" className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5" />
+                <Btn size="sm" variant="secondary" onClick={() => addNote(c)}>Add</Btn>
+              </div>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -1328,6 +1636,8 @@ export default function SuperAdminDashboard() {
           <Route path="verifications" element={<VerificationsPage enrollments={enrollments} verifyEnrollment={verifyEnrollment} rejectEnrollment={rejectEnrollment} toast={toast} />} />
           <Route path="messages" element={<MessagesPage />} />
           <Route path="automation" element={<AutomationWorkflowPage toast={toast} />} />
+          <Route path="automation/:id" element={<AutomationWorkflowPage toast={toast} />} />
+          <Route path="pipeline" element={<PipelinePage toast={toast} />} />
           <Route path="settings" element={<SettingsPage toast={toast} />} />
           <Route path="*" element={<Navigate to="" replace />} />
         </Routes>

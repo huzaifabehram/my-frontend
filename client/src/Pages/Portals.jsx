@@ -328,6 +328,15 @@ export default function Portals() {
   const [notesLoading, setNotesLoading] = useState(false);
   const [noteText, setNoteText] = useState('');
 
+  // NEW: fires the "Lesson Started" automation trigger for real, the first
+  // time a lecture is opened (not just completed) — used both for the
+  // auto-selected first lecture and for clicking one in the curriculum.
+  const openLecture = (lecture, course) => {
+    setActiveLecture(lecture);
+    if (!lecture || !course) return;
+    api.post('/progress/lesson-started', { courseId: course._id, lectureId: lecture.id, lectureTitle: lecture.title }).catch(() => {});
+  };
+
   const openCourse = async (enrollment) => {
     if (enrollment.paymentStatus !== 'verified') return;
     setSelectedEnrollment(enrollment);
@@ -341,7 +350,7 @@ export default function Portals() {
       setExpandedSections([full.sections[0]._id]);
       const done = progressMap[String(courseId)] || [];
       const firstIncomplete = full.sections.flatMap((s) => s.lectures_list).find((l) => !done.includes(String(l.id)));
-      setActiveLecture(firstIncomplete || full.sections[0]?.lectures_list?.[0] || null);
+      openLecture(firstIncomplete || full.sections[0]?.lectures_list?.[0] || null, full);
     }
     setCourseLoading(false);
 
@@ -635,7 +644,7 @@ export default function Portals() {
                           const isDone = done.includes(String(lecture.id));
                           const isActive = activeLecture?.id === lecture.id;
                           return (
-                            <button key={lecture.id} onClick={() => setActiveLecture(lecture)}
+                            <button key={lecture.id} onClick={() => openLecture(lecture, selectedCourse)}
                               className={`w-full flex items-center gap-3 px-4 py-2.5 border-none cursor-pointer text-left transition ${isActive ? 'bg-[#fdf2ea]' : 'bg-transparent hover:bg-[#f8f4ed]'}`}>
                               {isDone ? <CheckCircle size={16} className="text-[#e8540a] flex-shrink-0" /> : <Circle size={16} className="text-[#ccc5b8] flex-shrink-0" />}
                               <span className={`text-xs flex-1 truncate ${isActive ? 'text-[#e8540a] font-semibold' : 'text-[#3d3020]'}`}>{lecture.title}</span>
