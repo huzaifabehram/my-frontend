@@ -195,37 +195,49 @@ function useYouTubeIframeAPI() {
 
 function YouTubePlayer({ videoId }) {
   const apiReady = useYouTubeIframeAPI();
+  // NEW: fixes the "app crashed / removeChild / The object can not be
+  // found here" crash that happened when switching lectures. The old
+  // version pointed `new YT.Player(elementId, ...)` straight at a
+  // JSX-rendered <div id={elementId}>, which React was ALSO tracking in
+  // its own virtual DOM. The YouTube IFrame API replaces that div with an
+  // <iframe> in place — not as a child of it — so React's internal
+  // reference to "its" div silently went stale the moment YouTube's script
+  // touched the page. The next time React tried to update or remove that
+  // node (switching to another lecture), it crashed trying to operate on a
+  // DOM node that YouTube had already swapped out from under it.
+  // The fix: containerRef below is the ONLY element React ever renders/
+  // diffs here — nothing is declared inside it in JSX, so React never
+  // forms an opinion about what's inside. The actual YouTube target <div>
+  // is created and destroyed imperatively, entirely outside React's
+  // reconciliation, so there's nothing left for the two to conflict over.
+  const containerRef = useRef(null);
   const playerRef = useRef(null);
-  const elementId = useRef(`yt-player-${Math.random().toString(36).slice(2)}`).current;
 
   useEffect(() => {
-    if (!apiReady) return;
-    playerRef.current = new window.YT.Player(elementId, {
+    if (!apiReady || !containerRef.current) return;
+    const target = document.createElement('div');
+    containerRef.current.innerHTML = '';
+    containerRef.current.appendChild(target);
+
+    playerRef.current = new window.YT.Player(target, {
       videoId,
-      // NEW: mute:1 added — browsers are far more reliable about honoring
-      // autoplay when a video starts muted, even from a real click like
-      // this one. Without it, some browsers/devices were silently blocking
-      // the autoplay call, which is what made YouTube's own play button
-      // still appear after tapping our custom one — a second click was
-      // then needed to actually start it. The visitor can unmute with
-      // YouTube's own controls once it's playing.
-      playerVars: { autoplay: 1, mute: 1, rel: 0, playsinline: 1 },
+      // NEW: no longer forcing mute:1 — this is triggered by a real click
+      // on our custom play button, which counts as a genuine user gesture
+      // in virtually every modern browser, so autoplay-with-sound works
+      // without needing to start muted and rely on a manual unmute.
+      playerVars: { autoplay: 1, rel: 0, playsinline: 1 },
       events: {
-        onReady: (e) => {
-          // Deliberately staying muted here rather than calling unMute() —
-          // browsers that allow muted autoplay often still block it the
-          // instant you try to unmute programmatically, which would bring
-          // back the exact "doesn't actually start" problem this was
-          // fixing. Visitors can unmute themselves via the player's own
-          // controls once it's visibly playing.
-          try { e.target.playVideo(); } catch { /* ignore */ }
-        },
+        onReady: (e) => { try { e.target.playVideo(); } catch { /* ignore */ } },
       },
     });
-    return () => { try { playerRef.current?.destroy(); } catch { /* ignore */ } };
+
+    return () => {
+      try { playerRef.current?.destroy(); } catch { /* ignore */ }
+      if (containerRef.current) containerRef.current.innerHTML = '';
+    };
   }, [apiReady, videoId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return <div id={elementId} className="absolute inset-0 w-full h-full" />;
+  return <div ref={containerRef} className="absolute inset-0 w-full h-full" />;
 }
 
 function VideoPlayer({ url, thumbnail }) {
@@ -478,8 +490,7 @@ export default function Portals() {
   const [noteText, setNoteText] = useState('');
 
   // NEW: sidebar-level Notes/Q&A/Resources — aggregated across every course,
-  // not just the one currently open in the player. Loaded on demand the
-  // first time each tab is visited.
+  // not just the one currently open in the player.
   const [myNotes, setMyNotes] = useState(null);
   const [myNotesLoading, setMyNotesLoading] = useState(false);
   const [myQuestions, setMyQuestions] = useState(null);
@@ -488,15 +499,20 @@ export default function Portals() {
   const [myResourcesLoading, setMyResourcesLoading] = useState(false);
 
   useEffect(() => {
-    if (currentView === 'my-notes' && myNotes === null) {
+    // NEW: these used to only fetch the FIRST time each tab was opened
+    // (guarded by `=== null`), then never again — so a note/question saved
+    // after that first visit never showed up here, even though it was
+    // really saved; the tab just kept showing its stale first-load
+    // snapshot. Now it refetches fresh every time the tab is opened.
+    if (currentView === 'my-notes') {
       setMyNotesLoading(true);
       api.get('/notes/my').then((res) => setMyNotes(res.data || [])).catch(() => setMyNotes([])).finally(() => setMyNotesLoading(false));
     }
-    if (currentView === 'my-qa' && myQuestions === null) {
+    if (currentView === 'my-qa') {
       setMyQuestionsLoading(true);
       api.get('/questions/my-courses').then((res) => setMyQuestions(res.data || [])).catch(() => setMyQuestions([])).finally(() => setMyQuestionsLoading(false));
     }
-    if (currentView === 'my-resources' && myResources === null) {
+    if (currentView === 'my-resources') {
       setMyResourcesLoading(true);
       const verified = enrollments.filter((e) => e.paymentStatus === 'verified');
       Promise.all(verified.map((e) => fetchCourseById(e.course?._id || e.course)))
@@ -641,6 +657,41 @@ export default function Portals() {
     const match = enrollments.find((e) => String(e.course?._id || e.course) === String(courseId));
     return match?.course?.title || 'Course';
   };
+
+  // NEW: groups each aggregate list by course (Notes/Q&A) so it reads as
+  // "Course → its notes/questions" instead of one long flat list with no
+  // structure, matching how the data is actually organized.
+  const notesByCourse = useMemo(() => {
+    if (!myNotes) return [];
+    const groups = {};
+    myNotes.forEach((n) => {
+      const key = String(n.courseId);
+      if (!groups[key]) groups[key] = { key, title: courseTitleFor(n.courseId), items: [] };
+      groups[key].items.push(n);
+    });
+    return Object.values(groups);
+  }, [myNotes, enrollments]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const questionsByCourse = useMemo(() => {
+    if (!myQuestions) return [];
+    const groups = {};
+    myQuestions.forEach((q) => {
+      const key = String(q.courseId);
+      if (!groups[key]) groups[key] = { key, title: courseTitleFor(q.courseId), items: [] };
+      groups[key].items.push(q);
+    });
+    return Object.values(groups);
+  }, [myQuestions, enrollments]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const resourcesByCourse = useMemo(() => {
+    if (!myResources) return [];
+    const groups = {};
+    myResources.forEach((r) => {
+      if (!groups[r.courseTitle]) groups[r.courseTitle] = { key: r.courseTitle, title: r.courseTitle, items: [] };
+      groups[r.courseTitle].items.push(r);
+    });
+    return Object.values(groups);
+  }, [myResources]);
 
   const handleLogout = () => { logout(); navigate('/login'); };
 
@@ -1139,24 +1190,28 @@ export default function Portals() {
           ) : currentView === 'my-notes' ? (
             <div>
               <h1 className="text-2xl font-bold text-[#1a1208] mb-1" style={{ fontFamily: "'Playfair Display', serif" }}>Notes</h1>
-              <p className="text-[#9e9789] mb-6">Every note you've saved, across all your courses.</p>
+              <p className="text-[#9e9789] mb-6">Every note you've saved, grouped by course.</p>
               {myNotesLoading ? (
                 <Loader2 size={24} className="animate-spin text-[#e8540a]" />
-              ) : !myNotes || myNotes.length === 0 ? (
+              ) : notesByCourse.length === 0 ? (
                 <p className="text-[#9e9789] py-12 text-center">No notes yet — save one from inside any lecture.</p>
               ) : (
-                <div className="space-y-3 max-w-2xl">
-                  {myNotes.map((n) => (
-                    <div key={n._id} className="bg-white border border-[#ece6dd] rounded-xl p-4">
-                      <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
-                        <div>
-                          <span className="text-xs font-bold text-[#e8540a]">{courseTitleFor(n.courseId)}</span>
-                          {n.lectureTitle && <span className="text-xs text-[#9e9789]"> • {n.lectureTitle}</span>}
-                        </div>
-                        <button onClick={() => deleteMyNote(n._id)} className="bg-transparent border-none cursor-pointer text-[#9e9789] hover:text-red-500 p-0"><Trash2 size={14} /></button>
+                <div className="max-w-2xl space-y-7">
+                  {notesByCourse.map((group) => (
+                    <div key={group.key}>
+                      <h2 className="text-sm font-bold text-[#1a1208] mb-3 pb-2 border-b border-[#ece6dd]">{group.title}</h2>
+                      <div className="space-y-3">
+                        {group.items.map((n) => (
+                          <div key={n._id} className="bg-white border border-[#ece6dd] rounded-xl p-4">
+                            <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
+                              {n.lectureTitle && <span className="text-xs font-semibold text-[#e8540a]">{n.lectureTitle}</span>}
+                              <button onClick={() => deleteMyNote(n._id)} className="bg-transparent border-none cursor-pointer text-[#9e9789] hover:text-red-500 p-0 ml-auto"><Trash2 size={14} /></button>
+                            </div>
+                            <p className="text-sm text-[#3d3020] mb-1.5">{n.content}</p>
+                            <span className="text-xs text-[#9e9789]">{new Date(n.createdAt).toLocaleString()}</span>
+                          </div>
+                        ))}
                       </div>
-                      <p className="text-sm text-[#3d3020] mb-1.5">{n.content}</p>
-                      <span className="text-xs text-[#9e9789]">{new Date(n.createdAt).toLocaleString()}</span>
                     </div>
                   ))}
                 </div>
@@ -1166,36 +1221,43 @@ export default function Portals() {
           ) : currentView === 'my-qa' ? (
             <div>
               <h1 className="text-2xl font-bold text-[#1a1208] mb-1" style={{ fontFamily: "'Playfair Display', serif" }}>Q&A</h1>
-              <p className="text-[#9e9789] mb-6">Questions and answers across every course you're enrolled in.</p>
+              <p className="text-[#9e9789] mb-6">Questions and answers, grouped by course.</p>
               {myQuestionsLoading ? (
                 <Loader2 size={24} className="animate-spin text-[#e8540a]" />
-              ) : !myQuestions || myQuestions.length === 0 ? (
+              ) : questionsByCourse.length === 0 ? (
                 <p className="text-[#9e9789] py-12 text-center">No questions yet — ask one from inside any lecture.</p>
               ) : (
-                <div className="space-y-3 max-w-2xl">
-                  {myQuestions.map((q) => (
-                    <div key={q._id} className="bg-white border border-[#ece6dd] rounded-xl p-4">
-                      <div className="flex items-center gap-2.5 mb-2">
-                        <div className="w-8 h-8 rounded-full bg-[#e8540a] text-white flex items-center justify-center font-bold text-xs flex-shrink-0">{(q.author?.name || '?').charAt(0).toUpperCase()}</div>
-                        <div className="min-w-0">
-                          <p className="text-sm font-bold text-[#1a1208] truncate">{q.author?.name || 'Student'}</p>
-                          <p className="text-xs text-[#9e9789] truncate">{courseTitleFor(q.courseId)}{q.lectureTitle ? ` • ${q.lectureTitle}` : ''} • {new Date(q.createdAt).toLocaleDateString()}</p>
-                        </div>
-                      </div>
-                      <p className="text-sm text-[#3d3020] mb-2.5">{q.text}</p>
-                      <button onClick={() => toggleMyUpvote(q._id)} className="flex items-center gap-1.5 text-xs text-[#9e9789] hover:text-[#e8540a] bg-transparent border-none cursor-pointer p-0 mb-3">
-                        <ThumbsUp size={13} /> {q.upvotes?.length || 0}
-                      </button>
-                      {(q.answers || []).map((a, i) => (
-                        <div key={i} className="ml-4 pl-3 border-l-2 border-[#f0ebe3] mb-2">
-                          <p className="text-xs font-bold text-[#1a1208]">{a.author?.name || 'User'}</p>
-                          <p className="text-xs text-[#6b5e4e]">{a.text}</p>
-                        </div>
-                      ))}
-                      <div className="flex gap-2 mt-2">
-                        <input value={myAnswerDrafts[q._id] || ''} onChange={(e) => setMyAnswerDrafts((p) => ({ ...p, [q._id]: e.target.value }))}
-                          placeholder="Write an answer…" className="flex-1 border border-[#ece6dd] rounded-lg px-3 py-1.5 text-xs text-[#1a1208] outline-none focus:border-[#e8540a]" />
-                        <button onClick={() => postMyAnswer(q._id)} className="text-xs font-bold px-3 py-1.5 rounded-lg border-none cursor-pointer bg-[#f0ebe3] hover:bg-[#e8dfd0] text-[#3d3020]">Reply</button>
+                <div className="max-w-2xl space-y-7">
+                  {questionsByCourse.map((group) => (
+                    <div key={group.key}>
+                      <h2 className="text-sm font-bold text-[#1a1208] mb-3 pb-2 border-b border-[#ece6dd]">{group.title}</h2>
+                      <div className="space-y-3">
+                        {group.items.map((q) => (
+                          <div key={q._id} className="bg-white border border-[#ece6dd] rounded-xl p-4">
+                            <div className="flex items-center gap-2.5 mb-2">
+                              <div className="w-8 h-8 rounded-full bg-[#e8540a] text-white flex items-center justify-center font-bold text-xs flex-shrink-0">{(q.author?.name || '?').charAt(0).toUpperCase()}</div>
+                              <div className="min-w-0">
+                                <p className="text-sm font-bold text-[#1a1208] truncate">{q.author?.name || 'Student'}</p>
+                                <p className="text-xs text-[#9e9789] truncate">{q.lectureTitle ? `${q.lectureTitle} • ` : ''}{new Date(q.createdAt).toLocaleDateString()}</p>
+                              </div>
+                            </div>
+                            <p className="text-sm text-[#3d3020] mb-2.5">{q.text}</p>
+                            <button onClick={() => toggleMyUpvote(q._id)} className="flex items-center gap-1.5 text-xs text-[#9e9789] hover:text-[#e8540a] bg-transparent border-none cursor-pointer p-0 mb-3">
+                              <ThumbsUp size={13} /> {q.upvotes?.length || 0}
+                            </button>
+                            {(q.answers || []).map((a, i) => (
+                              <div key={i} className="ml-4 pl-3 border-l-2 border-[#f0ebe3] mb-2">
+                                <p className="text-xs font-bold text-[#1a1208]">{a.author?.name || 'User'}</p>
+                                <p className="text-xs text-[#6b5e4e]">{a.text}</p>
+                              </div>
+                            ))}
+                            <div className="flex gap-2 mt-2">
+                              <input value={myAnswerDrafts[q._id] || ''} onChange={(e) => setMyAnswerDrafts((p) => ({ ...p, [q._id]: e.target.value }))}
+                                placeholder="Write an answer…" className="flex-1 border border-[#ece6dd] rounded-lg px-3 py-1.5 text-xs text-[#1a1208] outline-none focus:border-[#e8540a]" />
+                              <button onClick={() => postMyAnswer(q._id)} className="text-xs font-bold px-3 py-1.5 rounded-lg border-none cursor-pointer bg-[#f0ebe3] hover:bg-[#e8dfd0] text-[#3d3020]">Reply</button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   ))}
@@ -1206,22 +1268,29 @@ export default function Portals() {
           ) : currentView === 'my-resources' ? (
             <div>
               <h1 className="text-2xl font-bold text-[#1a1208] mb-1" style={{ fontFamily: "'Playfair Display', serif" }}>Resources</h1>
-              <p className="text-[#9e9789] mb-6">Downloadable resources from every lecture across your courses.</p>
+              <p className="text-[#9e9789] mb-6">Downloadable resources, grouped by course.</p>
               {myResourcesLoading ? (
                 <Loader2 size={24} className="animate-spin text-[#e8540a]" />
-              ) : !myResources || myResources.length === 0 ? (
+              ) : resourcesByCourse.length === 0 ? (
                 <p className="text-[#9e9789] py-12 text-center">No resources available yet.</p>
               ) : (
-                <div className="space-y-2 max-w-2xl">
-                  {myResources.map((r) => (
-                    <a key={r.key} href={r.url} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3.5 bg-white border border-[#ece6dd] rounded-xl hover:border-[#e8540a] transition no-underline">
-                      <FileText size={20} className="text-[#e8540a] flex-shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm text-[#1a1208] truncate">{resourceLabel(r.url, 0)}</p>
-                        <p className="text-xs text-[#9e9789] truncate">{r.courseTitle} • {r.lectureTitle}</p>
+                <div className="max-w-2xl space-y-7">
+                  {resourcesByCourse.map((group) => (
+                    <div key={group.key}>
+                      <h2 className="text-sm font-bold text-[#1a1208] mb-3 pb-2 border-b border-[#ece6dd]">{group.title}</h2>
+                      <div className="space-y-2">
+                        {group.items.map((r) => (
+                          <a key={r.key} href={r.url} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3.5 bg-white border border-[#ece6dd] rounded-xl hover:border-[#e8540a] transition no-underline">
+                            <FileText size={20} className="text-[#e8540a] flex-shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm text-[#1a1208] truncate">{resourceLabel(r.url, 0)}</p>
+                              <p className="text-xs text-[#9e9789] truncate">{r.lectureTitle}</p>
+                            </div>
+                            <Download size={16} className="text-[#9e9789] flex-shrink-0" />
+                          </a>
+                        ))}
                       </div>
-                      <Download size={16} className="text-[#9e9789] flex-shrink-0" />
-                    </a>
+                    </div>
                   ))}
                 </div>
               )}
@@ -1283,4 +1352,4 @@ export default function Portals() {
       </div>
     </div>
   );
-} 
+}

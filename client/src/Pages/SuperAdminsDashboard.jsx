@@ -517,7 +517,7 @@ function CoursesPage({ courses, loading }) {
                         {c.title}
                       </a>
                     </td>
-                    <td className="px-3 sm:px-4 py-3 text-xs sm:text-sm text-gray-600">{c.instructorId?.name || c.instructor || "—"}</td>
+                    <td className="px-3 sm:px-4 py-3 text-xs sm:text-sm text-gray-600">{c.instructor?.name || "—"}</td>
                     <td className="px-3 sm:px-4 py-3 text-xs sm:text-sm text-gray-700">${c.price ?? 0}</td>
                     <td className="px-3 sm:px-4 py-3 text-xs sm:text-sm text-gray-700">{fmtNum(c.studentsEnrolled)}</td>
                     <td className="px-3 sm:px-4 py-3 text-xs sm:text-sm text-gray-700">{fmt(c.revenue)}</td>
