@@ -1245,8 +1245,8 @@ function PipelinePage({ toast }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // REVIEW IMPORTER — Super Admin panel
 // ─────────────────────────────────────────────────────────────────────────────
-// Bulk-add reviews to any course from a CSV or Excel sheet — Student Name,
-// Date, Stars, Review — the exact same fields/format every review on that
+// Bulk-add reviews to any course from a CSV sheet — Student Name, Date,
+// Stars, Review — the exact same fields/format every review on that
 // course's landing page already uses (they're written into the same Review
 // collection), so imported reviews show up there for real.
 
@@ -1272,15 +1272,15 @@ function ReviewImporterPage({ toast, courses }) {
 
   useEffect(() => { loadReviews(courseId); }, [courseId, loadReviews]);
 
-  const downloadTemplate = (kind) => {
-    const url = `${api.defaults.baseURL}/admin/reviews-template.${kind}`;
+  const downloadTemplate = () => {
+    const url = `${api.defaults.baseURL}/admin/reviews-template.csv`;
     const token = localStorage.getItem("token");
     fetch(url, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.blob())
       .then((blob) => {
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
-        link.download = `review-import-sample.${kind}`;
+        link.download = "review-import-sample.csv";
         link.click();
       })
       .catch(() => toast("Download failed", "error"));
@@ -1288,7 +1288,7 @@ function ReviewImporterPage({ toast, courses }) {
 
   const doImport = async () => {
     if (!courseId) { toast("Choose a course first", "error"); return; }
-    if (!file) { toast("Choose a CSV or Excel file first", "error"); return; }
+    if (!file) { toast("Choose a CSV file first", "error"); return; }
     setImporting(true);
     setResult(null);
     try {
@@ -1318,7 +1318,7 @@ function ReviewImporterPage({ toast, courses }) {
   return (
     <div className="max-w-3xl">
       <SectionHeader title="Review Importer" />
-      <p className="text-sm text-gray-500 mb-5 -mt-2">Bulk-add reviews to any course's landing page from a CSV or Excel sheet.</p>
+      <p className="text-sm text-gray-500 mb-5 -mt-2">Bulk-add reviews to any course's landing page from a CSV sheet — Excel opens and saves .csv files natively, so it works fine from Excel too.</p>
 
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 mb-5 space-y-4">
         <div>
@@ -1330,17 +1330,14 @@ function ReviewImporterPage({ toast, courses }) {
         </div>
 
         <div>
-          <label className="block text-xs font-bold text-gray-600 mb-1">Sample templates</label>
-          <div className="flex gap-2">
-            <Btn variant="secondary" size="sm" onClick={() => downloadTemplate("csv")}>Download CSV sample</Btn>
-            <Btn variant="secondary" size="sm" onClick={() => downloadTemplate("xlsx")}>Download Excel sample</Btn>
-          </div>
+          <label className="block text-xs font-bold text-gray-600 mb-1">Sample template</label>
+          <Btn variant="secondary" size="sm" onClick={downloadTemplate}>Download CSV sample</Btn>
           <p className="text-[11px] text-gray-400 mt-1.5">Columns: Student Name, Date, Stars (1–5), Review.</p>
         </div>
 
         <div>
           <label className="block text-xs font-bold text-gray-600 mb-1">Upload file</label>
-          <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={(e) => setFile(e.target.files?.[0] || null)}
+          <input ref={fileRef} type="file" accept=".csv" onChange={(e) => setFile(e.target.files?.[0] || null)}
             className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-rose-50 file:text-rose-600 file:text-xs file:font-bold" />
         </div>
 
