@@ -34,7 +34,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useCourses, normalizeCourse } from '../context/CoursesContext';
+import { useCourses, normalizeCourse, getDisplayStats } from '../context/CoursesContext';
 import {
   Play, Pause, SkipForward, SkipBack, Volume2, Maximize,
   CheckCircle, Circle, Clock, BookOpen, Download, FileText,
@@ -169,6 +169,65 @@ function CustomVideoPlayer({ url, poster }) {
 // playing, instead of YouTube's own thumbnail/branding/play button showing
 // through immediately — the actual player (including the YouTube iframe)
 // only loads once the visitor taps it.
+// NEW: loads YouTube's IFrame Player API once (shared across every lecture),
+// so playback can be started programmatically via player.playVideo()
+// instead of relying only on the ?autoplay=1 URL param — mobile browsers in
+// particular often ignore that param inside a cross-origin iframe even
+// right after a genuine click, which is what was showing YouTube's own
+// play button a second time after tapping our custom one. Calling
+// .playVideo() explicitly, the way YouTube's own docs recommend, is what
+// actually starts it reliably in response to that click.
+function useYouTubeIframeAPI() {
+  const [ready, setReady] = useState(() => !!(window.YT && window.YT.Player));
+  useEffect(() => {
+    if (ready) return;
+    if (!document.getElementById('youtube-iframe-api')) {
+      const tag = document.createElement('script');
+      tag.id = 'youtube-iframe-api';
+      tag.src = 'https://www.youtube.com/iframe_api';
+      document.head.appendChild(tag);
+    }
+    const prev = window.onYouTubeIframeAPIReady;
+    window.onYouTubeIframeAPIReady = () => { setReady(true); if (prev) prev(); };
+  }, [ready]);
+  return ready;
+}
+
+function YouTubePlayer({ videoId }) {
+  const apiReady = useYouTubeIframeAPI();
+  const playerRef = useRef(null);
+  const elementId = useRef(`yt-player-${Math.random().toString(36).slice(2)}`).current;
+
+  useEffect(() => {
+    if (!apiReady) return;
+    playerRef.current = new window.YT.Player(elementId, {
+      videoId,
+      // NEW: mute:1 added — browsers are far more reliable about honoring
+      // autoplay when a video starts muted, even from a real click like
+      // this one. Without it, some browsers/devices were silently blocking
+      // the autoplay call, which is what made YouTube's own play button
+      // still appear after tapping our custom one — a second click was
+      // then needed to actually start it. The visitor can unmute with
+      // YouTube's own controls once it's playing.
+      playerVars: { autoplay: 1, mute: 1, rel: 0, playsinline: 1 },
+      events: {
+        onReady: (e) => {
+          // Deliberately staying muted here rather than calling unMute() —
+          // browsers that allow muted autoplay often still block it the
+          // instant you try to unmute programmatically, which would bring
+          // back the exact "doesn't actually start" problem this was
+          // fixing. Visitors can unmute themselves via the player's own
+          // controls once it's visibly playing.
+          try { e.target.playVideo(); } catch { /* ignore */ }
+        },
+      },
+    });
+    return () => { try { playerRef.current?.destroy(); } catch { /* ignore */ } };
+  }, [apiReady, videoId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return <div id={elementId} className="absolute inset-0 w-full h-full" />;
+}
+
 function VideoPlayer({ url, thumbnail }) {
   const [started, setStarted] = useState(false);
   useEffect(() => { setStarted(false); }, [url]);
@@ -200,9 +259,7 @@ function VideoPlayer({ url, thumbnail }) {
   if (ytId) {
     return (
       <div className="relative w-full aspect-video bg-black">
-        <iframe src={`https://www.youtube.com/embed/${ytId}?rel=0&autoplay=1`} className="absolute inset-0 w-full h-full"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-          allowFullScreen title="Lecture video" loading="lazy" style={{ border: 'none' }} />
+        <YouTubePlayer videoId={ytId} />
       </div>
     );
   }
@@ -238,11 +295,16 @@ function CourseThumb({ course }) {
 function EnrollmentCard({ enrollment, progressPct, onOpen }) {
   const rawCourse = enrollment.course || {};
   const locked = enrollment.paymentStatus !== 'verified';
-  // NEW: run the raw course doc through the same normalizeCourse() the rest
-  // of the site uses, so rating/reviews/students here are the exact same
-  // real numbers shown on that course's own landing page — this card used
-  // to show neither.
+  // Run the raw course doc through the same normalizeCourse() the rest of
+  // the site uses, so title/thumbnail/instructor come out the same way.
   const course = useMemo(() => normalizeCourse(rawCourse) || rawCourse, [rawCourse]);
+  // NEW: now pulled from CoursesContext's shared getDisplayStats() instead
+  // of a locally-duplicated copy of the same formula — this is what makes a
+  // course card here show the exact same "61,0xx students" number as its
+  // own landing page, instead of just the tiny raw enrollment count, and
+  // keeps this in sync with that page automatically going forward.
+  const { rating: displayRating, reviewCount: displayRatingCount, studentCount: displayStudentCount } = useMemo(() => getDisplayStats(course), [course]);
+
   return (
     <div
       onClick={() => !locked && onOpen(enrollment)}
@@ -259,16 +321,14 @@ function EnrollmentCard({ enrollment, progressPct, onOpen }) {
         <h3 className="font-bold text-[#1a1208] text-sm md:text-base leading-snug mb-1 line-clamp-2">{course.title || 'Untitled course'}</h3>
         <p className="text-xs text-[#9e9789] mb-1.5">{course.instructor || 'Instructor'}</p>
         <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-          <span className="font-bold text-[#1a1208] text-xs">{course.rating || '—'}</span>
+          <span className="font-bold text-[#1a1208] text-xs">{displayRating.toFixed(1)}</span>
           <div className="flex gap-0.5">
             {Array.from({ length: 5 }).map((_, i) => (
-              <Star key={i} size={11} className="text-[#f9c97a]" fill={i < Math.floor(course.rating || 0) ? 'currentColor' : 'none'} />
+              <Star key={i} size={11} className="text-[#f9c97a]" fill={i < Math.round(displayRating) ? 'currentColor' : 'none'} />
             ))}
           </div>
-          <span className="text-[11px] text-[#9e9789]">({course.reviews || 0})</span>
-          {course.students > 0 && (
-            <span className="flex items-center gap-1 text-[11px] text-[#9e9789] ml-1"><Users size={11} />{course.students} students</span>
-          )}
+          <span className="text-[11px] text-[#9e9789]">({displayRatingCount.toLocaleString()})</span>
+          <span className="flex items-center gap-1 text-[11px] text-[#9e9789] ml-1"><Users size={11} />{displayStudentCount.toLocaleString()} students</span>
         </div>
         {locked ? (
           <div className={`mt-auto flex items-start gap-2 rounded-lg px-3 py-2.5 text-xs leading-relaxed ${enrollment.paymentStatus === 'rejected' ? 'bg-red-50 text-red-700' : 'bg-[#fdf2ea] text-[#7a4a00]'}`}>
@@ -417,6 +477,48 @@ export default function Portals() {
   const [notesLoading, setNotesLoading] = useState(false);
   const [noteText, setNoteText] = useState('');
 
+  // NEW: sidebar-level Notes/Q&A/Resources — aggregated across every course,
+  // not just the one currently open in the player. Loaded on demand the
+  // first time each tab is visited.
+  const [myNotes, setMyNotes] = useState(null);
+  const [myNotesLoading, setMyNotesLoading] = useState(false);
+  const [myQuestions, setMyQuestions] = useState(null);
+  const [myQuestionsLoading, setMyQuestionsLoading] = useState(false);
+  const [myResources, setMyResources] = useState(null);
+  const [myResourcesLoading, setMyResourcesLoading] = useState(false);
+
+  useEffect(() => {
+    if (currentView === 'my-notes' && myNotes === null) {
+      setMyNotesLoading(true);
+      api.get('/notes/my').then((res) => setMyNotes(res.data || [])).catch(() => setMyNotes([])).finally(() => setMyNotesLoading(false));
+    }
+    if (currentView === 'my-qa' && myQuestions === null) {
+      setMyQuestionsLoading(true);
+      api.get('/questions/my-courses').then((res) => setMyQuestions(res.data || [])).catch(() => setMyQuestions([])).finally(() => setMyQuestionsLoading(false));
+    }
+    if (currentView === 'my-resources' && myResources === null) {
+      setMyResourcesLoading(true);
+      const verified = enrollments.filter((e) => e.paymentStatus === 'verified');
+      Promise.all(verified.map((e) => fetchCourseById(e.course?._id || e.course)))
+        .then((fullCourses) => {
+          const flat = [];
+          fullCourses.forEach((course, idx) => {
+            if (!course) return;
+            (course.sections || []).forEach((section) => {
+              (section.lectures_list || []).forEach((lecture) => {
+                (lecture.resources || []).forEach((url) => {
+                  flat.push({ courseTitle: course.title, lectureTitle: lecture.title, url, key: `${idx}-${lecture.id}-${url}` });
+                });
+              });
+            });
+          });
+          setMyResources(flat);
+        })
+        .catch(() => setMyResources([]))
+        .finally(() => setMyResourcesLoading(false));
+    }
+  }, [currentView]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // NEW: fires the "Lesson Started" automation trigger for real, the first
   // time a lecture is opened (not just completed) — used both for the
   // auto-selected first lecture and for clicking one in the curriculum.
@@ -507,6 +609,37 @@ export default function Portals() {
   const deleteNote = async (id) => {
     try { await api.delete(`/notes/${id}`); setNotes((prev) => prev.filter((n) => n._id !== id)); }
     catch (err) { console.error('[Portal] failed to delete note:', err.message); }
+  };
+
+  // Same actions as above, but against the aggregate sidebar-level state
+  // (myNotes/myQuestions) instead of the single open course's.
+  const deleteMyNote = async (id) => {
+    try { await api.delete(`/notes/${id}`); setMyNotes((prev) => (prev || []).filter((n) => n._id !== id)); }
+    catch (err) { console.error('[Portal] failed to delete note:', err.message); }
+  };
+  const toggleMyUpvote = async (questionId) => {
+    try {
+      const res = await api.post(`/questions/${questionId}/upvote`);
+      setMyQuestions((prev) => (prev || []).map((q) => (q._id === questionId ? { ...q, upvotes: new Array(res.data.upvotes).fill(null) } : q)));
+    } catch (err) { console.error('[Portal] failed to upvote:', err.message); }
+  };
+  const [myAnswerDrafts, setMyAnswerDrafts] = useState({});
+  const postMyAnswer = async (questionId) => {
+    const text = (myAnswerDrafts[questionId] || '').trim();
+    if (!text) return;
+    try {
+      const res = await api.post(`/questions/${questionId}/answers`, { text });
+      setMyQuestions((prev) => (prev || []).map((q) => (q._id === questionId ? res.data : q)));
+      setMyAnswerDrafts((prev) => ({ ...prev, [questionId]: '' }));
+    } catch (err) { console.error('[Portal] failed to post answer:', err.message); }
+  };
+
+  // Maps a raw courseId (as stored on a Note/Question) to that course's
+  // title, using the enrollments this student already has loaded — avoids
+  // a separate lookup call just to label each group.
+  const courseTitleFor = (courseId) => {
+    const match = enrollments.find((e) => String(e.course?._id || e.course) === String(courseId));
+    return match?.course?.title || 'Course';
   };
 
   const handleLogout = () => { logout(); navigate('/login'); };
@@ -781,7 +914,7 @@ export default function Portals() {
           <button className="lg:hidden p-2 -ml-2 bg-transparent border-none cursor-pointer text-[#1a1208]" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>{mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}</button>
           <div className="flex items-center gap-2 text-[#1a1208] font-bold" style={{ fontFamily: "'Playfair Display', serif" }}>
             {siteLogoUrl ? (
-              <img src={siteLogoUrl} alt="Logo" className="h-9 md:h-10 w-auto object-contain" />
+              <img src={siteLogoUrl} alt="Logo" className="h-12 md:h-16 w-auto object-contain" />
             ) : (
               <>
                 <GraduationCap size={26} className="text-[#e8540a]" /><span className="text-lg md:text-xl">Ler<span className="text-[#e8540a]">ni</span> Portal</span>
@@ -836,11 +969,14 @@ export default function Portals() {
       </header>
 
       <div className="flex">
-        <aside className={`fixed lg:sticky top-[57px] left-0 h-[calc(100vh-57px)] w-64 bg-[#1a1208] flex-shrink-0 transition-transform z-30 overflow-y-auto ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
+        <aside className={`fixed lg:sticky top-[72px] lg:top-[88px] left-0 h-[calc(100vh-72px)] lg:h-[calc(100vh-88px)] w-64 bg-[#1a1208] flex-shrink-0 transition-transform z-30 overflow-y-auto ${mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}`}>
           <nav className="p-4 space-y-1">
             {[
               { id: 'dashboard', label: 'Dashboard', icon: Home },
               { id: 'courses', label: 'My Courses', icon: BookOpen },
+              { id: 'my-notes', label: 'Notes', icon: Edit3 },
+              { id: 'my-qa', label: 'Q&A', icon: MessageSquare },
+              { id: 'my-resources', label: 'Resources', icon: Download },
               { id: 'progress', label: 'Progress', icon: TrendingUp },
               { id: 'certificates', label: 'Certificates', icon: Award },
               { id: 'profile', label: 'Profile', icon: User },
@@ -970,9 +1106,21 @@ export default function Portals() {
             <div>
               <h1 className="text-2xl font-bold text-[#1a1208] mb-6" style={{ fontFamily: "'Playfair Display', serif" }}>My Progress</h1>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-                <div className="bg-white border border-[#ece6dd] rounded-2xl p-5"><p className="text-xs text-[#9e9789] mb-1">Enrolled</p><p className="text-3xl font-bold text-[#1a1208]">{enrolledCount}</p></div>
-                <div className="bg-white border border-[#ece6dd] rounded-2xl p-5"><p className="text-xs text-[#9e9789] mb-1">Unlocked</p><p className="text-3xl font-bold text-[#1a1208]">{verifiedCount}</p></div>
-                <div className="bg-white border border-[#ece6dd] rounded-2xl p-5"><p className="text-xs text-[#9e9789] mb-1">Completed</p><p className="text-3xl font-bold text-[#1a1208]">{completedEnrollments.length}</p></div>
+                {[
+                  { icon: BookOpen,    label: 'Courses Enrolled', value: enrolledCount,              accent: '#e8540a', bg: '#fdf2ea' },
+                  { icon: CheckCircle, label: 'Unlocked',         value: verifiedCount,               accent: '#1a7a4a', bg: '#e8f5ee' },
+                  { icon: Award,       label: 'Completed',        value: completedEnrollments.length, accent: '#a5762f', bg: '#faf3e6' },
+                ].map((s) => (
+                  <div key={s.label} className="bg-white border border-[#ece6dd] rounded-2xl p-5 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: s.bg, color: s.accent }}>
+                      <s.icon size={22} />
+                    </div>
+                    <div>
+                      <p className="text-3xl font-bold text-[#1a1208] leading-none" style={{ fontVariantNumeric: 'tabular-nums' }}>{s.value}</p>
+                      <p className="text-xs font-semibold text-[#9e9789] mt-1.5 uppercase tracking-wide">{s.label}</p>
+                    </div>
+                  </div>
+                ))}
               </div>
               <div>
                 <h2 className="font-bold text-[#1a1208] mb-4">Course Progress</h2>
@@ -986,6 +1134,97 @@ export default function Portals() {
                   </div>
                 )}
               </div>
+            </div>
+
+          ) : currentView === 'my-notes' ? (
+            <div>
+              <h1 className="text-2xl font-bold text-[#1a1208] mb-1" style={{ fontFamily: "'Playfair Display', serif" }}>Notes</h1>
+              <p className="text-[#9e9789] mb-6">Every note you've saved, across all your courses.</p>
+              {myNotesLoading ? (
+                <Loader2 size={24} className="animate-spin text-[#e8540a]" />
+              ) : !myNotes || myNotes.length === 0 ? (
+                <p className="text-[#9e9789] py-12 text-center">No notes yet — save one from inside any lecture.</p>
+              ) : (
+                <div className="space-y-3 max-w-2xl">
+                  {myNotes.map((n) => (
+                    <div key={n._id} className="bg-white border border-[#ece6dd] rounded-xl p-4">
+                      <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
+                        <div>
+                          <span className="text-xs font-bold text-[#e8540a]">{courseTitleFor(n.courseId)}</span>
+                          {n.lectureTitle && <span className="text-xs text-[#9e9789]"> • {n.lectureTitle}</span>}
+                        </div>
+                        <button onClick={() => deleteMyNote(n._id)} className="bg-transparent border-none cursor-pointer text-[#9e9789] hover:text-red-500 p-0"><Trash2 size={14} /></button>
+                      </div>
+                      <p className="text-sm text-[#3d3020] mb-1.5">{n.content}</p>
+                      <span className="text-xs text-[#9e9789]">{new Date(n.createdAt).toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+          ) : currentView === 'my-qa' ? (
+            <div>
+              <h1 className="text-2xl font-bold text-[#1a1208] mb-1" style={{ fontFamily: "'Playfair Display', serif" }}>Q&A</h1>
+              <p className="text-[#9e9789] mb-6">Questions and answers across every course you're enrolled in.</p>
+              {myQuestionsLoading ? (
+                <Loader2 size={24} className="animate-spin text-[#e8540a]" />
+              ) : !myQuestions || myQuestions.length === 0 ? (
+                <p className="text-[#9e9789] py-12 text-center">No questions yet — ask one from inside any lecture.</p>
+              ) : (
+                <div className="space-y-3 max-w-2xl">
+                  {myQuestions.map((q) => (
+                    <div key={q._id} className="bg-white border border-[#ece6dd] rounded-xl p-4">
+                      <div className="flex items-center gap-2.5 mb-2">
+                        <div className="w-8 h-8 rounded-full bg-[#e8540a] text-white flex items-center justify-center font-bold text-xs flex-shrink-0">{(q.author?.name || '?').charAt(0).toUpperCase()}</div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-bold text-[#1a1208] truncate">{q.author?.name || 'Student'}</p>
+                          <p className="text-xs text-[#9e9789] truncate">{courseTitleFor(q.courseId)}{q.lectureTitle ? ` • ${q.lectureTitle}` : ''} • {new Date(q.createdAt).toLocaleDateString()}</p>
+                        </div>
+                      </div>
+                      <p className="text-sm text-[#3d3020] mb-2.5">{q.text}</p>
+                      <button onClick={() => toggleMyUpvote(q._id)} className="flex items-center gap-1.5 text-xs text-[#9e9789] hover:text-[#e8540a] bg-transparent border-none cursor-pointer p-0 mb-3">
+                        <ThumbsUp size={13} /> {q.upvotes?.length || 0}
+                      </button>
+                      {(q.answers || []).map((a, i) => (
+                        <div key={i} className="ml-4 pl-3 border-l-2 border-[#f0ebe3] mb-2">
+                          <p className="text-xs font-bold text-[#1a1208]">{a.author?.name || 'User'}</p>
+                          <p className="text-xs text-[#6b5e4e]">{a.text}</p>
+                        </div>
+                      ))}
+                      <div className="flex gap-2 mt-2">
+                        <input value={myAnswerDrafts[q._id] || ''} onChange={(e) => setMyAnswerDrafts((p) => ({ ...p, [q._id]: e.target.value }))}
+                          placeholder="Write an answer…" className="flex-1 border border-[#ece6dd] rounded-lg px-3 py-1.5 text-xs text-[#1a1208] outline-none focus:border-[#e8540a]" />
+                        <button onClick={() => postMyAnswer(q._id)} className="text-xs font-bold px-3 py-1.5 rounded-lg border-none cursor-pointer bg-[#f0ebe3] hover:bg-[#e8dfd0] text-[#3d3020]">Reply</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+          ) : currentView === 'my-resources' ? (
+            <div>
+              <h1 className="text-2xl font-bold text-[#1a1208] mb-1" style={{ fontFamily: "'Playfair Display', serif" }}>Resources</h1>
+              <p className="text-[#9e9789] mb-6">Downloadable resources from every lecture across your courses.</p>
+              {myResourcesLoading ? (
+                <Loader2 size={24} className="animate-spin text-[#e8540a]" />
+              ) : !myResources || myResources.length === 0 ? (
+                <p className="text-[#9e9789] py-12 text-center">No resources available yet.</p>
+              ) : (
+                <div className="space-y-2 max-w-2xl">
+                  {myResources.map((r) => (
+                    <a key={r.key} href={r.url} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-3.5 bg-white border border-[#ece6dd] rounded-xl hover:border-[#e8540a] transition no-underline">
+                      <FileText size={20} className="text-[#e8540a] flex-shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm text-[#1a1208] truncate">{resourceLabel(r.url, 0)}</p>
+                        <p className="text-xs text-[#9e9789] truncate">{r.courseTitle} • {r.lectureTitle}</p>
+                      </div>
+                      <Download size={16} className="text-[#9e9789] flex-shrink-0" />
+                    </a>
+                  ))}
+                </div>
+              )}
             </div>
 
           ) : currentView === 'courses' ? (
@@ -1010,11 +1249,20 @@ export default function Portals() {
             <div>
               <h1 className="text-2xl font-bold text-[#1a1208] mb-1" style={{ fontFamily: "'Playfair Display', serif" }}>Welcome back, {(user?.name || 'Student').split(' ')[0]}!</h1>
               <p className="text-[#9e9789] mb-6">Continue your learning journey</p>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
-                {[{ icon: BookOpen, label: 'Enrolled', value: enrolledCount }, { icon: CheckCircle, label: 'Unlocked', value: verifiedCount }, { icon: TrendingUp, label: 'Completed', value: completedEnrollments.length }].map((s) => (
-                  <div key={s.label} className="bg-white border border-[#ece6dd] rounded-2xl p-4 md:p-5 flex items-center gap-3">
-                    <div className="w-11 h-11 rounded-xl bg-[#fdf2ea] text-[#e8540a] flex items-center justify-center flex-shrink-0"><s.icon size={20} /></div>
-                    <div><p className="text-xl font-bold text-[#1a1208]">{s.value}</p><p className="text-xs text-[#9e9789]">{s.label}</p></div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+                {[
+                  { icon: BookOpen,    label: 'Courses Enrolled', value: enrolledCount,               accent: '#e8540a', bg: '#fdf2ea' },
+                  { icon: CheckCircle, label: 'Unlocked',         value: verifiedCount,                accent: '#1a7a4a', bg: '#e8f5ee' },
+                  { icon: Award,       label: 'Completed',        value: completedEnrollments.length,  accent: '#a5762f', bg: '#faf3e6' },
+                ].map((s) => (
+                  <div key={s.label} className="bg-white border border-[#ece6dd] rounded-2xl p-5 flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0" style={{ backgroundColor: s.bg, color: s.accent }}>
+                      <s.icon size={22} />
+                    </div>
+                    <div>
+                      <p className="text-3xl font-bold text-[#1a1208] leading-none" style={{ fontVariantNumeric: 'tabular-nums' }}>{s.value}</p>
+                      <p className="text-xs font-semibold text-[#9e9789] mt-1.5 uppercase tracking-wide">{s.label}</p>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1035,4 +1283,4 @@ export default function Portals() {
       </div>
     </div>
   );
-}
+} 

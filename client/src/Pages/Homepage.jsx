@@ -13,7 +13,7 @@
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Star, ArrowRight, Megaphone, ShoppingBag, Target, TrendingUp } from 'lucide-react';
-import { useCourses } from '../context/CoursesContext';
+import { useCourses, getDisplayStats } from '../context/CoursesContext';
 import SiteHeader from '../components/SiteHeader';
 import SiteFooter from '../components/SiteFooter';
 
@@ -52,6 +52,10 @@ const SERVICES = [
 ];
 
 function CourseCard({ course, onClick }) {
+  // NEW: pulled from the shared getDisplayStats() (CoursesContext.jsx) so
+  // this matches the course's own landing page instead of the small raw
+  // real counts.
+  const { rating: displayRating, reviewCount: displayReviewCount } = useMemo(() => getDisplayStats(course), [course]);
   return (
     <div onClick={onClick} className="bg-white border border-[#ece6dd] rounded-2xl overflow-hidden hover:shadow-lg transition cursor-pointer group">
       <div className="h-36 md:h-44 bg-[#f0ebe3] flex items-center justify-center relative overflow-hidden">
@@ -67,17 +71,15 @@ function CourseCard({ course, onClick }) {
       <div className="p-4">
         <h3 className="font-bold text-[#1a1208] text-sm md:text-base mb-2 line-clamp-2 group-hover:text-[#e8540a] transition">{course.title}</h3>
         <p className="text-xs md:text-sm text-[#9e9789] mb-2">{course.instructor || 'Instructor'}</p>
-        {course.rating > 0 && (
-          <div className="flex items-center gap-1 mb-2">
-            <span className="font-bold text-sm text-[#1a1208]">{course.rating}</span>
-            <div className="flex gap-0.5">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <Star key={i} size={12} className="text-[#f9c97a]" fill={i < Math.round(course.rating) ? 'currentColor' : 'none'} />
-              ))}
-            </div>
-            <span className="text-xs text-[#9e9789]">({formatNumber(course.reviews)})</span>
+        <div className="flex items-center gap-1 mb-2">
+          <span className="font-bold text-sm text-[#1a1208]">{displayRating.toFixed(1)}</span>
+          <div className="flex gap-0.5">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Star key={i} size={12} className="text-[#f9c97a]" fill={i < Math.round(displayRating) ? 'currentColor' : 'none'} />
+            ))}
           </div>
-        )}
+          <span className="text-xs text-[#9e9789]">({formatNumber(displayReviewCount)})</span>
+        </div>
         <p className="text-base md:text-lg font-bold text-[#1a1208]" style={{ fontFamily: "'Playfair Display', serif" }}>PKR {course.price}</p>
       </div>
     </div>

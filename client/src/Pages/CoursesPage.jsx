@@ -15,7 +15,7 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Star, Clock, Users, Search, Filter, X, ChevronDown, BookOpen, Zap } from 'lucide-react';
-import { useCourses } from '../context/CoursesContext';
+import { useCourses, getDisplayStats } from '../context/CoursesContext';
 import SiteHeader from '../components/SiteHeader';
 import SiteFooter from '../components/SiteFooter';
 
@@ -59,6 +59,11 @@ function CourseCard({ course, onClick }) {
   const discount = course.originalPrice && course.originalPrice > course.price
     ? Math.round((1 - course.price / course.originalPrice) * 100)
     : null;
+  // NEW: pulled from the shared getDisplayStats() (CoursesContext.jsx) —
+  // this is what actually makes these match the course's own landing page;
+  // the raw course.rating/reviews/students fields below are just the small
+  // real counts on their own.
+  const { rating: displayRating, reviewCount: displayReviewCount, studentCount: displayStudentCount } = useMemo(() => getDisplayStats(course), [course]);
   return (
     <div onClick={onClick}
       className="group bg-white border border-[#ece6dd] rounded-2xl overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 cursor-pointer flex flex-col">
@@ -81,16 +86,16 @@ function CourseCard({ course, onClick }) {
         {/* Rating + review count + student count — same numbers, same
             source, as the course's own landing page. */}
         <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-          <span className="font-bold text-[#1a1208] text-sm">{course.rating || '—'}</span>
+          <span className="font-bold text-[#1a1208] text-sm">{displayRating.toFixed(1)}</span>
           <div className="flex gap-0.5">
             {Array.from({ length: 5 }).map((_, i) => (
-              <Star key={i} size={12} className="text-[#f9c97a]" fill={i < Math.floor(course.rating || 0) ? 'currentColor' : 'none'} />
+              <Star key={i} size={12} className="text-[#f9c97a]" fill={i < Math.floor(displayRating) ? 'currentColor' : 'none'} />
             ))}
           </div>
-          <span className="text-xs text-[#9e9789]">({formatNumber(course.reviews)})</span>
-          {course.students > 0 && (
+          <span className="text-xs text-[#9e9789]">({formatNumber(displayReviewCount)})</span>
+          {displayStudentCount > 0 && (
             <span className="flex items-center gap-1 text-xs text-[#9e9789] ml-1">
-              <Users size={11} />{formatNumber(course.students)} students
+              <Users size={11} />{formatNumber(displayStudentCount)} students
             </span>
           )}
         </div>

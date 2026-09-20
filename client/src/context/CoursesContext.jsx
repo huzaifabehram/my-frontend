@@ -26,6 +26,45 @@ const COLOR_POOL = [
   "from-yellow-500 to-orange-500","from-sky-400 to-blue-500",
 ];
 
+// ─────────────────────────────────────────────────────────────────────────────
+// DISPLAY STATS — the same "stable per-course fallback + real count" numbers
+// shown on the course landing page (Shopify.jsx), exported here so every
+// OTHER place a course card appears (Student Portal, Courses listing, Home
+// page) shows the exact same rating/review/student numbers instead of the
+// raw, much-smaller real counts. This is a copy of Shopify.jsx's own
+// internal logic (stableCourseOffset/FALLBACK_RATING/etc.) — kept as an
+// exact copy rather than having Shopify.jsx import this, so that page's
+// already-working, heavily-tuned logic isn't disturbed; if the numbers here
+// ever need to change, change them in both places.
+// ─────────────────────────────────────────────────────────────────────────────
+const DISPLAY_FALLBACK_RATING = 4.8;
+
+function stableCourseOffset(seed, range) {
+  const str = String(seed || "course");
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash * 31 + str.charCodeAt(i)) >>> 0;
+  }
+  return hash % range;
+}
+
+// Takes a normalized course (i.e. already run through normalizeCourse) and
+// returns { rating, reviewCount, studentCount } — the same numbers that
+// course's own landing page shows, not the raw real-only counts.
+export function getDisplayStats(course) {
+  if (!course) return { rating: DISPLAY_FALLBACK_RATING, reviewCount: 0, studentCount: 0 };
+  const courseSeed = course._id || course.id || course.title;
+  const fallbackReviewCount  = 11800 + stableCourseOffset(courseSeed, 1100);
+  const fallbackStudentCount = 61001 + stableCourseOffset(`${courseSeed}-students`, 999);
+  const realReviewCount  = course.reviews  || 0;
+  const realStudentCount = course.students || 0;
+  return {
+    rating:       course.rating || DISPLAY_FALLBACK_RATING,
+    reviewCount:  fallbackReviewCount + realReviewCount,
+    studentCount: fallbackStudentCount + realStudentCount,
+  };
+}
+
 export function normalizeCourse(raw, index) {
   if (!raw || typeof raw !== "object") return null;
   const source = raw.course && typeof raw.course === "object" ? raw.course : raw;

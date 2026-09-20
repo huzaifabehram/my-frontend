@@ -9,8 +9,8 @@
 //      routes.
 // Nothing else below is changed — same ErrorBoundary, MetaPixelRouteTracker,
 // ProtectedRoute, and every other route exactly as you had them.
-import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import React, { useEffect, useState } from "react";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth }  from "./context/AuthContext";
 import { CoursesProvider }        from "./context/CoursesContext";
 import AuthPage                   from "./Pages/AuthPages";
@@ -53,6 +53,32 @@ class ErrorBoundary extends React.Component {
     }
     return this.props.children;
   }
+}
+
+// ─── Route transition bar ───────────────────────────────────────────────────
+// NEW: a thin, branded-orange progress bar at the very top of the screen
+// that briefly runs on every page navigation. This doesn't touch the
+// browser's own native loading bar (that only shows on a hard refresh/first
+// load — fixing THAT needs public/index.html, which isn't available here
+// yet) — this covers the other half of the complaint: clicking between
+// pages inside the app going straight to blank/skeleton content with no
+// visual transition at all. The `key` on the wrapper forces React to
+// remount it on every route change, which is what makes the CSS animation
+// restart reliably every single time instead of only playing once.
+function RouteProgressBar() {
+  const location = useLocation();
+  return (
+    <div key={location.pathname + location.search} style={{ position: "fixed", top: 0, left: 0, right: 0, height: 3, zIndex: 9999, pointerEvents: "none" }}>
+      <div style={{ height: "100%", background: "#e8540a", width: "0%", animation: "lerni-route-progress 550ms ease-out forwards" }} />
+      <style>{`
+        @keyframes lerni-route-progress {
+          0%   { width: 0%;  opacity: 1; }
+          60%  { width: 80%; opacity: 1; }
+          100% { width: 100%; opacity: 0; }
+        }
+      `}</style>
+    </div>
+  );
 }
 
 // ─── Screens ──────────────────────────────────────────────────────────────────
@@ -128,6 +154,7 @@ export default function App() {
   return (
     <ErrorBoundary>
       <BrowserRouter>
+        <RouteProgressBar />
         <ScrollToTop />
         <MetaPixelRouteTracker />
         <AuthProvider>
