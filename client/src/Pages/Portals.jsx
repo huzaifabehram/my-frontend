@@ -220,6 +220,14 @@ function YouTubePlayer({ videoId }) {
     containerRef.current.appendChild(target);
 
     playerRef.current = new window.YT.Player(target, {
+      // NEW: width/height explicitly set to fill the container — without
+      // these, the YouTube IFrame API defaults to its own fixed pixel size
+      // (~640×390) for the iframe it creates, completely ignoring the
+      // responsive container around it. That's what was making the video
+      // look "zoomed"/oversized after pressing play — it wasn't actually
+      // zoomed, it was rendering at a fixed size larger than its box.
+      width: '100%',
+      height: '100%',
       videoId,
       // NEW: no longer forcing mute:1 — this is triggered by a real click
       // on our custom play button, which counts as a genuine user gesture
@@ -227,7 +235,22 @@ function YouTubePlayer({ videoId }) {
       // without needing to start muted and rely on a manual unmute.
       playerVars: { autoplay: 1, rel: 0, playsinline: 1 },
       events: {
-        onReady: (e) => { try { e.target.playVideo(); } catch { /* ignore */ } },
+        onReady: (e) => {
+          try { e.target.playVideo(); } catch { /* ignore */ }
+          // Safety net on top of width/height above — pins the actual
+          // <iframe> the API just created to fill the container exactly,
+          // regardless of whatever size attributes YouTube itself applied.
+          try {
+            const iframe = e.target.getIframe();
+            if (iframe) {
+              iframe.style.position = 'absolute';
+              iframe.style.inset = '0';
+              iframe.style.width = '100%';
+              iframe.style.height = '100%';
+              iframe.style.border = 'none';
+            }
+          } catch { /* ignore */ }
+        },
       },
     });
 
