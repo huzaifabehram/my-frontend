@@ -34,11 +34,11 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useCourses } from '../context/CoursesContext';
+import { useCourses, normalizeCourse } from '../context/CoursesContext';
 import {
   Play, Pause, SkipForward, SkipBack, Volume2, Maximize,
   CheckCircle, Circle, Clock, BookOpen, Download, FileText,
-  MessageSquare, Star, Award, Menu, X, Home,
+  MessageSquare, Star, Award, Menu, X, Home, Users,
   GraduationCap, User, Settings as SettingsIcon, LogOut, Bell, ChevronDown,
   ChevronRight, ChevronLeft, TrendingUp, Share2, ThumbsUp, Edit3, Trash2,
   Send, Camera, Lock, AlertCircle, Loader2, Save,
@@ -92,7 +92,7 @@ function formatTime(seconds) {
 // needs YouTube's separate IFrame Player API/postMessage bridge, which is
 // its own project; native controls are what YouTube gives for free and work
 // reliably everywhere.
-function CustomVideoPlayer({ url }) {
+function CustomVideoPlayer({ url, poster }) {
   const videoRef = useRef(null);
   const [playing, setPlaying] = useState(false);
   const [current, setCurrent] = useState(0);
@@ -121,6 +121,7 @@ function CustomVideoPlayer({ url }) {
       <video
         ref={videoRef}
         src={url}
+        poster={poster || undefined}
         className="w-full h-full"
         onClick={togglePlay}
         onTimeUpdate={(e) => setCurrent(e.currentTarget.currentTime)}
@@ -131,7 +132,7 @@ function CustomVideoPlayer({ url }) {
       />
       {!playing && (
         <button onClick={togglePlay} className="absolute inset-0 flex items-center justify-center bg-black/20 border-none cursor-pointer">
-          <div className="w-16 h-16 rounded-full bg-white/95 flex items-center justify-center"><Play size={28} className="text-[#1a1208] ml-1" fill="currentColor" /></div>
+          <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-[#e8540a] hover:bg-[#c94708] flex items-center justify-center transition shadow-lg"><Play size={30} className="text-white ml-1.5" fill="white" /></div>
         </button>
       )}
       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/85 to-transparent px-3 pt-8 pb-2 opacity-0 group-hover:opacity-100 transition">
@@ -164,15 +165,42 @@ function CustomVideoPlayer({ url }) {
   );
 }
 
-function VideoPlayer({ url }) {
+// NEW: shows a static thumbnail with our own orange play button before
+// playing, instead of YouTube's own thumbnail/branding/play button showing
+// through immediately — the actual player (including the YouTube iframe)
+// only loads once the visitor taps it.
+function VideoPlayer({ url, thumbnail }) {
+  const [started, setStarted] = useState(false);
+  useEffect(() => { setStarted(false); }, [url]);
+
   if (!url) {
     return <div className="w-full aspect-video bg-black flex items-center justify-center"><p className="text-white/50 text-sm">No video for this lecture yet.</p></div>;
   }
+
   const ytId = getYouTubeId(url);
+  const posterUrl = ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : thumbnail;
+
+  if (!started && (ytId || isBunnyUrl(url))) {
+    return (
+      <button onClick={() => setStarted(true)} className="relative w-full aspect-video bg-black border-none cursor-pointer p-0 block group">
+        {posterUrl ? (
+          <img src={posterUrl} alt="" className="absolute inset-0 w-full h-full object-cover" />
+        ) : (
+          <div className="absolute inset-0 bg-[#1a1208]" />
+        )}
+        <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/35 transition">
+          <div className="w-16 h-16 md:w-20 md:h-20 rounded-full bg-[#e8540a] group-hover:bg-[#c94708] flex items-center justify-center transition shadow-lg">
+            <Play size={30} className="text-white ml-1.5" fill="white" />
+          </div>
+        </div>
+      </button>
+    );
+  }
+
   if (ytId) {
     return (
       <div className="relative w-full aspect-video bg-black">
-        <iframe src={`https://www.youtube.com/embed/${ytId}?rel=0`} className="absolute inset-0 w-full h-full"
+        <iframe src={`https://www.youtube.com/embed/${ytId}?rel=0&autoplay=1`} className="absolute inset-0 w-full h-full"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen title="Lecture video" loading="lazy" style={{ border: 'none' }} />
       </div>
@@ -183,14 +211,14 @@ function VideoPlayer({ url }) {
     if (embedUrl) {
       return (
         <div className="relative w-full aspect-video bg-black">
-          <iframe src={embedUrl} className="absolute inset-0 w-full h-full"
+          <iframe src={`${embedUrl}&autoplay=true`} className="absolute inset-0 w-full h-full"
             allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture"
             allowFullScreen title="Lecture video" loading="lazy" style={{ border: 'none' }} />
         </div>
       );
     }
   }
-  if (isDirectVideo(url) || isCloudinaryVideo(url)) return <CustomVideoPlayer url={url} />;
+  if (isDirectVideo(url) || isCloudinaryVideo(url)) return <CustomVideoPlayer url={url} poster={thumbnail} />;
   return <div className="w-full aspect-video bg-black flex items-center justify-center"><p className="text-white/50 text-sm">Couldn't load this video format.</p></div>;
 }
 
@@ -208,8 +236,13 @@ function CourseThumb({ course }) {
 }
 
 function EnrollmentCard({ enrollment, progressPct, onOpen }) {
-  const course = enrollment.course || {};
+  const rawCourse = enrollment.course || {};
   const locked = enrollment.paymentStatus !== 'verified';
+  // NEW: run the raw course doc through the same normalizeCourse() the rest
+  // of the site uses, so rating/reviews/students here are the exact same
+  // real numbers shown on that course's own landing page — this card used
+  // to show neither.
+  const course = useMemo(() => normalizeCourse(rawCourse) || rawCourse, [rawCourse]);
   return (
     <div
       onClick={() => !locked && onOpen(enrollment)}
@@ -224,7 +257,19 @@ function EnrollmentCard({ enrollment, progressPct, onOpen }) {
       </div>
       <div className="p-4 flex-1 flex flex-col">
         <h3 className="font-bold text-[#1a1208] text-sm md:text-base leading-snug mb-1 line-clamp-2">{course.title || 'Untitled course'}</h3>
-        <p className="text-xs text-[#9e9789] mb-3">{course.instructor?.name || 'Instructor'}</p>
+        <p className="text-xs text-[#9e9789] mb-1.5">{course.instructor || 'Instructor'}</p>
+        <div className="flex items-center gap-1.5 mb-3 flex-wrap">
+          <span className="font-bold text-[#1a1208] text-xs">{course.rating || '—'}</span>
+          <div className="flex gap-0.5">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Star key={i} size={11} className="text-[#f9c97a]" fill={i < Math.floor(course.rating || 0) ? 'currentColor' : 'none'} />
+            ))}
+          </div>
+          <span className="text-[11px] text-[#9e9789]">({course.reviews || 0})</span>
+          {course.students > 0 && (
+            <span className="flex items-center gap-1 text-[11px] text-[#9e9789] ml-1"><Users size={11} />{course.students} students</span>
+          )}
+        </div>
         {locked ? (
           <div className={`mt-auto flex items-start gap-2 rounded-lg px-3 py-2.5 text-xs leading-relaxed ${enrollment.paymentStatus === 'rejected' ? 'bg-red-50 text-red-700' : 'bg-[#fdf2ea] text-[#7a4a00]'}`}>
             <AlertCircle size={14} className="flex-shrink-0 mt-0.5" />
@@ -265,6 +310,20 @@ export default function Portals() {
   const [progressMap, setProgressMap] = useState({});
   const [loading, setLoading] = useState(true);
   const [courseFilter, setCourseFilter] = useState('all');
+
+  // NEW: real header logo (same one used sitewide, uploaded via Super Admin
+  // → Settings) — same localStorage-caching pattern as SiteHeader.jsx, so it
+  // was previously just a hardcoded "Lerni Portal" wordmark + generic icon.
+  const [siteLogoUrl, setSiteLogoUrl] = useState(() => { try { return localStorage.getItem('lerni_header_logo_url') || ''; } catch { return ''; } });
+  useEffect(() => {
+    api.get('/settings')
+      .then((res) => {
+        const url = res.data?.logoUrl || '';
+        setSiteLogoUrl(url);
+        try { localStorage.setItem('lerni_header_logo_url', url); } catch { /* cache is a nice-to-have */ }
+      })
+      .catch(() => {});
+  }, [api]);
 
   const [selectedEnrollment, setSelectedEnrollment] = useState(null);
   const [selectedCourse, setSelectedCourse] = useState(null);
@@ -317,7 +376,37 @@ export default function Portals() {
     }
   }, [enrollments, courseFilter, progressMap]);
 
-  const handleNavigate = (view) => { setCurrentView(view); setMobileMenuOpen(false); setShowProfileMenu(false); };
+  const handleNavigate = (view) => {
+    setCurrentView(view);
+    setMobileMenuOpen(false);
+    setShowProfileMenu(false);
+    window.history.pushState({ portal: true, view }, '');
+  };
+
+  // NEW: the browser/device Back button should never take a student out of
+  // the portal onto the marketing site — the only way out is Logout. Back
+  // should still work BETWEEN views inside the portal (Dashboard → My
+  // Courses → Course, etc.), so this doesn't just block Back outright: it
+  // pushes a history entry per internal view change (see handleNavigate
+  // and openCourse) and only traps the boundary — the one Back press that
+  // would otherwise leave the portal entirely re-lands on the portal
+  // instead of exiting it.
+  useEffect(() => {
+    window.history.replaceState({ portal: true, view: 'dashboard' }, '');
+    const handlePop = (e) => {
+      if (e.state && e.state.portal) {
+        // 'course' isn't restorable from history state alone (the full
+        // course object isn't serialized into it) — land on My Courses
+        // instead, which is a reasonable, safe place to land either way.
+        setCurrentView(e.state.view === 'course' ? 'courses' : (e.state.view || 'dashboard'));
+      } else {
+        // Tried to go before the portal's first entry — trap it right here.
+        window.history.pushState({ portal: true, view: currentView }, '');
+      }
+    };
+    window.addEventListener('popstate', handlePop);
+    return () => window.removeEventListener('popstate', handlePop);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Q&A / Notes state for the open course ─────────────────────────────
   const [questions, setQuestions] = useState([]);
@@ -342,6 +431,7 @@ export default function Portals() {
     setSelectedEnrollment(enrollment);
     setCurrentView('course');
     setActiveTab('content');
+    window.history.pushState({ portal: true, view: 'course' }, '');
     setCourseLoading(true);
     const courseId = enrollment.course?._id || enrollment.course;
     const full = await fetchCourseById(courseId);
@@ -496,9 +586,9 @@ export default function Portals() {
         ) : !selectedCourse ? (
           <div className="flex-1 flex items-center justify-center py-24"><p className="text-[#9e9789]">Couldn't load this course.</p></div>
         ) : (
-          <div className="flex-1 grid lg:grid-cols-[1fr_380px]">
+          <div className={`flex-1 grid ${activeTab === 'content' ? 'lg:grid-cols-[1fr_380px]' : 'lg:grid-cols-1'}`}>
             <div className="bg-white">
-              <VideoPlayer url={activeLecture?.videoUrl} />
+              <VideoPlayer url={activeLecture?.videoUrl} thumbnail={selectedCourse?.thumbnail} />
               <div className="p-4 md:p-6">
                 <h1 className="text-lg md:text-xl font-bold text-[#1a1208] mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>{activeLecture?.title || 'Select a lecture'}</h1>
                 <div className="flex items-center gap-3 text-xs text-[#9e9789] mb-4 flex-wrap">
@@ -627,37 +717,45 @@ export default function Portals() {
               </div>
             </div>
 
-            {/* CURRICULUM RAIL */}
-            <div className="bg-white border-l border-[#ece6dd] overflow-y-auto max-h-[calc(100vh-64px)]">
-              <div className="p-4 border-b border-[#ece6dd]"><h2 className="font-bold text-[#1a1208] text-sm">Course Content</h2></div>
-              {(selectedCourse.sections || []).map((section) => {
-                const expanded = expandedSections.includes(section._id);
-                return (
-                  <div key={section._id} className="border-b border-[#f0ebe3]">
-                    <button onClick={() => toggleSection(section._id)} className="w-full flex items-center justify-between px-4 py-3 bg-transparent border-none cursor-pointer text-left">
-                      <span className="font-semibold text-sm text-[#1a1208] flex items-center gap-2">{expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}{section.title}</span>
-                      <span className="text-xs text-[#9e9789]">{section.lectures} lectures</span>
-                    </button>
-                    {expanded && (
-                      <div>
-                        {(section.lectures_list || []).map((lecture) => {
-                          const isDone = done.includes(String(lecture.id));
-                          const isActive = activeLecture?.id === lecture.id;
-                          return (
-                            <button key={lecture.id} onClick={() => openLecture(lecture, selectedCourse)}
-                              className={`w-full flex items-center gap-3 px-4 py-2.5 border-none cursor-pointer text-left transition ${isActive ? 'bg-[#fdf2ea]' : 'bg-transparent hover:bg-[#f8f4ed]'}`}>
-                              {isDone ? <CheckCircle size={16} className="text-[#e8540a] flex-shrink-0" /> : <Circle size={16} className="text-[#ccc5b8] flex-shrink-0" />}
-                              <span className={`text-xs flex-1 truncate ${isActive ? 'text-[#e8540a] font-semibold' : 'text-[#3d3020]'}`}>{lecture.title}</span>
-                              {lecture.duration && <span className="text-[10px] text-[#9e9789] flex-shrink-0">{lecture.duration}</span>}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+            {/* CURRICULUM RAIL — only shown on the Course Content tab now;
+                previously this rendered next to every tab (Q&A/Notes/
+                Resources too), which on narrower screens made it look like
+                a second, out-of-place "Course Content" block sitting below
+                those tabs. */}
+            {activeTab === 'content' && (
+              <div className="bg-white border-l border-[#ece6dd] overflow-y-auto max-h-[calc(100vh-64px)]">
+                <div className="p-4 border-b border-[#ece6dd]"><h2 className="font-bold text-[#1a1208] text-sm">Course Content</h2></div>
+                {(selectedCourse.sections || []).map((section) => {
+                  const expanded = expandedSections.includes(section._id);
+                  return (
+                    <div key={section._id} className="border-b border-[#f0ebe3]">
+                      <button onClick={() => toggleSection(section._id)} className="w-full flex items-center justify-between px-4 py-3 bg-transparent border-none cursor-pointer text-left">
+                        <span className="font-semibold text-sm text-[#1a1208] flex items-center gap-2">{expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}{section.title}</span>
+                        <span className="text-xs text-[#9e9789]">{section.lectures} lectures</span>
+                      </button>
+                      {expanded && (
+                        <div>
+                          {(section.lectures_list || []).map((lecture) => {
+                            const isDone = done.includes(String(lecture.id));
+                            const isActive = activeLecture?.id === lecture.id;
+                            return (
+                              <button key={lecture.id} onClick={() => openLecture(lecture, selectedCourse)}
+                                className={`w-full flex items-center gap-3 px-4 py-2.5 border-none cursor-pointer text-left transition ${isActive ? 'bg-[#fdf2ea]' : 'bg-transparent hover:bg-[#f8f4ed]'}`}>
+                                {isDone ? <CheckCircle size={16} className="text-[#e8540a] flex-shrink-0" /> : <Circle size={16} className="text-[#ccc5b8] flex-shrink-0" />}
+                                {/* NEW: text-sm instead of text-xs — kept the
+                                    exact same order/structure, just larger. */}
+                                <span className={`text-sm flex-1 truncate ${isActive ? 'text-[#e8540a] font-semibold' : 'text-[#3d3020]'}`}>{lecture.title}</span>
+                                {lecture.duration && <span className="text-xs text-[#9e9789] flex-shrink-0">{lecture.duration}</span>}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -682,7 +780,13 @@ export default function Portals() {
         <div className="px-4 md:px-6 py-3 flex items-center gap-3">
           <button className="lg:hidden p-2 -ml-2 bg-transparent border-none cursor-pointer text-[#1a1208]" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>{mobileMenuOpen ? <X size={22} /> : <Menu size={22} />}</button>
           <div className="flex items-center gap-2 text-[#1a1208] font-bold" style={{ fontFamily: "'Playfair Display', serif" }}>
-            <GraduationCap size={26} className="text-[#e8540a]" /><span className="text-lg md:text-xl">Ler<span className="text-[#e8540a]">ni</span> Portal</span>
+            {siteLogoUrl ? (
+              <img src={siteLogoUrl} alt="Logo" className="h-9 md:h-10 w-auto object-contain" />
+            ) : (
+              <>
+                <GraduationCap size={26} className="text-[#e8540a]" /><span className="text-lg md:text-xl">Ler<span className="text-[#e8540a]">ni</span> Portal</span>
+              </>
+            )}
           </div>
           <div className="flex items-center gap-2 ml-auto">
             <div className="relative">
@@ -834,14 +938,23 @@ export default function Portals() {
           ) : currentView === 'certificates' ? (
             <div>
               <h1 className="text-2xl font-bold text-[#1a1208] mb-1" style={{ fontFamily: "'Playfair Display', serif" }}>Certificates</h1>
-              <p className="text-[#9e9789] mb-6">Earned once a course reaches 100% complete.</p>
+              <p className="text-[#6b5e4e] mb-6 max-w-xl leading-relaxed">
+                Once you complete 100% of a course, your certificate becomes available here to download — it includes your name and the profile photo from your <button onClick={() => handleNavigate('profile')} className="text-[#e8540a] font-semibold bg-transparent border-none p-0 cursor-pointer underline">Profile</button> page, so make sure that's up to date.
+              </p>
               {completedEnrollments.length === 0 ? (
                 <p className="text-[#9e9789] py-12 text-center">No certificates yet — finish a course to earn one.</p>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {completedEnrollments.map((e) => (
                     <div key={e._id} className="bg-white border-2 border-[#e8dfd0] rounded-2xl p-6 text-center">
-                      <div className="w-16 h-16 rounded-full bg-[#fdf2ea] text-[#e8540a] flex items-center justify-center mx-auto mb-4"><Award size={30} /></div>
+                      <div className="relative w-16 h-16 mx-auto mb-4">
+                        {avatarUrl ? (
+                          <img src={avatarUrl} alt="" className="w-16 h-16 rounded-full object-cover border-2 border-[#fdf2ea]" />
+                        ) : (
+                          <div className="w-16 h-16 rounded-full bg-[#e8540a] text-white flex items-center justify-center font-bold text-xl">{(user?.name || 'S').charAt(0).toUpperCase()}</div>
+                        )}
+                        <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-[#fdf2ea] text-[#e8540a] flex items-center justify-center border-2 border-white"><Award size={12} /></div>
+                      </div>
                       <h3 className="font-bold text-[#1a1208] mb-1" style={{ fontFamily: "'Playfair Display', serif" }}>{e.course?.title}</h3>
                       <p className="text-xs text-[#9e9789] mb-4">Completed by {user?.name}</p>
                       <button onClick={() => window.print()} className="flex items-center gap-1.5 mx-auto text-sm font-bold px-4 py-2 rounded-lg border-none cursor-pointer bg-[#e8540a] hover:bg-[#c94708] text-white transition">
@@ -861,21 +974,17 @@ export default function Portals() {
                 <div className="bg-white border border-[#ece6dd] rounded-2xl p-5"><p className="text-xs text-[#9e9789] mb-1">Unlocked</p><p className="text-3xl font-bold text-[#1a1208]">{verifiedCount}</p></div>
                 <div className="bg-white border border-[#ece6dd] rounded-2xl p-5"><p className="text-xs text-[#9e9789] mb-1">Completed</p><p className="text-3xl font-bold text-[#1a1208]">{completedEnrollments.length}</p></div>
               </div>
-              <div className="bg-white border border-[#ece6dd] rounded-2xl p-5 md:p-6">
+              <div>
                 <h2 className="font-bold text-[#1a1208] mb-4">Course Progress</h2>
-                {enrollments.length === 0 ? <p className="text-sm text-[#9e9789]">No courses yet.</p> : enrollments.map((e) => (
-                  <div key={e._id} className="py-3 border-b border-[#f8f4ed] last:border-none">
-                    <p className="text-sm font-semibold text-[#1a1208] mb-1.5">{e.course?.title}</p>
-                    {e.paymentStatus !== 'verified' ? (
-                      <p className="text-xs text-[#9e9789] flex items-center gap-1.5"><Lock size={12} /> Locked</p>
-                    ) : (
-                      <div className="flex items-center gap-3">
-                        <div className="flex-1 h-1.5 bg-[#f0ebe3] rounded-full overflow-hidden"><div className="h-full bg-[#e8540a] rounded-full" style={{ width: `${progressPctFor(e)}%` }} /></div>
-                        <span className="text-xs font-bold text-[#e8540a] w-10 text-right">{progressPctFor(e)}%</span>
-                      </div>
-                    )}
+                {enrollments.length === 0 ? (
+                  <p className="text-sm text-[#9e9789]">No courses yet.</p>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {enrollments.map((e) => (
+                      <EnrollmentCard key={e._id} enrollment={e} progressPct={progressPctFor(e)} onOpen={openCourse} />
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
             </div>
 

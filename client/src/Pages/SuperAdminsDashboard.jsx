@@ -188,6 +188,7 @@ const NAV_ITEMS = [
   { to: "/superadmin/messages",     label: "Messages",      icon: "✉️" },
   { to: "/superadmin/automation",   label: "Automation Workflow", icon: "⚡" },
   { to: "/superadmin/pipeline",     label: "Pipeline",      icon: "📊" },
+  { to: "/superadmin/review-importer", label: "Review Importer", icon: "⭐" },
   { to: "/superadmin/settings",     label: "Settings",      icon: "⚙️" },
 ];
 
@@ -625,9 +626,11 @@ function LogoUploadBox({ toast, target, label, description, initialUrl, onUpload
 // button, and its run history on the same page.
 //
 // Honest capability notes (also shown inline in the UI where relevant):
-//   • send_email needs SMTP_* env vars on the server — shows a banner if unset
+//   • Email sending (Send Email action) was removed for now — SMTP isn't
+//     set up and the nodemailer dependency wasn't installed, which broke
+//     the server. See server.js for how to bring it back once SMTP is ready.
 //   • send_whatsapp needs WHATSAPP_PHONE_NUMBER_ID + WHATSAPP_ACCESS_TOKEN
-//     (Meta WhatsApp Cloud API) — same kind of banner
+//     (Meta WhatsApp Cloud API) — shows a banner if unset
 //   • customer_replied only fires once your provider's inbound webhook is
 //     pointed at POST /api/inbound/message — it can't fire on its own
 //   • video_tracking, appointment triggers, and site-wide page-view
@@ -650,7 +653,6 @@ const TRIGGER_LABELS = {
   opportunity_created:     "Opportunity Created",
   opportunity_status_changed: "Opportunity Status Changed",
   link_clicked:            "Link Clicked",
-  email_sent:              "Email Sent",
   whatsapp_sent:           "WhatsApp Message Sent",
   customer_replied:        "Customer Replied  (needs your provider's inbound webhook — see Settings)",
 };
@@ -665,7 +667,6 @@ const ACTION_LABELS = {
   internal_notification: "Send Internal Notification",
   notify_student:        "Send Student Notification",
   wait:                  "Wait",
-  send_email:            "Send Email",
   send_whatsapp:         "Send WhatsApp Message",
   add_to_pipeline:       "Add to Pipeline",
   update_opportunity_stage: "Update Opportunity Stage",
@@ -790,19 +791,6 @@ function WorkflowStepEditor({ step, index, total, meta, assignableUsers, onChang
                 {["seconds", "minutes", "hours", "days", "weeks", "years"].map((u) => <option key={u} value={u}>{u}</option>)}
               </select>
             </div>
-          )}
-
-          {step.actionType === "send_email" && (
-            <>
-              {!meta.emailConfigured && <p className="text-[11px] text-amber-600">SMTP isn't configured yet — this step will be skipped (and logged) until it is. See the guide below.</p>}
-              <input value={p.to || ""} onChange={(e) => onChangeParam("to", e.target.value)} placeholder="To (default: {{studentEmail}})" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
-              <input value={p.subject || ""} onChange={(e) => onChangeParam("subject", e.target.value)} placeholder="Subject" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
-              <RichMessageEditor value={p.body || ""} onChange={(v) => onChangeParam("body", v)} boldTag={["<b>", "</b>"]} rows={4} placeholder="Email body…" />
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <input value={p.buttonText || ""} onChange={(e) => onChangeParam("buttonText", e.target.value)} placeholder="Button text (optional)" className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
-                <input value={p.buttonUrl || ""} onChange={(e) => onChangeParam("buttonUrl", e.target.value)} placeholder="Button URL (optional)" className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
-              </div>
-            </>
           )}
 
           {step.actionType === "send_whatsapp" && (
@@ -931,7 +919,7 @@ function AutomationWorkflowEditorPage({ toast, navigate, workflowId }) {
   const [steps, setSteps] = useState([]);
   const [runCount, setRunCount] = useState(0);
   const [lastRunAt, setLastRunAt] = useState(null);
-  const [meta, setMeta] = useState({ triggers: [], actionTypes: [], emailConfigured: false, whatsappConfigured: false, pipelineStages: [] });
+  const [meta, setMeta] = useState({ triggers: [], actionTypes: [], whatsappConfigured: false, pipelineStages: [] });
   const [assignableUsers, setAssignableUsers] = useState([]);
   const [saving, setSaving] = useState(false);
   const [showTriggerPicker, setShowTriggerPicker] = useState(false);
@@ -1248,6 +1236,148 @@ function PipelinePage({ toast }) {
               </div>
             </div>
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// REVIEW IMPORTER — Super Admin panel
+// ─────────────────────────────────────────────────────────────────────────────
+// Bulk-add reviews to any course from a CSV or Excel sheet — Student Name,
+// Date, Stars, Review — the exact same fields/format every review on that
+// course's landing page already uses (they're written into the same Review
+// collection), so imported reviews show up there for real.
+
+function ReviewImporterPage({ toast, courses }) {
+  const { API: api } = useAuth();
+  const [courseId, setCourseId] = useState("");
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [file, setFile] = useState(null);
+  const [importing, setImporting] = useState(false);
+  const [result, setResult] = useState(null);
+  const fileRef = useRef(null);
+
+  // Every course, not just published ones — an admin may want reviews ready
+  // before a course goes live.
+  const allCourses = useMemo(() => (courses || []).filter((c) => c && c._id), [courses]);
+
+  const loadReviews = useCallback((id) => {
+    if (!id) { setReviews([]); return; }
+    setReviewsLoading(true);
+    api.get(`/admin/courses/${id}/reviews`).then((res) => setReviews(res.data || [])).catch(() => toast("Failed to load reviews", "error")).finally(() => setReviewsLoading(false));
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { loadReviews(courseId); }, [courseId, loadReviews]);
+
+  const downloadTemplate = (kind) => {
+    const url = `${api.defaults.baseURL}/admin/reviews-template.${kind}`;
+    const token = localStorage.getItem("token");
+    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.blob())
+      .then((blob) => {
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `review-import-sample.${kind}`;
+        link.click();
+      })
+      .catch(() => toast("Download failed", "error"));
+  };
+
+  const doImport = async () => {
+    if (!courseId) { toast("Choose a course first", "error"); return; }
+    if (!file) { toast("Choose a CSV or Excel file first", "error"); return; }
+    setImporting(true);
+    setResult(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await api.post(`/admin/courses/${courseId}/reviews/import`, formData, { headers: { "Content-Type": "multipart/form-data" } });
+      setResult(res.data);
+      toast(`Imported ${res.data.imported} review${res.data.imported === 1 ? "" : "s"}`, "success");
+      setFile(null);
+      if (fileRef.current) fileRef.current.value = "";
+      loadReviews(courseId);
+    } catch (err) {
+      toast(err.response?.data?.message || "Import failed", "error");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const deleteReview = async (id) => {
+    if (!window.confirm("Remove this review?")) return;
+    try {
+      await api.delete(`/admin/reviews/${id}`);
+      setReviews((prev) => prev.filter((r) => r._id !== id));
+    } catch { toast("Failed to remove review", "error"); }
+  };
+
+  return (
+    <div className="max-w-3xl">
+      <SectionHeader title="Review Importer" />
+      <p className="text-sm text-gray-500 mb-5 -mt-2">Bulk-add reviews to any course's landing page from a CSV or Excel sheet.</p>
+
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 mb-5 space-y-4">
+        <div>
+          <label className="block text-xs font-bold text-gray-600 mb-1">Course</label>
+          <select value={courseId} onChange={(e) => { setCourseId(e.target.value); setResult(null); }} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-rose-500">
+            <option value="">Choose a course…</option>
+            {allCourses.map((c) => <option key={c._id} value={c._id}>{c.title}</option>)}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-gray-600 mb-1">Sample templates</label>
+          <div className="flex gap-2">
+            <Btn variant="secondary" size="sm" onClick={() => downloadTemplate("csv")}>Download CSV sample</Btn>
+            <Btn variant="secondary" size="sm" onClick={() => downloadTemplate("xlsx")}>Download Excel sample</Btn>
+          </div>
+          <p className="text-[11px] text-gray-400 mt-1.5">Columns: Student Name, Date, Stars (1–5), Review.</p>
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-gray-600 mb-1">Upload file</label>
+          <input ref={fileRef} type="file" accept=".csv,.xlsx,.xls" onChange={(e) => setFile(e.target.files?.[0] || null)}
+            className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white file:mr-3 file:py-1 file:px-3 file:rounded-md file:border-0 file:bg-rose-50 file:text-rose-600 file:text-xs file:font-bold" />
+        </div>
+
+        <Btn onClick={doImport} disabled={importing || !courseId || !file}>{importing ? "Importing…" : "Import Reviews"}</Btn>
+
+        {result && (
+          <div className={`rounded-lg p-3 text-xs ${result.skipped > 0 ? "bg-amber-50 text-amber-700" : "bg-green-50 text-green-700"}`}>
+            <p className="font-bold mb-1">Imported {result.imported}, skipped {result.skipped}.</p>
+            {result.errors?.length > 0 && (
+              <ul className="space-y-0.5">
+                {result.errors.map((e, i) => <li key={i}>• {e}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+
+      {courseId && (
+        <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5">
+          <h3 className="font-bold text-gray-900 text-sm mb-3">Current Reviews on This Course</h3>
+          {reviewsLoading ? (
+            <p className="text-sm text-gray-400">Loading…</p>
+          ) : reviews.length === 0 ? (
+            <p className="text-sm text-gray-400">No reviews yet for this course.</p>
+          ) : (
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {reviews.map((r) => (
+                <div key={r._id} className="border border-gray-100 rounded-lg p-3 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-gray-900">{r.authorName || "Anonymous"} <span className="font-normal text-gray-400">• {"★".repeat(r.rating)} • {new Date(r.createdAt).toLocaleDateString()}</span></p>
+                    <p className="text-xs text-gray-600 mt-0.5">{r.comment || r.text}</p>
+                  </div>
+                  <button onClick={() => deleteReview(r._id)} className="text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer flex-shrink-0">✕</button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1638,6 +1768,7 @@ export default function SuperAdminDashboard() {
           <Route path="automation" element={<AutomationWorkflowPage toast={toast} />} />
           <Route path="automation/:id" element={<AutomationWorkflowPage toast={toast} />} />
           <Route path="pipeline" element={<PipelinePage toast={toast} />} />
+          <Route path="review-importer" element={<ReviewImporterPage toast={toast} courses={courses} />} />
           <Route path="settings" element={<SettingsPage toast={toast} />} />
           <Route path="*" element={<Navigate to="" replace />} />
         </Routes>

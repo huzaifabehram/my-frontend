@@ -479,6 +479,38 @@ function computeRatingDistribution(reviews) {
 }
 
 // ── YouTube embed helper ───────────────────────────────────────────────────
+// NEW: replaces plain `document.body.style.overflow = 'hidden'` for locking
+// background scroll while a modal/overlay is open. Used by every modal in
+// this file (Free Lecture Preview, image/video lightboxes, reviews
+// overlay). Plain overflow:hidden is well known to behave inconsistently
+// on iOS Safari specifically — the page can still rubber-band/scroll behind
+// the modal, and unlocking it can cause a jarring repaint/jump right at
+// that moment. That's what was showing up as "the announcement bar hangs
+// after closing the preview, but only on iPhone, not Android" — Android
+// Chrome doesn't have this quirk, so the same code looked fine there. This
+// is the standard fix: pin the body with position:fixed (recording the
+// scroll position first) instead, then restore the exact scroll position
+// on unlock.
+function lockBodyScroll() {
+  const scrollY = window.scrollY;
+  document.body.dataset.scrollLockY = String(scrollY);
+  document.body.style.position = 'fixed';
+  document.body.style.top = `-${scrollY}px`;
+  document.body.style.left = '0';
+  document.body.style.right = '0';
+  document.body.style.width = '100%';
+}
+function unlockBodyScroll() {
+  const scrollY = parseInt(document.body.dataset.scrollLockY || '0', 10);
+  document.body.style.position = '';
+  document.body.style.top = '';
+  document.body.style.left = '';
+  document.body.style.right = '';
+  document.body.style.width = '';
+  delete document.body.dataset.scrollLockY;
+  window.scrollTo(0, scrollY);
+}
+
 function getYouTubeId(url) {
   if (!url) return null;
   const m = url.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/watch\?v=|\/shorts\/))([^&?/\s]{11})/);
@@ -766,9 +798,9 @@ function DefaultVideoModal({ isOpen, onClose, videos, startIndex = 0 }) {
   const [currentIndex, setCurrentIndex] = useState(startIndex);
 
   useEffect(() => {
-    if (isOpen) { document.body.style.overflow = 'hidden'; setCurrentIndex(startIndex); }
-    else document.body.style.overflow = 'unset';
-    return () => { document.body.style.overflow = 'unset'; };
+    if (isOpen) { lockBodyScroll(); setCurrentIndex(startIndex); }
+    else unlockBodyScroll();
+    return () => { unlockBodyScroll(); };
   }, [isOpen, startIndex]);
 
   useEffect(() => {
@@ -874,7 +906,7 @@ function InstructorVideoBlock({ urls, clickIndexes, heading, onOpen }) {
             <button
               key={i}
               onClick={() => onOpen(clickIndexes[i])}
-              className="relative flex-shrink-0 snap-center block w-[78%] sm:w-[60%] md:w-[47%] aspect-video rounded-xl overflow-hidden border border-[#ece6dd] shadow-sm hover:shadow-md transition cursor-pointer bg-[#2d2416] p-0"
+              className="relative flex-shrink-0 snap-center block w-[80%] sm:w-[62%] md:w-[49%] h-48 sm:h-56 md:h-64 rounded-xl overflow-hidden border border-[#ece6dd] shadow-sm hover:shadow-md transition cursor-pointer bg-[#2d2416] p-0"
             >
               {ytId && (
                 <img src={`https://img.youtube.com/vi/${ytId}/hqdefault.jpg`} alt={heading || 'Video'} className="absolute inset-0 w-full h-full object-cover" />
@@ -942,9 +974,9 @@ function ImageLightbox({ isOpen, onClose, images, startIndex = 0 }) {
   const [currentIndex, setCurrentIndex] = useState(startIndex);
 
   useEffect(() => {
-    if (isOpen) { document.body.style.overflow = 'hidden'; setCurrentIndex(startIndex); }
-    else document.body.style.overflow = 'unset';
-    return () => { document.body.style.overflow = 'unset'; };
+    if (isOpen) { lockBodyScroll(); setCurrentIndex(startIndex); }
+    else unlockBodyScroll();
+    return () => { unlockBodyScroll(); };
   }, [isOpen, startIndex]);
 
   useEffect(() => {
@@ -1426,8 +1458,8 @@ export default function CourseLandingPage() {
 
   useEffect(() => {
     const handleKeyDown = (e) => { if (e.key === 'Escape' && isPreviewOpen) handleClosePreview(); };
-    if (isPreviewOpen) { window.addEventListener('keydown', handleKeyDown); document.body.style.overflow = 'hidden'; }
-    return () => { window.removeEventListener('keydown', handleKeyDown); document.body.style.overflow = 'unset'; };
+    if (isPreviewOpen) { window.addEventListener('keydown', handleKeyDown); lockBodyScroll(); }
+    return () => { window.removeEventListener('keydown', handleKeyDown); unlockBodyScroll(); };
   }, [isPreviewOpen]);
 
   const handleToggleDescription = () => {
@@ -1460,8 +1492,8 @@ export default function CourseLandingPage() {
   // reviews view to feel like it "hangs" partway through scrolling on mobile.
   useEffect(() => {
     const handleKeyDown = (e) => { if (e.key === 'Escape' && reviewsOverlayOpen) closeReviewsOverlay(); };
-    if (reviewsOverlayOpen) { window.addEventListener('keydown', handleKeyDown); document.body.style.overflow = 'hidden'; }
-    return () => { window.removeEventListener('keydown', handleKeyDown); document.body.style.overflow = 'unset'; };
+    if (reviewsOverlayOpen) { window.addEventListener('keydown', handleKeyDown); lockBodyScroll(); }
+    return () => { window.removeEventListener('keydown', handleKeyDown); unlockBodyScroll(); };
   }, [reviewsOverlayOpen, closeReviewsOverlay]);
 
   // NEW: extended into a fuller skeleton that fills the whole viewport
@@ -1754,11 +1786,11 @@ export default function CourseLandingPage() {
                   weight, color, tabular-nums number) — not the page-heading
                   serif font used elsewhere. */}
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-2xl md:text-3xl font-bold text-[#1a1208]" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                  {displayRating ? displayRating.toFixed(1) : '—'} Rating
+                <span className="text-3xl md:text-4xl font-bold text-[#1a1208]" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  {displayRating ? displayRating.toFixed(1) : '—'} Reviews
                 </span>
                 <span className="text-[#9e9789] text-lg md:text-xl">•</span>
-                <span className="text-sm md:text-base text-[#9e9789] font-medium">
+                <span className="text-base md:text-lg text-[#9e9789] font-medium">
                   {formatNumber(displayRatingCount)} Reviews
                 </span>
               </div>
@@ -1777,7 +1809,7 @@ export default function CourseLandingPage() {
                       <Star key={i} size={18} className="text-[#f9c97a]" fill={i < Math.round(displayRating) ? 'currentColor' : 'none'} />
                     ))}
                   </div>
-                  <p className="text-sm text-[#9e9789] mt-2">{formatNumber(displayRatingCount)} ratings</p>
+                  <p className="text-base text-[#9e9789] mt-2">{formatNumber(displayRatingCount)} Reviews</p>
                 </div>
                 <div className="flex-1 w-full">
                   <RatingDistribution distribution={displayRatingDistribution} />
@@ -2422,14 +2454,14 @@ export default function CourseLandingPage() {
                   aria-label="View all course reviews"
                 >
                   <Star size={28} className="text-[#f9c97a] flex-shrink-0" fill="currentColor" />
-                  <span className="text-2xl md:text-3xl font-bold text-[#1a1208]" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                  <span className="text-3xl md:text-4xl font-bold text-[#1a1208]" style={{ fontVariantNumeric: 'tabular-nums' }}>
                     {displayRating ? displayRating.toFixed(1) : '—'}
                   </span>
                   {displayRatingCount > 0 && (
                     <>
                       <span className="text-[#9e9789] text-lg md:text-xl">•</span>
-                      <span className="text-sm md:text-base text-[#9e9789] font-medium underline decoration-[#9e9789]/40">
-                        {formatNumber(displayRatingCount)} {displayRatingCount === 1 ? 'rating' : 'ratings'}
+                      <span className="text-base md:text-lg text-[#9e9789] font-medium underline decoration-[#9e9789]/40">
+                        {formatNumber(displayRatingCount)} Reviews
                       </span>
                     </>
                   )}
