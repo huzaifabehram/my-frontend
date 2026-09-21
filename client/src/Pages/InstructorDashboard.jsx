@@ -53,8 +53,6 @@ import {
   Navigate,
 } from "react-router-dom";
 import {
-  AreaChart,
-  Area,
   BarChart,
   Bar,
   XAxis,
@@ -75,30 +73,14 @@ import ThemeEditor from './ThemeEditor';
 // STATIC CHART DATA
 // ─────────────────────────────────────────────────────────────────────────────
 
-const REVENUE_DATA = [
-  { month: "Jan", revenue: 12400, students: 320 },
-  { month: "Feb", revenue: 15800, students: 410 },
-  { month: "Mar", revenue: 18200, students: 480 },
-  { month: "Apr", revenue: 16500, students: 430 },
-  { month: "May", revenue: 22100, students: 580 },
-  { month: "Jun", revenue: 28400, students: 740 },
-  { month: "Jul", revenue: 31200, students: 820 },
-  { month: "Aug", revenue: 29800, students: 780 },
-  { month: "Sep", revenue: 35600, students: 930 },
-  { month: "Oct", revenue: 38900, students: 1020 },
-  { month: "Nov", revenue: 42100, students: 1100 },
-  { month: "Dec", revenue: 33750, students: 880 },
-];
-
-const STUDENT_SOURCE = [
-  { name: "Organic Search", value: 38 },
-  { name: "Direct",         value: 24 },
-  { name: "Social Media",   value: 18 },
-  { name: "Referral",       value: 12 },
-  { name: "Email",          value: 8  },
-];
-
-const PIE_COLORS = ["#a435f0", "#6610f2", "#e84393", "#fd7e14", "#20c997"];
+// NOTE: the old REVENUE_DATA / STUDENT_SOURCE / PIE_COLORS constants here
+// were 100% hardcoded demo numbers (a fake Jan–Dec trend, fake traffic
+// sources) with no connection to anything real — removed. Every chart that
+// used them now runs off the real `courses` prop instead (revenue,
+// students enrolled, rating — all real fields from the Course documents
+// this instructor actually owns). A palette used by the "Students by
+// Course" chart below.
+const CHART_COLORS = ["#e8540a", "#f9c97a", "#1a1208", "#c94708", "#9e9789"];
 
 const CATEGORIES = [
   { value: "Marketing",        label: "Marketing" },
@@ -296,7 +278,7 @@ function Avatar({ name = "?", size = 36, src }) {
   if (src) return <img src={src} alt={name} style={{ width: size, height: size }} className="rounded-full object-cover"/>;
   return (
     <div style={{ width: size, height: size, fontSize: size * 0.36 }}
-      className="rounded-full bg-purple-600 text-white flex items-center justify-center font-bold flex-shrink-0">
+      className="rounded-full bg-[#e8540a] text-white flex items-center justify-center font-bold flex-shrink-0">
       {initials}
     </div>
   );
@@ -312,8 +294,11 @@ function Badge({ status }) {
 }
 
 function StatCard({ icon, label, value, sub, color = "purple" }) {
-  const bg = { purple: "bg-purple-50", green: "bg-emerald-50", blue: "bg-blue-50", amber: "bg-amber-50" };
-  const ic = { purple: "text-purple-600", green: "text-emerald-600", blue: "text-blue-600", amber: "text-amber-600" };
+  // NEW: "purple" now renders the site's real brand orange — kept the same
+  // prop key everywhere it's already used (color="purple") to avoid having
+  // to touch every call site individually.
+  const bg = { purple: "bg-[#fdf2ea]", green: "bg-emerald-50", blue: "bg-blue-50", amber: "bg-amber-50" };
+  const ic = { purple: "text-[#e8540a]", green: "text-emerald-600", blue: "text-blue-600", amber: "text-amber-600" };
   return (
     <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 flex gap-3 sm:gap-4 items-center shadow-sm hover:shadow-md transition-shadow">
       <div className={`w-10 h-10 sm:w-12 sm:h-12 rounded-xl ${bg[color]} flex items-center justify-center flex-shrink-0`}>
@@ -340,7 +325,7 @@ function SectionHeader({ title, action }) {
 function Btn({ children, onClick, variant = "primary", size = "md", disabled, className = "" }) {
   const base = "inline-flex items-center gap-2 font-semibold rounded-lg transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed active:scale-95";
   const variants = {
-    primary:   "bg-purple-600 hover:bg-purple-700 text-white shadow-sm",
+    primary:   "bg-[#e8540a] hover:bg-[#c94708] text-white shadow-sm",
     secondary: "bg-white border border-gray-200 hover:bg-gray-50 text-gray-700",
     danger:    "bg-red-50 border border-red-200 hover:bg-red-100 text-red-600",
     ghost:     "hover:bg-gray-100 text-gray-600",
@@ -359,7 +344,7 @@ function Input({ label, value, onChange, placeholder, type = "text", className =
     <div className={`flex flex-col gap-1 ${className}`}>
       {label && <label className="text-xs sm:text-sm font-medium text-gray-700">{label}</label>}
       <input type={type} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-        className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition"/>
+        className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#e8540a] focus:border-transparent transition"/>
     </div>
   );
 }
@@ -369,7 +354,7 @@ function Textarea({ label, value, onChange, placeholder, rows = 4, className = "
     <div className={`flex flex-col gap-1 ${className}`}>
       {label && <label className="text-xs sm:text-sm font-medium text-gray-700">{label}</label>}
       <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={rows}
-        className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition resize-none"/>
+        className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#e8540a] focus:border-transparent transition resize-none"/>
     </div>
   );
 }
@@ -379,7 +364,7 @@ function Select({ label, value, onChange, options, className = "" }) {
     <div className={`flex flex-col gap-1 ${className}`}>
       {label && <label className="text-xs sm:text-sm font-medium text-gray-700">{label}</label>}
       <select value={value} onChange={(e) => onChange(e.target.value)}
-        className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent transition bg-white">
+        className="border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#e8540a] focus:border-transparent transition bg-white">
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
     </div>
@@ -457,6 +442,7 @@ function ToastContainer({ toasts }) {
 const NAV_ITEMS = [
   { to: "/instructor",           label: "Dashboard",     icon: "⊞", exact: true },
   { to: "/instructor/courses",   label: "My Courses",    icon: "▤" },
+  { to: "/instructor/students",  label: "Students",      icon: "🧑‍🎓" },
   { to: "/instructor/create",    label: "Create Course", icon: "＋" },
   { to: "/instructor/analytics", label: "Analytics",     icon: "↗" },
   { to: "/instructor/profile",   label: "Profile",       icon: "◉" },
@@ -465,18 +451,37 @@ const NAV_ITEMS = [
 
 function Sidebar({ instructor, collapsed, setCollapsed, isMobile, hasThemeAccess }) {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { logout, API: api } = useAuth();
+  // NEW: real Motiviam logo (uploaded via Super Admin → Settings), same
+  // fetch + localStorage-cache pattern used sitewide — replaces the
+  // hardcoded "LearnFlow" text + generic mountain-icon SVG that had nothing
+  // to do with this site's actual branding.
+  const [logoUrl, setLogoUrl] = useState(() => { try { return localStorage.getItem('lerni_header_logo_url') || ''; } catch { return ''; } });
+  useEffect(() => {
+    api.get('/settings')
+      .then((res) => {
+        const url = res.data?.logoUrl || '';
+        setLogoUrl(url);
+        try { localStorage.setItem('lerni_header_logo_url', url); } catch { /* cache is a nice-to-have */ }
+      })
+      .catch(() => {});
+  }, [api]);
+
   return (
     <aside
-      className={`fixed top-0 left-0 h-screen bg-[#1c1d1f] flex flex-col z-50 transition-all duration-300 ${isMobile && collapsed ? "-translate-x-full" : "translate-x-0"}`}
+      className={`fixed top-0 left-0 h-screen bg-[#1a1208] flex flex-col z-50 transition-all duration-300 ${isMobile && collapsed ? "-translate-x-full" : "translate-x-0"}`}
       style={{ width: isMobile ? 240 : collapsed ? 64 : 230 }}>
       <div className="flex items-center gap-2.5 px-4 h-16 border-b border-white/10 flex-shrink-0">
-        <div className="w-8 h-8 rounded-lg bg-purple-600 flex items-center justify-center flex-shrink-0">
-          <svg width="18" height="18" viewBox="0 0 40 40" fill="none">
-            <path d="M8 32l12-24 12 24M12 26h16" stroke="#fff" strokeWidth="3" strokeLinecap="round"/>
-          </svg>
-        </div>
-        {!collapsed && <span className="font-extrabold text-white text-base tracking-tight whitespace-nowrap flex-1">LearnFlow</span>}
+        {logoUrl ? (
+          <img src={logoUrl} alt="Logo" className="h-9 w-auto object-contain flex-shrink-0" />
+        ) : (
+          <div className="w-8 h-8 rounded-lg bg-[#e8540a] flex items-center justify-center flex-shrink-0">
+            <svg width="18" height="18" viewBox="0 0 40 40" fill="none">
+              <path d="M8 32l12-24 12 24M12 26h16" stroke="#fff" strokeWidth="3" strokeLinecap="round"/>
+            </svg>
+          </div>
+        )}
+        {!collapsed && <span className="font-extrabold text-white text-base tracking-tight whitespace-nowrap flex-1" style={{ fontFamily: "'Playfair Display', serif" }}>Lerni</span>}
         {isMobile ? (
           <button onClick={() => setCollapsed(true)} className="ml-auto text-gray-400 hover:text-white transition-colors text-lg">✕</button>
         ) : (
@@ -498,7 +503,7 @@ function Sidebar({ instructor, collapsed, setCollapsed, isMobile, hasThemeAccess
         {NAV_ITEMS.filter((item) => !item.themeEditorOnly || hasThemeAccess).map((item) => (
           <NavLink key={item.to} to={item.to} end={item.exact} onClick={() => isMobile && setCollapsed(true)}
             className={({ isActive }) =>
-              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 ${isActive ? "bg-purple-600 text-white" : "text-gray-400 hover:bg-white/10 hover:text-white"}`}>
+              `flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-150 ${isActive ? "bg-[#e8540a] text-white" : "text-gray-400 hover:bg-white/10 hover:text-white"}`}>
             <span className="text-lg leading-none flex-shrink-0">{item.icon}</span>
             {!collapsed && <span className="truncate">{item.label}</span>}
           </NavLink>
@@ -520,6 +525,22 @@ function Sidebar({ instructor, collapsed, setCollapsed, isMobile, hasThemeAccess
 // ─────────────────────────────────────────────────────────────────────────────
 
 function TopBar({ instructor, sidebarWidth, isMobile, onMenuClick }) {
+  const navigate = useNavigate();
+  const { logout, API: api } = useAuth();
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  const [notifLoading, setNotifLoading] = useState(false);
+
+  // NEW: real notifications (recent verified enrollments across this
+  // instructor's own courses), replacing a bell icon that had no onClick
+  // at all before — clicking it now actually opens something real.
+  useEffect(() => {
+    if (!showNotifications) return;
+    setNotifLoading(true);
+    api.get('/instructor/notifications').then((res) => setNotifications(res.data || [])).catch(() => setNotifications([])).finally(() => setNotifLoading(false));
+  }, [showNotifications, api]);
+
   return (
     <header className="fixed top-0 right-0 h-16 bg-white border-b border-gray-100 flex items-center justify-between px-4 sm:px-6 z-40 transition-all duration-300"
       style={{ left: isMobile ? 0 : sidebarWidth }}>
@@ -528,13 +549,47 @@ function TopBar({ instructor, sidebarWidth, isMobile, onMenuClick }) {
       )}
       <h1 className="text-sm sm:text-base font-bold text-gray-900">Instructor Studio</h1>
       <div className="flex items-center gap-2 sm:gap-3 ml-auto">
-        <button className="relative p-2 rounded-lg hover:bg-gray-100 transition text-gray-500">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/>
-          </svg>
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full"/>
-        </button>
-        <Avatar name={instructor?.name || "I"} size={34} src={instructor?.avatar}/>
+        <div className="relative">
+          <button onClick={() => { setShowNotifications((v) => !v); setShowProfileMenu(false); }} className="relative p-2 rounded-lg hover:bg-gray-100 transition text-gray-500">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+            {notifications.length > 0 && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#e8540a] rounded-full"/>}
+          </button>
+          {showNotifications && (
+            <div className="absolute top-full right-0 mt-2 w-72 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden z-50">
+              <div className="p-3 border-b border-gray-100 flex justify-between items-center">
+                <span className="font-bold text-sm text-gray-900">Notifications</span>
+                <button onClick={() => setShowNotifications(false)} className="bg-transparent border-none cursor-pointer text-gray-400">✕</button>
+              </div>
+              <div className="max-h-72 overflow-y-auto">
+                {notifLoading ? (
+                  <p className="text-xs text-gray-400 p-4 text-center">Loading…</p>
+                ) : notifications.length === 0 ? (
+                  <p className="text-xs text-gray-400 p-4 text-center">No notifications yet.</p>
+                ) : (
+                  notifications.map((n) => (
+                    <div key={n.id} className="p-3 border-b border-gray-50 text-xs text-gray-700">
+                      <p>{n.message}</p>
+                      <p className="text-gray-400 mt-0.5">{new Date(n.createdAt).toLocaleString()}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="relative">
+          <button onClick={() => { setShowProfileMenu((v) => !v); setShowNotifications(false); }} className="bg-transparent border-none cursor-pointer p-0">
+            <Avatar name={instructor?.name || "I"} size={34} src={instructor?.avatar}/>
+          </button>
+          {showProfileMenu && (
+            <div className="absolute top-full right-0 mt-2 w-44 bg-white rounded-xl shadow-lg border border-gray-100 overflow-hidden z-50">
+              <button onClick={() => { setShowProfileMenu(false); navigate('/instructor/profile'); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 bg-transparent border-none cursor-pointer text-left">Profile</button>
+              <button onClick={() => { logout(); navigate('/login'); }} className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 bg-transparent border-none cursor-pointer text-left border-t border-gray-100">Logout</button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
@@ -551,14 +606,20 @@ function DashboardPage({ instructor, courses, loading }) {
   const totalRevenue   = courses.reduce((a, c) => a + (c.revenue || 0), 0);
   const avgRating      = courses.filter((c) => c.rating > 0);
   const rating         = avgRating.length ? (avgRating.reduce((a, c) => a + c.rating, 0) / avgRating.length).toFixed(1) : "—";
+  // NEW: real per-course revenue for the chart below, replacing a
+  // hardcoded fake Jan–Dec trend that had no connection to actual data.
+  const courseRevenueData = courses.filter((c) => (c.revenue || 0) > 0).map((c) => ({
+    name: c.title?.length > 18 ? c.title.slice(0, 18) + "…" : c.title,
+    revenue: c.revenue || 0,
+  }));
 
   return (
     <div className="space-y-6 sm:space-y-8">
-      <div className="bg-gradient-to-r from-purple-700 to-purple-500 rounded-2xl p-5 sm:p-7 text-white relative overflow-hidden">
+      <div className="bg-gradient-to-r from-[#1a1208] to-[#3d2b1a] rounded-2xl p-5 sm:p-7 text-white relative overflow-hidden">
         <div className="absolute right-0 top-0 w-64 h-64 bg-white/5 rounded-full -translate-y-1/2 translate-x-1/4 pointer-events-none"/>
-        <p className="text-purple-200 text-xs sm:text-sm font-medium mb-1">Welcome back 👋</p>
+        <p className="text-[#f0ceac] text-xs sm:text-sm font-medium mb-1">Welcome back 👋</p>
         <h2 className="text-2xl sm:text-3xl font-extrabold mb-1">{instructor?.name || "Instructor"}</h2>
-        <p className="text-purple-200 text-xs sm:text-sm">{instructor?.email}</p>
+        <p className="text-[#f0ceac] text-xs sm:text-sm">{instructor?.email}</p>
         <div className="flex gap-2 sm:gap-3 mt-5 flex-wrap">
           <Btn onClick={() => navigate("/instructor/create")} variant="secondary" size="sm">+ New Course</Btn>
           <Btn onClick={() => navigate("/instructor/analytics")} size="sm" className="bg-white/20 hover:bg-white/30 text-white border-white/30 border">View Analytics</Btn>
@@ -571,22 +632,20 @@ function DashboardPage({ instructor, courses, loading }) {
         <StatCard icon="⭐" label="Avg Rating"        value={rating}                sub="Across all courses"   color="amber"/>
       </div>
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm overflow-x-auto">
-        <SectionHeader title="Revenue Overview — 2024"/>
-        <ResponsiveContainer width="100%" height={240} minWidth={300}>
-          <AreaChart data={REVENUE_DATA} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="revenueGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%"  stopColor="#a435f0" stopOpacity={0.2}/>
-                <stop offset="95%" stopColor="#a435f0" stopOpacity={0}/>
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6"/>
-            <XAxis dataKey="month" tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false}/>
-            <YAxis tickFormatter={(v) => `$${v/1000}k`} tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false}/>
-            <Tooltip formatter={(v) => [`$${v.toLocaleString()}`, "Revenue"]} contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }}/>
-            <Area type="monotone" dataKey="revenue" stroke="#a435f0" strokeWidth={2.5} fill="url(#revenueGrad)"/>
-          </AreaChart>
-        </ResponsiveContainer>
+        <SectionHeader title="Revenue by Course"/>
+        {courseRevenueData.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-10">No revenue yet — once students enroll, it'll show up here.</p>
+        ) : (
+          <ResponsiveContainer width="100%" height={240} minWidth={300}>
+            <BarChart data={courseRevenueData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6"/>
+              <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#9ca3af" }} axisLine={false} tickLine={false}/>
+              <YAxis tickFormatter={(v) => `PKR ${v/1000}k`} tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false}/>
+              <Tooltip formatter={(v) => [`PKR ${v.toLocaleString()}`, "Revenue"]} contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }}/>
+              <Bar dataKey="revenue" fill="#e8540a" radius={[4,4,0,0]}/>
+            </BarChart>
+          </ResponsiveContainer>
+        )}
       </div>
       <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
         <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
@@ -597,7 +656,7 @@ function DashboardPage({ instructor, courses, loading }) {
             <div className="space-y-3">
               {courses.slice(0, 4).map((c) => (
                 <div key={c._id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition">
-                  <div className="w-10 h-10 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600 font-bold text-sm flex-shrink-0">{c.title?.charAt(0)}</div>
+                  <div className="w-10 h-10 rounded-lg bg-[#fdf2ea] flex items-center justify-center text-[#e8540a] font-bold text-sm flex-shrink-0">{c.title?.charAt(0)}</div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-gray-800 truncate">{c.title}</p>
                     <p className="text-xs text-gray-500">{fmtNum(c.studentsEnrolled)} students · {fmt(c.revenue)}</p>
@@ -672,11 +731,11 @@ function CoursesPage({ courses, loading, deleteCourse, togglePublish, toast }) {
       </div>
       <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search courses…"
-          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-purple-500 transition"/>
+          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-[#e8540a] transition"/>
         <div className="flex gap-1.5 overflow-x-auto pb-1">
           {["all","published","draft","review"].map((s) => (
             <button key={s} onClick={() => setFilter(s)}
-              className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs font-semibold transition whitespace-nowrap ${filter === s ? "bg-purple-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
+              className={`px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs font-semibold transition whitespace-nowrap ${filter === s ? "bg-[#e8540a] text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
               {s.charAt(0).toUpperCase() + s.slice(1)}
             </button>
           ))}
@@ -700,7 +759,7 @@ function CoursesPage({ courses, loading, deleteCourse, togglePublish, toast }) {
                   <tr key={c._id} className="hover:bg-gray-50 transition">
                     <td className="px-3 sm:px-4 py-4">
                       <div className="flex items-center gap-2 sm:gap-3">
-                        <div className="w-8 sm:w-10 h-8 sm:h-10 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600 font-bold text-xs sm:text-sm flex-shrink-0">{c.title?.charAt(0)}</div>
+                        <div className="w-8 sm:w-10 h-8 sm:h-10 rounded-lg bg-[#fdf2ea] flex items-center justify-center text-[#e8540a] font-bold text-xs sm:text-sm flex-shrink-0">{c.title?.charAt(0)}</div>
                         <div className="min-w-0">
                           <p className="text-xs sm:text-sm font-semibold text-gray-800 truncate max-w-[120px] sm:max-w-[200px]">{c.title}</p>
                           <p className="text-xs text-gray-400 hidden sm:block">{c.category} · PKR {c.price}</p>
@@ -1120,7 +1179,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
         <h3 className="font-bold text-gray-800 text-base mb-4">Course Thumbnail</h3>
         <div className="flex flex-col sm:flex-row gap-6 items-start">
           <div className="w-full sm:w-64 flex-shrink-0">
-            <div className="aspect-video bg-gray-100 rounded-xl overflow-hidden border-2 border-dashed border-gray-300 hover:border-purple-400 transition-colors relative group cursor-pointer"
+            <div className="aspect-video bg-gray-100 rounded-xl overflow-hidden border-2 border-dashed border-gray-300 hover:border-[#e8540a]/60 transition-colors relative group cursor-pointer"
               onClick={() => thumbnailRef.current?.click()}>
               {thumbnailPreview
                 ? <img src={thumbnailPreview} alt="Thumbnail" className="w-full h-full object-cover"/>
@@ -1137,7 +1196,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
             <p className="text-sm text-gray-600 font-medium">Or paste an image URL:</p>
             <input value={thumbnail} onChange={e => { setThumbnail(e.target.value); setThumbnailPreview(e.target.value); }}
               placeholder="https://example.com/image.jpg"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"/>
+              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
             <p className="text-xs text-gray-400">Recommended: 1280×720px, under 10MB.</p>
           </div>
         </div>
@@ -1151,7 +1210,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Video URL</label>
             <input value={previewVideoUrl} onChange={e => setPreviewVideoUrl(e.target.value)}
               placeholder="https://www.youtube.com/watch?v=... or iframe.mediadelivery.net/embed/..."
-              className="w-full mt-1.5 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"/>
+              className="w-full mt-1.5 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
             <p className="text-xs text-gray-400 mt-1">YouTube • Bunny Stream • Cloudinary • MP4</p>
           </div>
           {previewVideoUrl && (
@@ -1216,19 +1275,19 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                             <span className="text-gray-300 text-xs select-none">⋮⋮</span>
                             <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2 w-full">
                               <input value={lec.title} onChange={e => updateLecture(secId, lecId, "title", e.target.value)}
-                                className="border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-purple-400 sm:col-span-2" placeholder="Lecture title"/>
+                                className="border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#e8540a]/60 sm:col-span-2" placeholder="Lecture title"/>
                               <select value={lec.type} onChange={e => updateLecture(secId, lecId, "type", e.target.value)}
-                                className="border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-purple-400 bg-white">
+                                className="border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#e8540a]/60 bg-white">
                                 {LECTURE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
                               </select>
                             </div>
                             <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
                               <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
-                                <input type="checkbox" checked={lec.free} onChange={e => updateLecture(secId, lecId, "free", e.target.checked)} className="accent-purple-600"/>
+                                <input type="checkbox" checked={lec.free} onChange={e => updateLecture(secId, lecId, "free", e.target.checked)} className="accent-[#e8540a]"/>
                                 Free
                               </label>
                               <input value={lec.duration||""} onChange={e => updateLecture(secId, lecId, "duration", e.target.value)}
-                                placeholder="10:30" className="w-12 sm:w-14 border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400"/>
+                                placeholder="10:30" className="w-12 sm:w-14 border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#e8540a]/60"/>
                               <button onClick={() => deleteLecture(secId, lecId)} className="text-red-300 hover:text-red-500 transition text-xs">✕</button>
                             </div>
                           </div>
@@ -1238,7 +1297,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                                 <svg className="w-4 h-4 text-red-500 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
                                 <input value={lec.videoUrl||""} onChange={e => updateLectureVideo(secId, lecId, e.target.value)}
                                   placeholder="YouTube, Bunny, Cloudinary, or MP4 URL"
-                                  className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-400"/>
+                                  className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#e8540a]/60"/>
                               </div>
                               {hasVideo && (
                                 <div className="flex justify-end">
@@ -1251,7 +1310,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                       );
                     })}
                     <div className="px-3 sm:px-4 py-3">
-                      <button onClick={() => addLecture(secId)} className="text-xs sm:text-sm text-purple-600 hover:text-purple-800 font-medium flex items-center gap-1.5 transition">
+                      <button onClick={() => addLecture(secId)} className="text-xs sm:text-sm text-[#e8540a] hover:text-[#c94708] font-medium flex items-center gap-1.5 transition">
                         <span className="text-lg leading-none">＋</span> Add Lecture
                       </button>
                     </div>
@@ -1284,7 +1343,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
           <h4 className="font-semibold text-gray-800 text-sm">Add New Image Testimonial</h4>
           <div className="flex gap-4 items-start">
             <div className="w-28 h-28 flex-shrink-0 relative">
-              <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-purple-400 transition cursor-pointer group"
+              <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-[#e8540a]/60 transition cursor-pointer group"
                 onClick={() => imageTestimonialRef.current?.click()}>
                 {newImageTestimonial.imagePreview
                   ? <img src={newImageTestimonial.imagePreview} alt="Preview" className="w-full h-full object-cover"/>
@@ -1334,11 +1393,11 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
             <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Video source:</span>
             <div className="flex rounded-lg border border-gray-200 overflow-hidden">
               <button onClick={() => setVideoInputMode('url')}
-                className={`px-3 py-1.5 text-xs font-semibold transition ${videoInputMode === 'url' ? 'bg-purple-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                className={`px-3 py-1.5 text-xs font-semibold transition ${videoInputMode === 'url' ? 'bg-[#e8540a] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
                 🔗 Paste URL
               </button>
               <button onClick={() => setVideoInputMode('upload')}
-                className={`px-3 py-1.5 text-xs font-semibold transition ${videoInputMode === 'upload' ? 'bg-purple-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                className={`px-3 py-1.5 text-xs font-semibold transition ${videoInputMode === 'upload' ? 'bg-[#e8540a] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
                 ☁️ Upload to Cloudinary
               </button>
             </div>
@@ -1348,14 +1407,14 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
               <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">Video URL</label>
               <input value={newVideoTestimonial.videoUrl} onChange={e => setNewVideoTestimonial(p => ({ ...p, videoUrl: e.target.value, videoPreview: e.target.value }))}
                 placeholder="https://iframe.mediadelivery.net/embed/... or youtube.com/watch?v=..."
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"/>
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
               <p className="text-xs text-gray-400 mt-1">YouTube · Bunny.net · Cloudinary · MP4</p>
             </div>
           ) : (
             <div className="space-y-2">
               <label className="text-xs sm:text-sm font-medium text-gray-700 block">Upload Video File</label>
               <div className="relative">
-                <div className="aspect-video bg-gray-100 rounded-xl overflow-hidden border-2 border-dashed border-gray-300 hover:border-purple-400 transition cursor-pointer flex items-center justify-center"
+                <div className="aspect-video bg-gray-100 rounded-xl overflow-hidden border-2 border-dashed border-gray-300 hover:border-[#e8540a]/60 transition cursor-pointer flex items-center justify-center"
                   onClick={() => !uploadingVideoTestimonial && videoTestimonialRef.current?.click()}>
                   {videoPreviewUrl ? (
                     <VideoPlayer url={videoPreviewUrl} className="rounded-none"/>
@@ -1371,8 +1430,8 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                 <input ref={videoTestimonialRef} type="file" accept="video/mp4,video/webm,video/ogg,video/quicktime,video/x-msvideo" className="hidden" onChange={handleVideoTestimonialFile}/>
               </div>
               {uploadingVideoTestimonial && (
-                <div className="flex items-center gap-2 text-sm text-purple-600">
-                  <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin"/>
+                <div className="flex items-center gap-2 text-sm text-[#e8540a]">
+                  <div className="w-4 h-4 border-2 border-[#e8540a] border-t-transparent rounded-full animate-spin"/>
                   <span>Uploading to Cloudinary… large files may take a moment.</span>
                 </div>
               )}
@@ -1417,7 +1476,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
           <h4 className="font-semibold text-gray-800 text-sm">Add Gallery Image</h4>
           <div className="flex gap-4 items-start">
             <div className="w-40 h-28 flex-shrink-0 relative">
-              <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-purple-400 transition cursor-pointer group"
+              <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-[#e8540a]/60 transition cursor-pointer group"
                 onClick={() => galleryRef.current?.click()}>
                 {newGalleryItem.imagePreview
                   ? <img src={newGalleryItem.imagePreview} alt="Preview" className="w-full h-full object-cover"/>
@@ -1479,12 +1538,12 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                   onDragOver={(e) => handleBlockDragOver(e, bId)}
                   onDrop={(e) => e.preventDefault()}
                   onDragEnd={handleBlockDragEnd}
-                  className={`border rounded-xl p-4 transition ${isDragging ? "border-purple-400 bg-purple-50/60 opacity-60" : "border-gray-200 bg-gray-50"}`}
+                  className={`border rounded-xl p-4 transition ${isDragging ? "border-[#e8540a]/60 bg-[#fdf2ea]/80 opacity-60" : "border-gray-200 bg-gray-50"}`}
                 >
                   <div className="flex items-center gap-2 mb-3">
                     <span className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 text-sm select-none" title="Drag to reorder">☰</span>
                     <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex-1">Content Block</span>
-                    <button onClick={() => duplicateCustomBlock(bId)} className="text-xs font-semibold text-purple-600 hover:text-purple-800 transition px-2 py-1 rounded hover:bg-purple-100">⧉ Duplicate</button>
+                    <button onClick={() => duplicateCustomBlock(bId)} className="text-xs font-semibold text-[#e8540a] hover:text-[#c94708] transition px-2 py-1 rounded hover:bg-[#fdf2ea]">⧉ Duplicate</button>
                     <button onClick={() => deleteCustomBlock(bId)} className="text-red-400 hover:text-red-600 transition text-xs px-2 py-1 rounded hover:bg-red-50">✕ Remove</button>
                   </div>
 
@@ -1500,7 +1559,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                       </label>
                       <input value={block.videoUrl || ""} onChange={e => updateCustomBlock(bId, "videoUrl", e.target.value)}
                         placeholder="YouTube, Bunny.net, or direct MP4 URL"
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"/>
+                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
                       {block.videoUrl && (
                         <div className="flex justify-end mt-2">
                           <CompactVideoPreview url={block.videoUrl} width={150} height={84}/>
@@ -1513,7 +1572,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                       </label>
                       <div className="flex items-start gap-3">
                         <div className="w-20 h-20 flex-shrink-0 relative">
-                          <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-purple-400 transition cursor-pointer group"
+                          <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-[#e8540a]/60 transition cursor-pointer group"
                             onClick={() => blockImageRefs.current[bId]?.click()}>
                             {imgPreview
                               ? <img src={imgPreview} alt="Preview" className="w-full h-full object-cover"/>
@@ -1524,7 +1583,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                         </div>
                         <input value={block.imageUrl || ""} onChange={e => updateCustomBlock(bId, "imageUrl", e.target.value)}
                           placeholder="Or paste image URL"
-                          className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"/>
+                          className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
                       </div>
                     </div>
                   </div>
@@ -1542,10 +1601,10 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
           <div className="mb-6 space-y-2">
             {alsoBoughtCourses.map((c, idx) => (
               <div key={c._id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
-                <div className="w-8 h-8 rounded-lg overflow-hidden bg-purple-100 flex-shrink-0">
+                <div className="w-8 h-8 rounded-lg overflow-hidden bg-[#fdf2ea] flex-shrink-0">
                   {c.thumbnail
                     ? <img src={c.thumbnail} alt={c.title} className="w-full h-full object-cover"/>
-                    : <div className="w-full h-full flex items-center justify-center text-purple-600 font-bold text-sm">{c.title?.charAt(0)}</div>}
+                    : <div className="w-full h-full flex items-center justify-center text-[#e8540a] font-bold text-sm">{c.title?.charAt(0)}</div>}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-gray-800 truncate">{c.title}</p>
@@ -1565,7 +1624,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                 Select a course {alsoBoughtIds.length > 0 && <span className="text-gray-400 font-normal">({alsoBoughtIds.length}/6 selected)</span>}
               </label>
               <select value={coursePicker} onChange={e => setCoursePicker(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-purple-500 bg-white">
+                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#e8540a] bg-white">
                 <option value="">— Choose a published course —</option>
                 {publishedCourses.filter(c => !alsoBoughtIds.includes(c._id)).map(c => (
                   <option key={c._id} value={c._id}>{c.title} (PKR {c.price})</option>
@@ -1592,103 +1651,88 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function AnalyticsPage({ courses }) {
-  const [range, setRange] = useState("12m");
-  const data = range === "6m" ? REVENUE_DATA.slice(6) : REVENUE_DATA;
-  const courseRevenue = courses.filter(c => (c.revenue || 0) > 0).map(c => ({
+  // NEW: this whole page used to run off REVENUE_DATA/STUDENT_SOURCE — a
+  // hardcoded fake Jan–Dec trend and fake "Traffic Sources" breakdown with
+  // no connection to real data. Replaced with real, currently-available
+  // aggregates from the courses this instructor actually owns: total
+  // students, total revenue, revenue by course, and students by course.
+  // There's no real month-by-month history to chart yet (that would need
+  // new backend work tracking enrollments over time) — so the monthly
+  // trend charts and the 6m/12m toggle are gone rather than faked, and
+  // "Traffic Sources" (which had no real data source at all — this
+  // platform doesn't track where a visitor came from) is replaced with
+  // "Students by Course", which is real.
+  const totalStudents = courses.reduce((a, c) => a + (c.studentsEnrolled || 0), 0);
+  const totalRevenue  = courses.reduce((a, c) => a + (c.revenue || 0), 0);
+  const publishedCount = courses.filter((c) => c.status === "published").length;
+  const avgRatingCourses = courses.filter((c) => c.rating > 0);
+  const avgRating = avgRatingCourses.length ? (avgRatingCourses.reduce((a, c) => a + c.rating, 0) / avgRatingCourses.length).toFixed(1) : "—";
+
+  const courseRevenue = courses.filter((c) => (c.revenue || 0) > 0).map((c) => ({
     name: c.title?.length > 20 ? c.title.slice(0, 20) + "…" : c.title,
     revenue: c.revenue || 0,
+  }));
+  const courseStudents = courses.filter((c) => (c.studentsEnrolled || 0) > 0).map((c) => ({
+    name: c.title?.length > 18 ? c.title.slice(0, 18) + "…" : c.title,
+    value: c.studentsEnrolled || 0,
   }));
 
   return (
     <div className="space-y-6 sm:space-y-8">
-      <div className="flex flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-3">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900">Analytics</h2>
-          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Performance overview across all courses</p>
-        </div>
-        <div className="flex gap-2">
-          {["6m","12m"].map(r => (
-            <button key={r} onClick={() => setRange(r)}
-              className={`px-3 sm:px-4 py-2 rounded-lg text-xs font-semibold transition ${range === r ? "bg-purple-600 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"}`}>
-              {r === "12m" ? "Last 12m" : "Last 6m"}
-            </button>
-          ))}
-        </div>
+      <div>
+        <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900">Analytics</h2>
+        <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Real performance across all your courses</p>
       </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        <StatCard icon="💰" label="Chart Revenue"  value={fmt(data.reduce((a,d) => a+d.revenue,0))}                color="green"/>
-        <StatCard icon="👥" label="New Students"   value={fmtNum(data.reduce((a,d) => a+d.students,0))}            color="purple"/>
-        <StatCard icon="📈" label="Best Month"     value={`$${Math.max(...data.map(d=>d.revenue)).toLocaleString()}`} color="blue"/>
-        <StatCard icon="⭐" label="Avg / Month"    value={Math.round(data.reduce((a,d) => a+d.students,0)/data.length)} color="amber"/>
+        <StatCard icon="💰" label="Total Revenue"     value={fmt(totalRevenue)}     sub="All time"             color="green"/>
+        <StatCard icon="👥" label="Total Students"    value={fmtNum(totalStudents)} sub="All courses"          color="purple"/>
+        <StatCard icon="📚" label="Published Courses" value={publishedCount}        sub={`of ${courses.length} total`} color="blue"/>
+        <StatCard icon="⭐" label="Avg Rating"        value={avgRating}             sub="Across all courses"   color="amber"/>
       </div>
       <div className="grid lg:grid-cols-2 gap-4 sm:gap-6">
         <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm overflow-x-auto">
-          <SectionHeader title="Monthly Revenue"/>
-          <ResponsiveContainer width="100%" height={220} minWidth={300}>
-            <AreaChart data={data} margin={{ top:4, right:4, left:0, bottom:0 }}>
-              <defs>
-                <linearGradient id="revGrad2" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%"  stopColor="#a435f0" stopOpacity={0.2}/>
-                  <stop offset="95%" stopColor="#a435f0" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6"/>
-              <XAxis dataKey="month" tick={{ fontSize:10, fill:"#9ca3af" }} axisLine={false} tickLine={false}/>
-              <YAxis tickFormatter={v=>`$${v/1000}k`} tick={{ fontSize:10, fill:"#9ca3af" }} axisLine={false} tickLine={false}/>
-              <Tooltip formatter={v=>[`$${v.toLocaleString()}`,"Revenue"]} contentStyle={{ borderRadius:8, border:"1px solid #e5e7eb", fontSize:12 }}/>
-              <Area type="monotone" dataKey="revenue" stroke="#a435f0" strokeWidth={2} fill="url(#revGrad2)"/>
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm overflow-x-auto">
-          <SectionHeader title="Monthly Enrollments"/>
-          <ResponsiveContainer width="100%" height={220} minWidth={300}>
-            <BarChart data={data} margin={{ top:4, right:4, left:0, bottom:0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6"/>
-              <XAxis dataKey="month" tick={{ fontSize:10, fill:"#9ca3af" }} axisLine={false} tickLine={false}/>
-              <YAxis tick={{ fontSize:10, fill:"#9ca3af" }} axisLine={false} tickLine={false}/>
-              <Tooltip formatter={v=>[v,"Students"]} contentStyle={{ borderRadius:8, border:"1px solid #e5e7eb", fontSize:12 }}/>
-              <Bar dataKey="students" fill="#a435f0" radius={[4,4,0,0]}/>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-      <div className="grid lg:grid-cols-3 gap-4 sm:gap-6">
-        {courseRevenue.length > 0 && (
-          <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm lg:col-span-2 overflow-x-auto">
-            <SectionHeader title="Revenue by Course"/>
+          <SectionHeader title="Revenue by Course"/>
+          {courseRevenue.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-12">No revenue yet.</p>
+          ) : (
             <ResponsiveContainer width="100%" height={220} minWidth={300}>
               <BarChart data={courseRevenue} layout="vertical" margin={{ top:0, right:8, left:0, bottom:0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" horizontal={false}/>
-                <XAxis type="number" tickFormatter={v=>`$${v/1000}k`} tick={{ fontSize:10, fill:"#9ca3af" }} axisLine={false} tickLine={false}/>
+                <XAxis type="number" tickFormatter={v=>`PKR ${v/1000}k`} tick={{ fontSize:10, fill:"#9ca3af" }} axisLine={false} tickLine={false}/>
                 <YAxis type="category" dataKey="name" tick={{ fontSize:11, fill:"#6b7280" }} axisLine={false} tickLine={false} width={120}/>
-                <Tooltip formatter={v=>[`$${v.toLocaleString()}`,"Revenue"]} contentStyle={{ borderRadius:8, border:"1px solid #e5e7eb", fontSize:12 }}/>
-                <Bar dataKey="revenue" fill="#a435f0" radius={[0,4,4,0]}/>
+                <Tooltip formatter={v=>[`PKR ${v.toLocaleString()}`,"Revenue"]} contentStyle={{ borderRadius:8, border:"1px solid #e5e7eb", fontSize:12 }}/>
+                <Bar dataKey="revenue" fill="#e8540a" radius={[0,4,4,0]}/>
               </BarChart>
             </ResponsiveContainer>
-          </div>
-        )}
+          )}
+        </div>
         <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
-          <SectionHeader title="Traffic Sources"/>
-          <ResponsiveContainer width="100%" height={180} minWidth={250}>
-            <PieChart>
-              <Pie data={STUDENT_SOURCE} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3} dataKey="value">
-                {STUDENT_SOURCE.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]}/>)}
-              </Pie>
-              <Tooltip formatter={v=>[`${v}%`,"Share"]} contentStyle={{ borderRadius:8, border:"1px solid #e5e7eb", fontSize:12 }}/>
-            </PieChart>
-          </ResponsiveContainer>
-          <div className="space-y-2 mt-2">
-            {STUDENT_SOURCE.map((s,i) => (
-              <div key={s.name} className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }}/>
-                  <span className="text-gray-600 truncate">{s.name}</span>
-                </div>
-                <span className="font-semibold text-gray-800 ml-1">{s.value}%</span>
+          <SectionHeader title="Students by Course"/>
+          {courseStudents.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-12">No enrollments yet.</p>
+          ) : (
+            <>
+              <ResponsiveContainer width="100%" height={180} minWidth={250}>
+                <PieChart>
+                  <Pie data={courseStudents} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={3} dataKey="value">
+                    {courseStudents.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]}/>)}
+                  </Pie>
+                  <Tooltip formatter={v=>[v,"Students"]} contentStyle={{ borderRadius:8, border:"1px solid #e5e7eb", fontSize:12 }}/>
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="space-y-2 mt-2">
+                {courseStudents.map((s,i) => (
+                  <div key={s.name} className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}/>
+                      <span className="text-gray-600 truncate">{s.name}</span>
+                    </div>
+                    <span className="font-semibold text-gray-800 ml-1">{s.value}</span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -2001,7 +2045,7 @@ function ProfilePage({ toast }) {
           <div className="relative flex-shrink-0">
             {uploadingAvatar ? (
               <div className="w-24 h-24 rounded-full bg-gray-200 flex items-center justify-center">
-                <div className="w-8 h-8 border-4 border-purple-600 border-t-transparent rounded-full animate-spin"/>
+                <div className="w-8 h-8 border-4 border-[#e8540a] border-t-transparent rounded-full animate-spin"/>
               </div>
             ) : (
               <Avatar name={form.name || "I"} size={96} src={avatarSrc}/>
@@ -2009,7 +2053,7 @@ function ProfilePage({ toast }) {
             <button
               onClick={() => fileRef.current?.click()}
               disabled={uploadingAvatar}
-              className="absolute -bottom-1 -right-1 w-8 h-8 bg-purple-600 rounded-full flex items-center justify-center text-white text-sm hover:bg-purple-700 transition shadow-md disabled:opacity-50"
+              className="absolute -bottom-1 -right-1 w-8 h-8 bg-[#e8540a] rounded-full flex items-center justify-center text-white text-sm hover:bg-[#c94708] transition shadow-md disabled:opacity-50"
               title="Upload new photo"
             >
               ✎
@@ -2019,7 +2063,7 @@ function ProfilePage({ toast }) {
           <div>
             <p className="font-semibold text-gray-800">{form.name || "Your Name"}</p>
             <p className="text-sm text-gray-500">{form.title || "Instructor"}</p>
-            <p className="text-xs text-purple-600 mt-1">{form.email}</p>
+            <p className="text-xs text-[#e8540a] mt-1">{form.email}</p>
             <p className="text-xs text-gray-400 mt-2">
               JPG, PNG, WebP • Max 5 MB<br/>
               Uploaded directly to Cloudinary
@@ -2156,11 +2200,11 @@ function ProfilePage({ toast }) {
                   onDragOver={(e) => handleBlockDragOver(e, block.id)}
                   onDrop={(e) => e.preventDefault()}
                   onDragEnd={handleBlockDragEnd}
-                  className={`border rounded-xl p-4 transition ${isDragging ? "border-purple-400 bg-purple-50/60 opacity-60" : "border-gray-200 bg-gray-50"}`}
+                  className={`border rounded-xl p-4 transition ${isDragging ? "border-[#e8540a]/60 bg-[#fdf2ea]/80 opacity-60" : "border-gray-200 bg-gray-50"}`}
                 >
                   <div className="flex items-center gap-2 mb-3">
                     <span className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 text-sm select-none" title="Drag to reorder">☰</span>
-                    <span className="text-xs font-semibold text-purple-600 uppercase tracking-wide flex-1">
+                    <span className="text-xs font-semibold text-[#e8540a] uppercase tracking-wide flex-1">
                       {block.type === 'text' ? '📝 Paragraph' : block.type === 'video' ? '🎬 Video' : '🖼️ Picture'}
                     </span>
                     <button onClick={() => deleteBlock(block.id)} className="text-red-400 hover:text-red-600 transition text-xs px-2 py-1 rounded hover:bg-red-50">✕ Remove</button>
@@ -2187,7 +2231,7 @@ function ProfilePage({ toast }) {
                           <span className="text-[11px] font-semibold text-gray-500 mr-1">Align</span>
                           {[['left','⬅'],['center','↔'],['right','➡']].map(([val, icon]) => (
                             <button key={val} type="button" onClick={() => updateBlock(block.id, 'textAlign', val)}
-                              className={`w-7 h-7 rounded flex items-center justify-center text-xs transition ${(block.textAlign || 'left') === val ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}
+                              className={`w-7 h-7 rounded flex items-center justify-center text-xs transition ${(block.textAlign || 'left') === val ? 'bg-[#e8540a] text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}
                               title={`Align ${val}`}>{icon}</button>
                           ))}
                         </div>
@@ -2195,17 +2239,17 @@ function ProfilePage({ toast }) {
                           <span className="text-[11px] font-semibold text-gray-500 mr-1">Size</span>
                           {[['sm','S'],['base','M'],['lg','L'],['xl','XL']].map(([val, label]) => (
                             <button key={val} type="button" onClick={() => updateBlock(block.id, 'textSize', val)}
-                              className={`min-w-[1.75rem] h-7 px-1.5 rounded flex items-center justify-center text-[11px] font-bold transition ${(block.textSize || 'base') === val ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}
+                              className={`min-w-[1.75rem] h-7 px-1.5 rounded flex items-center justify-center text-[11px] font-bold transition ${(block.textSize || 'base') === val ? 'bg-[#e8540a] text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}
                               title={`Font size ${label}`}>{label}</button>
                           ))}
                         </div>
                         <div className="flex items-center gap-1">
                           <span className="text-[11px] font-semibold text-gray-500 mr-1">Style</span>
                           <button type="button" onClick={() => updateBlock(block.id, 'textBold', !block.textBold)}
-                            className={`w-7 h-7 rounded flex items-center justify-center text-xs font-bold transition ${block.textBold ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}
+                            className={`w-7 h-7 rounded flex items-center justify-center text-xs font-bold transition ${block.textBold ? 'bg-[#e8540a] text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}
                             title="Bold">B</button>
                           <button type="button" onClick={() => updateBlock(block.id, 'textItalic', !block.textItalic)}
-                            className={`w-7 h-7 rounded flex items-center justify-center text-xs italic transition ${block.textItalic ? 'bg-purple-600 text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}
+                            className={`w-7 h-7 rounded flex items-center justify-center text-xs italic transition ${block.textItalic ? 'bg-[#e8540a] text-white' : 'bg-white text-gray-500 border border-gray-200 hover:bg-gray-100'}`}
                             title="Italic">I</button>
                         </div>
                       </div>
@@ -2216,7 +2260,7 @@ function ProfilePage({ toast }) {
                               Video URL{(block.videoUrls || ['']).length > 1 ? 's' : ''}
                             </label>
                             <button onClick={() => addBlockVideoUrl(block.id)}
-                              className="text-purple-600 hover:text-purple-800 text-xs font-semibold transition">
+                              className="text-[#e8540a] hover:text-[#c94708] text-xs font-semibold transition">
                               + Add Another Video
                             </button>
                           </div>
@@ -2226,7 +2270,7 @@ function ProfilePage({ toast }) {
                                 <div className="flex-1">
                                   <input value={url} onChange={e => updateBlockVideoUrl(block.id, idx, e.target.value)}
                                     placeholder="Paste a YouTube or Bunny.net link"
-                                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"/>
+                                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
                                   {url && (
                                     <div className="flex justify-end mt-2">
                                       <CompactVideoPreview url={url} width={220} height={124}/>
@@ -2242,7 +2286,7 @@ function ProfilePage({ toast }) {
                           </div>
                           <p className="text-xs text-gray-400 mt-2">YouTube · Bunny.net (embed supported)</p>
                           {(block.videoUrls || []).filter(Boolean).length > 1 && (
-                            <p className="text-[11px] text-purple-600 mt-1">These {(block.videoUrls || []).filter(Boolean).length} videos will show together as a slider under one heading on your course page.</p>
+                            <p className="text-[11px] text-[#e8540a] mt-1">These {(block.videoUrls || []).filter(Boolean).length} videos will show together as a slider under one heading on your course page.</p>
                           )}
                         </div>
                       ) : (
@@ -2250,7 +2294,7 @@ function ProfilePage({ toast }) {
                           <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">Picture</label>
                           <div className="flex items-start gap-3">
                             <div className="w-24 h-24 flex-shrink-0 relative">
-                              <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-purple-400 transition cursor-pointer group"
+                              <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-[#e8540a]/60 transition cursor-pointer group"
                                 onClick={() => blockImageRefs.current[block.id]?.click()}>
                                 {imgPreview
                                   ? <img src={imgPreview} alt="Preview" className="w-full h-full object-cover"/>
@@ -2335,6 +2379,109 @@ function Layout({ children, sidebarWidth, isMobile }) {
 // ROOT EXPORT
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PAGE: STUDENTS — real enrolled-student lists per course
+// ─────────────────────────────────────────────────────────────────────────────
+
+function StudentsPage({ courses, loading }) {
+  const { API: api } = useAuth();
+  const [selectedCourse, setSelectedCourse] = useState(null); // null = course list view
+  const [students, setStudents] = useState([]);
+  const [studentsLoading, setStudentsLoading] = useState(false);
+
+  const openCourse = (course) => {
+    setSelectedCourse(course);
+    setStudentsLoading(true);
+    api.get(`/instructor/courses/${course._id}/students`)
+      .then((res) => setStudents(res.data?.students || []))
+      .catch(() => setStudents([]))
+      .finally(() => setStudentsLoading(false));
+  };
+
+  if (selectedCourse) {
+    return (
+      <div className="space-y-4 sm:space-y-6">
+        <button onClick={() => setSelectedCourse(null)} className="text-sm font-semibold text-gray-500 hover:text-gray-800 bg-transparent border-none cursor-pointer p-0 flex items-center gap-1.5">← All Courses</button>
+        <div>
+          <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900">{selectedCourse.title}</h2>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">{students.length} enrolled student{students.length === 1 ? "" : "s"}</p>
+        </div>
+        {studentsLoading ? (
+          <p className="text-sm text-gray-400 text-center py-16">Loading students…</p>
+        ) : students.length === 0 ? (
+          <EmptyState icon="🧑‍🎓" title="No students yet" body="Once someone enrolls and their payment is verified, they'll show up here."/>
+        ) : (
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-100">
+                  <tr>
+                    {["Student", "Email", "Enrolled", "Progress"].map((h) => (
+                      <th key={h} className="text-left text-xs font-semibold text-gray-500 uppercase tracking-wide px-3 sm:px-4 py-3 whitespace-nowrap">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {students.map((s) => (
+                    <tr key={s.studentId} className="hover:bg-gray-50 transition">
+                      <td className="px-3 sm:px-4 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <Avatar name={s.name || "?"} size={30} src={s.avatar}/>
+                          <span className="text-xs sm:text-sm font-semibold text-gray-800">{s.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 sm:px-4 py-3 text-xs sm:text-sm text-gray-600">{s.email}</td>
+                      <td className="px-3 sm:px-4 py-3 text-xs sm:text-sm text-gray-600 whitespace-nowrap">{new Date(s.enrolledAt).toLocaleDateString()}</td>
+                      <td className="px-3 sm:px-4 py-3">
+                        <div className="flex items-center gap-2 min-w-[120px]">
+                          <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                            <div className="h-full bg-[#e8540a] rounded-full" style={{ width: `${s.completionPct}%` }}/>
+                          </div>
+                          <span className="text-xs font-bold text-gray-700 w-9 text-right">{s.completionPct}%</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 sm:space-y-6">
+      <div>
+        <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900">Students</h2>
+        <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Pick a course to see who's enrolled and how far along they are.</p>
+      </div>
+      {loading ? (
+        <p className="text-sm text-gray-400 text-center py-16">Loading courses…</p>
+      ) : courses.length === 0 ? (
+        <EmptyState icon="📭" title="No courses yet" body="Create a course first — once students enroll, they'll show up here."/>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          {courses.map((c) => (
+            <button key={c._id} onClick={() => openCourse(c)}
+              className="text-left bg-white rounded-xl border border-gray-100 p-4 sm:p-5 shadow-sm hover:shadow-md hover:border-[#e8540a]/40 transition-all cursor-pointer">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-lg bg-[#fdf2ea] flex items-center justify-center text-[#e8540a] font-bold text-sm flex-shrink-0">{c.title?.charAt(0)}</div>
+                <p className="text-sm font-semibold text-gray-800 truncate">{c.title}</p>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500">Enrolled</span>
+                <span className="text-lg font-bold text-gray-900">{fmtNum(c.studentsEnrolled)}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function InstructorDashboard() {
   const { user, API: api } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
@@ -2407,6 +2554,7 @@ export default function InstructorDashboard() {
             />
           }/>
 
+          <Route path="students" element={<StudentsPage courses={courses} loading={loading}/>}/>
           <Route path="analytics" element={<AnalyticsPage courses={courses}/>}/>
           <Route path="profile"   element={<ProfilePage toast={toast}/>}/>
           <Route path="*"         element={<Navigate to="" replace/>}/>
