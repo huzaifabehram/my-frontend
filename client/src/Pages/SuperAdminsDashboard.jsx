@@ -675,10 +675,37 @@ const ACTION_LABELS = {
 
 const CONTEXT_FIELDS = ["studentName", "studentEmail", "courseTitle", "amount", "reason", "lectureId", "category", "name", "email", "message"];
 
-function emptyStep(type) {
-  if (type === "condition") return { type: "condition", conditionField: "courseTitle", conditionOperator: "equals", conditionValue: "" };
-  return { type: "action", actionType: "notify_student", params: {} };
-}
+// NEW: groups + icons for the trigger/action side panels below — matches
+// the "pick from a categorized list" pattern (search box, category
+// headers, icon + label rows) from the reference screenshots, instead of
+// the old flat alphabetical list.
+const TRIGGER_GROUPS = [
+  { label: "Signup & Access", items: ["new_sign_up", "offer_access_granted"] },
+  { label: "Courses", items: ["category_started", "category_completed", "lesson_started", "lesson_completed"] },
+  { label: "Payments", items: ["enrollment_created", "payment_received", "payment_rejected"] },
+  { label: "Forms & Contacts", items: ["form_submitted", "newsletter_subscribed"] },
+  { label: "Pipeline", items: ["opportunity_created", "opportunity_status_changed"] },
+  { label: "Engagement", items: ["link_clicked", "whatsapp_sent", "customer_replied"] },
+];
+const ACTION_GROUPS = [
+  { label: "Contact", items: ["create_contact", "add_contact_tag", "remove_contact_tag", "assign_user", "remove_assigned_user", "add_note"] },
+  { label: "Notifications", items: ["internal_notification", "notify_student"] },
+  { label: "Messaging", items: ["send_whatsapp"] },
+  { label: "Pipeline", items: ["add_to_pipeline", "update_opportunity_stage"] },
+  { label: "Flow Control", items: ["wait"] },
+  { label: "Developer", items: ["webhook"] },
+];
+const TRIGGER_ICONS = {
+  new_sign_up: "👤", offer_access_granted: "🔓", category_started: "▦", category_completed: "▦",
+  lesson_started: "✓", lesson_completed: "✓", enrollment_created: "📝", payment_received: "💳",
+  payment_rejected: "❌", form_submitted: "📋", newsletter_subscribed: "✉️", opportunity_created: "📊",
+  opportunity_status_changed: "📊", link_clicked: "🔗", whatsapp_sent: "💬", customer_replied: "💬",
+};
+const ACTION_ICONS = {
+  create_contact: "👤", add_contact_tag: "🏷️", remove_contact_tag: "🏷️", assign_user: "👥",
+  remove_assigned_user: "👥", add_note: "📝", internal_notification: "🔔", notify_student: "🔔",
+  send_whatsapp: "💬", add_to_pipeline: "📊", update_opportunity_stage: "📊", wait: "⏱️", webhook: "🔌",
+};
 
 // Wraps/inserts text into a plain <textarea> at the cursor — used for Bold,
 // variable insertion, and the [[Label|url]] tracked-link syntax the backend
@@ -719,110 +746,199 @@ function RichMessageEditor({ value, onChange, boldTag = ["<b>", "</b>"], rows = 
   );
 }
 
-function WorkflowStepEditor({ step, index, total, meta, assignableUsers, onChange, onChangeParam, onRemove, onMove }) {
-  const p = step.params || {};
+// Shared slide-in panel shell (fixed to the right edge, dims the page
+// behind it, closes on backdrop click) — used for both the trigger picker
+// and the step (condition/action) picker/editor.
+function SidePanel({ title, subtitle, onClose, children }) {
   return (
-    <div className="border border-gray-200 rounded-xl p-4 bg-gray-50">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-xs font-bold text-gray-500">Step {index + 1} — {step.type === "condition" ? "Condition" : ACTION_LABELS[step.actionType] || "Action"}</span>
-        <div className="flex items-center gap-2">
-          <button onClick={() => onMove(-1)} disabled={index === 0} className="text-gray-400 hover:text-gray-700 disabled:opacity-30 text-xs px-1 bg-transparent border-none cursor-pointer">↑</button>
-          <button onClick={() => onMove(1)} disabled={index === total - 1} className="text-gray-400 hover:text-gray-700 disabled:opacity-30 text-xs px-1 bg-transparent border-none cursor-pointer">↓</button>
-          <button onClick={onRemove} className="text-red-400 hover:text-red-600 text-xs px-1 bg-transparent border-none cursor-pointer">✕ Remove</button>
+    <div className="fixed inset-0 z-[200] flex justify-end" onClick={onClose}>
+      <div className="absolute inset-0 bg-black/30" />
+      <div className="relative bg-white w-full sm:w-[400px] h-full shadow-2xl overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-start justify-between z-10">
+          <div>
+            <h3 className="font-bold text-gray-900">{title}</h3>
+            {subtitle && <p className="text-xs text-gray-500 mt-0.5">{subtitle}</p>}
+          </div>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-700 bg-transparent border-none cursor-pointer text-lg leading-none">✕</button>
         </div>
+        <div className="p-5">{children}</div>
       </div>
+    </div>
+  );
+}
+
+function TriggerSidePanel({ meta, onPick, onClose }) {
+  const [search, setSearch] = useState("");
+  const groups = TRIGGER_GROUPS.map((g) => ({
+    ...g,
+    items: g.items.filter((t) => (meta.triggers || []).includes(t) && (TRIGGER_LABELS[t] || t).toLowerCase().includes(search.toLowerCase())),
+  })).filter((g) => g.items.length > 0);
+
+  return (
+    <SidePanel title="Add New Trigger" onClose={onClose}>
+      <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search triggers…"
+        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-rose-500" />
+      {groups.length === 0 && <p className="text-sm text-gray-400">No triggers match "{search}".</p>}
+      {groups.map((g) => (
+        <div key={g.label} className="mb-5">
+          <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">{g.label}</p>
+          <div className="space-y-1.5">
+            {g.items.map((t) => (
+              <button key={t} onClick={() => onPick(t)} className="w-full flex items-center gap-3 text-left px-3 py-2.5 rounded-lg text-sm text-gray-700 hover:bg-rose-50 hover:text-rose-700 bg-white border border-gray-100 cursor-pointer transition">
+                <span className="text-base flex-shrink-0">{TRIGGER_ICONS[t] || "⚡"}</span>
+                {TRIGGER_LABELS[t] || t}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </SidePanel>
+  );
+}
+
+// Handles both adding a brand-new step (starts on the "pick a type" list,
+// matching the "Actions — Pick an action for this step" reference screen)
+// and editing an existing one (opens straight into its config form).
+function StepPanel({ meta, assignableUsers, initialStep, onSave, onRemove, onClose }) {
+  const [stage, setStage] = useState(initialStep ? "configure" : "pick");
+  const [step, setStep] = useState(initialStep || null);
+  const [search, setSearch] = useState("");
+
+  const pickType = (kind, actionType) => {
+    setStep(kind === "condition"
+      ? { type: "condition", conditionField: "courseTitle", conditionOperator: "equals", conditionValue: "" }
+      : { type: "action", actionType, params: {} });
+    setStage("configure");
+  };
+  const updateStep = (patch) => setStep((s) => ({ ...s, ...patch }));
+  const updateParam = (key, value) => setStep((s) => ({ ...s, params: { ...(s.params || {}), [key]: value } }));
+
+  if (stage === "pick") {
+    const conditionMatches = "if condition flow control".includes(search.toLowerCase()) || search.trim() === "";
+    const groups = ACTION_GROUPS.map((g) => ({
+      ...g,
+      items: g.items.filter((a) => (meta.actionTypes || []).includes(a) && (ACTION_LABELS[a] || a).toLowerCase().includes(search.toLowerCase())),
+    })).filter((g) => g.items.length > 0);
+
+    return (
+      <SidePanel title="Actions" subtitle="Pick an action for this step" onClose={onClose}>
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search Action"
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-rose-500" />
+        {conditionMatches && (
+          <div className="mb-5">
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">Flow Control</p>
+            <button onClick={() => pickType("condition")} className="w-full flex items-center gap-3 text-left px-3 py-2.5 rounded-lg text-sm text-gray-700 hover:bg-rose-50 hover:text-rose-700 bg-white border border-gray-100 cursor-pointer transition">
+              <span className="text-base flex-shrink-0">🔀</span> If / Condition
+            </button>
+          </div>
+        )}
+        {groups.map((g) => (
+          <div key={g.label} className="mb-5">
+            <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-2">{g.label}</p>
+            <div className="space-y-1.5">
+              {g.items.map((a) => (
+                <button key={a} onClick={() => pickType("action", a)} className="w-full flex items-center gap-3 text-left px-3 py-2.5 rounded-lg text-sm text-gray-700 hover:bg-rose-50 hover:text-rose-700 bg-white border border-gray-100 cursor-pointer transition">
+                  <span className="text-base flex-shrink-0">{ACTION_ICONS[a] || "⚙️"}</span>
+                  {ACTION_LABELS[a] || a}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </SidePanel>
+    );
+  }
+
+  // stage === "configure"
+  const p = step?.params || {};
+  return (
+    <SidePanel title={step.type === "condition" ? "Condition" : (ACTION_LABELS[step.actionType] || "Action")} onClose={onClose}>
+      {!initialStep && (
+        <button onClick={() => setStage("pick")} className="text-xs font-semibold text-gray-500 hover:text-gray-800 bg-transparent border-none cursor-pointer p-0 mb-4 flex items-center gap-1">← Change type</button>
+      )}
 
       {step.type === "condition" ? (
-        <div className="grid grid-cols-3 gap-2">
-          <select value={step.conditionField} onChange={(e) => onChange({ conditionField: e.target.value })} className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+        <div className="space-y-2.5">
+          <select value={step.conditionField} onChange={(e) => updateStep({ conditionField: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
             {CONTEXT_FIELDS.map((f) => <option key={f} value={f}>{f}</option>)}
           </select>
-          <select value={step.conditionOperator} onChange={(e) => onChange({ conditionOperator: e.target.value })} className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+          <select value={step.conditionOperator} onChange={(e) => updateStep({ conditionOperator: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
             <option value="equals">equals</option>
             <option value="not_equals">not equals</option>
             <option value="contains">contains</option>
           </select>
-          <input value={step.conditionValue} onChange={(e) => onChange({ conditionValue: e.target.value })} placeholder="value" className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+          <input value={step.conditionValue} onChange={(e) => updateStep({ conditionValue: e.target.value })} placeholder="value" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
         </div>
       ) : (
         <div className="space-y-2.5">
-          <select value={step.actionType} onChange={(e) => onChange({ actionType: e.target.value, params: {} })} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
-            {(meta.actionTypes || []).map((t) => <option key={t} value={t}>{ACTION_LABELS[t] || t}</option>)}
-          </select>
-
           {step.actionType === "create_contact" && (
             <>
-              <input value={p.name || ""} onChange={(e) => onChangeParam("name", e.target.value)} placeholder="Name (default: {{studentName}} / {{name}})" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
-              <input value={p.email || ""} onChange={(e) => onChangeParam("email", e.target.value)} placeholder="Email (default: {{studentEmail}} / {{email}})" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+              <input value={p.name || ""} onChange={(e) => updateParam("name", e.target.value)} placeholder="Name (default: {{studentName}} / {{name}})" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+              <input value={p.email || ""} onChange={(e) => updateParam("email", e.target.value)} placeholder="Email (default: {{studentEmail}} / {{email}})" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
               <p className="text-[11px] text-gray-400">A contact is matched/created by email — running this again for the same email just updates it.</p>
             </>
           )}
-
           {(step.actionType === "add_contact_tag" || step.actionType === "remove_contact_tag") && (
-            <input value={p.tag || ""} onChange={(e) => onChangeParam("tag", e.target.value)} placeholder="Tag name" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+            <input value={p.tag || ""} onChange={(e) => updateParam("tag", e.target.value)} placeholder="Tag name" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
           )}
-
           {step.actionType === "assign_user" && (
-            <select value={p.userId || ""} onChange={(e) => onChangeParam("userId", e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+            <select value={p.userId || ""} onChange={(e) => updateParam("userId", e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
               <option value="">Choose a user…</option>
               {(assignableUsers || []).map((u) => <option key={u._id} value={u._id}>{u.name} ({u.role})</option>)}
             </select>
           )}
-
           {step.actionType === "add_note" && (
-            <textarea value={p.text || ""} onChange={(e) => onChangeParam("text", e.target.value)} rows={2} placeholder="Note text — use {{studentName}}, {{courseTitle}}, etc." className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs resize-none" />
+            <textarea value={p.text || ""} onChange={(e) => updateParam("text", e.target.value)} rows={2} placeholder="Note text — use {{studentName}}, {{courseTitle}}, etc." className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none" />
           )}
-
           {step.actionType === "internal_notification" && (
-            <textarea value={p.message || ""} onChange={(e) => onChangeParam("message", e.target.value)} rows={2} placeholder="Message shown to your admin team" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs resize-none" />
+            <textarea value={p.message || ""} onChange={(e) => updateParam("message", e.target.value)} rows={2} placeholder="Message shown to your admin team" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none" />
           )}
-
           {step.actionType === "notify_student" && (
             <>
-              <input value={p.title || ""} onChange={(e) => onChangeParam("title", e.target.value)} placeholder="Notification title" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
-              <textarea value={p.message || ""} onChange={(e) => onChangeParam("message", e.target.value)} rows={2} placeholder="Message — use {{studentName}}, {{courseTitle}}, etc." className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs resize-none" />
+              <input value={p.title || ""} onChange={(e) => updateParam("title", e.target.value)} placeholder="Notification title" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+              <textarea value={p.message || ""} onChange={(e) => updateParam("message", e.target.value)} rows={2} placeholder="Message — use {{studentName}}, {{courseTitle}}, etc." className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none" />
             </>
           )}
-
           {step.actionType === "wait" && (
             <div className="flex gap-2">
-              <input type="number" min="1" value={p.amount || ""} onChange={(e) => onChangeParam("amount", e.target.value)} placeholder="Amount" className="flex-1 border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
-              <select value={p.unit || "minutes"} onChange={(e) => onChangeParam("unit", e.target.value)} className="border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+              <input type="number" min="1" value={p.amount || ""} onChange={(e) => updateParam("amount", e.target.value)} placeholder="Amount" className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+              <select value={p.unit || "minutes"} onChange={(e) => updateParam("unit", e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
                 {["seconds", "minutes", "hours", "days", "weeks", "years"].map((u) => <option key={u} value={u}>{u}</option>)}
               </select>
             </div>
           )}
-
           {step.actionType === "send_whatsapp" && (
             <>
               {!meta.whatsappConfigured && <p className="text-[11px] text-amber-600">WhatsApp isn't configured yet — this step will be skipped (and logged) until it is. See the guide below.</p>}
-              <input value={p.to || ""} onChange={(e) => onChangeParam("to", e.target.value)} placeholder="To (default: {{whatsapp}})" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
-              <RichMessageEditor value={p.message || ""} onChange={(v) => onChangeParam("message", v)} boldTag={["*", "*"]} rows={4} placeholder="WhatsApp message… (WhatsApp itself renders *text* as bold)" />
+              <input value={p.to || ""} onChange={(e) => updateParam("to", e.target.value)} placeholder="To (default: {{whatsapp}})" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+              <RichMessageEditor value={p.message || ""} onChange={(v) => updateParam("message", v)} boldTag={["*", "*"]} rows={4} placeholder="WhatsApp message… (WhatsApp itself renders *text* as bold)" />
             </>
           )}
-
           {step.actionType === "add_to_pipeline" && (
             <>
-              <select value={p.stage || (meta.pipelineStages || [])[0] || ""} onChange={(e) => onChangeParam("stage", e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+              <select value={p.stage || (meta.pipelineStages || [])[0] || ""} onChange={(e) => updateParam("stage", e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
                 {(meta.pipelineStages || []).map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
-              <input value={p.title || ""} onChange={(e) => onChangeParam("title", e.target.value)} placeholder="Opportunity title (default: course title)" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
-              <input type="number" value={p.value || ""} onChange={(e) => onChangeParam("value", e.target.value)} placeholder="Value (PKR, optional)" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+              <input value={p.title || ""} onChange={(e) => updateParam("title", e.target.value)} placeholder="Opportunity title (default: course title)" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+              <input type="number" value={p.value || ""} onChange={(e) => updateParam("value", e.target.value)} placeholder="Value (PKR, optional)" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
             </>
           )}
-
           {step.actionType === "update_opportunity_stage" && (
-            <select value={p.stage || (meta.pipelineStages || [])[0] || ""} onChange={(e) => onChangeParam("stage", e.target.value)} className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+            <select value={p.stage || (meta.pipelineStages || [])[0] || ""} onChange={(e) => updateParam("stage", e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
               {(meta.pipelineStages || []).map((s) => <option key={s} value={s}>{s}</option>)}
             </select>
           )}
-
           {step.actionType === "webhook" && (
-            <input value={p.url || ""} onChange={(e) => onChangeParam("url", e.target.value)} placeholder="https://…  (Zapier / Make / n8n / your own endpoint)" className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs" />
+            <input value={p.url || ""} onChange={(e) => updateParam("url", e.target.value)} placeholder="https://…  (Zapier / Make / n8n / your own endpoint)" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
           )}
         </div>
       )}
-    </div>
+
+      <div className="flex gap-2 mt-6 pt-4 border-t border-gray-100">
+        <Btn onClick={() => onSave(step)}>Save</Btn>
+        {initialStep && <Btn variant="danger" onClick={onRemove}>Remove Step</Btn>}
+      </div>
+    </SidePanel>
   );
 }
 
@@ -890,20 +1006,26 @@ function AutomationWorkflowListPage({ toast, navigate }) {
   );
 }
 
-function TriggerPickerModal({ meta, onPick, onClose }) {
+// ── Visual canvas primitives ────────────────────────────────────────────────
+function Connector() { return <div className="w-0.5 h-6 bg-gray-300" />; }
+function PlusButton({ onClick, title }) {
   return (
-    <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
-        <h3 className="font-bold text-gray-900 mb-4">New Trigger</h3>
-        <div className="space-y-1.5">
-          {(meta.triggers || []).map((t) => (
-            <button key={t} onClick={() => onPick(t)} className="w-full text-left px-3 py-2.5 rounded-lg text-sm text-gray-700 hover:bg-rose-50 hover:text-rose-700 bg-transparent border border-gray-100 cursor-pointer transition">
-              {TRIGGER_LABELS[t] || t}
-            </button>
-          ))}
+    <button onClick={onClick} title={title || "Add a step"} className="w-7 h-7 rounded-full bg-white border-2 border-gray-300 hover:border-rose-400 hover:text-rose-500 text-gray-400 flex items-center justify-center text-sm font-bold cursor-pointer transition shadow-sm">+</button>
+  );
+}
+function NodeCard({ icon, label, sublabel, onClick, onRemove, variant }) {
+  return (
+    <div className="relative group">
+      <button onClick={onClick} className={`flex items-center gap-3 px-4 py-3 rounded-xl border-2 bg-white shadow-sm hover:shadow-md transition cursor-pointer text-left min-w-[260px] max-w-[320px] ${variant === "trigger" ? "border-rose-200" : "border-gray-200"}`}>
+        <span className="text-xl flex-shrink-0">{icon}</span>
+        <div className="min-w-0">
+          {sublabel && <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide">{sublabel}</p>}
+          <p className="text-sm font-bold text-gray-900 truncate">{label}</p>
         </div>
-        <Btn variant="secondary" onClick={onClose} className="mt-4 w-full justify-center">Cancel</Btn>
-      </div>
+      </button>
+      {onRemove && (
+        <button onClick={(e) => { e.stopPropagation(); onRemove(); }} title="Remove step" className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-white border border-gray-300 text-gray-400 hover:text-red-500 hover:border-red-300 flex items-center justify-center text-[10px] opacity-0 group-hover:opacity-100 transition cursor-pointer">✕</button>
+      )}
     </div>
   );
 }
@@ -923,6 +1045,12 @@ function AutomationWorkflowEditorPage({ toast, navigate, workflowId }) {
   const [assignableUsers, setAssignableUsers] = useState([]);
   const [saving, setSaving] = useState(false);
   const [showTriggerPicker, setShowTriggerPicker] = useState(false);
+  // NEW: replaces the old "+ Condition"/"+ Action" buttons under a plain
+  // stacked list — insertAt is the position a brand-new step should land at
+  // (from a "+" button between nodes), editIndex is the position of an
+  // existing node that was clicked to edit it. Only one is ever set.
+  const [insertAt, setInsertAt] = useState(null);
+  const [editIndex, setEditIndex] = useState(null);
   const [runs, setRuns] = useState([]);
   const [runsLoading, setRunsLoading] = useState(false);
 
@@ -952,17 +1080,17 @@ function AutomationWorkflowEditorPage({ toast, navigate, workflowId }) {
   }, [api, workflowId, isNew]);
   useEffect(() => { loadRuns(); }, [loadRuns]);
 
-  const addStep = (type) => setSteps((prev) => [...prev, emptyStep(type)]);
-  const updateStep = (i, patch) => setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
-  const updateStepParam = (i, key, value) => setSteps((prev) => prev.map((s, idx) => (idx === i ? { ...s, params: { ...s.params, [key]: value } } : s)));
   const removeStep = (i) => setSteps((prev) => prev.filter((_, idx) => idx !== i));
-  const moveStep = (i, dir) => setSteps((prev) => {
-    const next = [...prev];
-    const j = i + dir;
-    if (j < 0 || j >= next.length) return prev;
-    [next[i], next[j]] = [next[j], next[i]];
-    return next;
-  });
+
+  const saveStepFromPanel = (step) => {
+    if (insertAt !== null) {
+      setSteps((prev) => [...prev.slice(0, insertAt), step, ...prev.slice(insertAt)]);
+      setInsertAt(null);
+    } else if (editIndex !== null) {
+      setSteps((prev) => prev.map((s, idx) => (idx === editIndex ? step : s)));
+      setEditIndex(null);
+    }
+  };
 
   const save = async (publishOverride) => {
     if (!name.trim()) { toast("Name is required", "error"); return; }
@@ -1000,45 +1128,48 @@ function AutomationWorkflowEditorPage({ toast, navigate, workflowId }) {
         {!isNew && <StatusBadge status={published ? "active" : "draft"} />}
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 mb-5 space-y-4">
-        <div>
-          <label className="block text-xs font-bold text-gray-600 mb-1">Workflow Name</label>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Welcome new students"
-            className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
-        </div>
-
-        <div>
-          <label className="block text-xs font-bold text-gray-600 mb-1">Trigger</label>
-          {trigger ? (
-            <div className="flex items-center gap-2">
-              <span className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50">{TRIGGER_LABELS[trigger] || trigger}</span>
-              <Btn variant="secondary" size="sm" onClick={() => setShowTriggerPicker(true)}>Change</Btn>
-            </div>
-          ) : (
-            <Btn onClick={() => setShowTriggerPicker(true)}>+ New Trigger</Btn>
-          )}
-        </div>
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 mb-5">
+        <label className="block text-xs font-bold text-gray-600 mb-1">Workflow Name</label>
+        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Welcome new students"
+          className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
       </div>
 
-      {trigger && (
-        <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 mb-5">
-          <p className="text-xs font-bold text-gray-600 mb-3">Actions — run in order, top to bottom. A Condition stops the workflow here if it doesn't match.</p>
-          <div className="space-y-3">
+      {/* NEW: visual canvas — trigger node, then each condition/action as its
+          own connected node, with a "+" between every pair to insert a new
+          step there, ending in an END pill. Replaces the old plain stacked
+          list of step-editor cards. */}
+      <div className="bg-white rounded-xl border border-gray-100 py-10 px-4 mb-5 flex flex-col items-center overflow-x-auto">
+        {trigger ? (
+          <NodeCard icon={TRIGGER_ICONS[trigger] || "⚡"} label={TRIGGER_LABELS[trigger] || trigger} sublabel="Trigger" variant="trigger" onClick={() => setShowTriggerPicker(true)} />
+        ) : (
+          <button onClick={() => setShowTriggerPicker(true)} className="flex items-center gap-2 px-5 py-3 rounded-xl border-2 border-dashed border-rose-300 text-rose-500 hover:bg-rose-50 bg-white cursor-pointer font-semibold text-sm transition">
+            + Add New Trigger
+          </button>
+        )}
+
+        {trigger && (
+          <>
+            <Connector />
+            <PlusButton onClick={() => setInsertAt(0)} title="Add a step" />
             {steps.map((step, i) => (
-              <WorkflowStepEditor key={i} step={step} index={i} total={steps.length} meta={meta} assignableUsers={assignableUsers}
-                onChange={(patch) => updateStep(i, patch)}
-                onChangeParam={(key, value) => updateStepParam(i, key, value)}
-                onRemove={() => removeStep(i)}
-                onMove={(dir) => moveStep(i, dir)} />
+              <React.Fragment key={i}>
+                <Connector />
+                <NodeCard
+                  icon={step.type === "condition" ? "🔀" : (ACTION_ICONS[step.actionType] || "⚙️")}
+                  label={step.type === "condition" ? `If ${step.conditionField} ${step.conditionOperator} "${step.conditionValue}"` : (ACTION_LABELS[step.actionType] || step.actionType)}
+                  sublabel={step.type === "condition" ? "Condition" : "Action"}
+                  onClick={() => setEditIndex(i)}
+                  onRemove={() => removeStep(i)}
+                />
+                <Connector />
+                <PlusButton onClick={() => setInsertAt(i + 1)} title="Add a step" />
+              </React.Fragment>
             ))}
-            {steps.length === 0 && <p className="text-xs text-gray-400 italic">No actions yet — add one below. As soon as one is added, this workflow will run it whenever the trigger fires.</p>}
-          </div>
-          <div className="flex gap-2 mt-3">
-            <Btn variant="secondary" size="sm" onClick={() => addStep("condition")}>+ Condition</Btn>
-            <Btn variant="secondary" size="sm" onClick={() => addStep("action")}>+ Action</Btn>
-          </div>
-        </div>
-      )}
+            <Connector />
+            <div className="px-4 py-2 rounded-full bg-gray-800 text-white text-xs font-bold tracking-wide">END</div>
+          </>
+        )}
+      </div>
 
       <div className="flex flex-wrap items-center gap-2 mb-8">
         <Btn onClick={() => save()} disabled={saving}>{saving ? "Saving…" : "Save"}</Btn>
@@ -1078,11 +1209,23 @@ function AutomationWorkflowEditorPage({ toast, navigate, workflowId }) {
       )}
 
       {showTriggerPicker && (
-        <TriggerPickerModal meta={meta} onClose={() => setShowTriggerPicker(false)} onPick={(t) => { setTrigger(t); setShowTriggerPicker(false); }} />
+        <TriggerSidePanel meta={meta} onClose={() => setShowTriggerPicker(false)} onPick={(t) => { setTrigger(t); setShowTriggerPicker(false); }} />
+      )}
+
+      {(insertAt !== null || editIndex !== null) && (
+        <StepPanel
+          meta={meta}
+          assignableUsers={assignableUsers}
+          initialStep={editIndex !== null ? steps[editIndex] : null}
+          onSave={saveStepFromPanel}
+          onRemove={() => { removeStep(editIndex); setEditIndex(null); }}
+          onClose={() => { setInsertAt(null); setEditIndex(null); }}
+        />
       )}
     </div>
   );
 }
+
 
 function AutomationWorkflowPage({ toast }) {
   const navigate = useNavigate();
