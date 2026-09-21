@@ -20,7 +20,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
-import { Routes, Route, NavLink, useNavigate, useParams, Navigate } from "react-router-dom";
+import { Routes, Route, NavLink, useNavigate, useParams, useLocation, Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useSuperAdminData } from "../hooks/useSuperAdminData";
 
@@ -189,6 +189,7 @@ const NAV_ITEMS = [
   { to: "/superadmin/automation",   label: "Automation Workflow", icon: "⚡" },
   { to: "/superadmin/pipeline",     label: "Pipeline",      icon: "📊" },
   { to: "/superadmin/review-importer", label: "Review Importer", icon: "⭐" },
+  { to: "/superadmin/forms",        label: "Forms",         icon: "📄" },
   { to: "/superadmin/settings",     label: "Settings",      icon: "⚙️" },
 ];
 
@@ -710,9 +711,16 @@ const ACTION_ICONS = {
 // Wraps/inserts text into a plain <textarea> at the cursor — used for Bold,
 // variable insertion, and the [[Label|url]] tracked-link syntax the backend
 // rewrites into a real clickable, click-tracked link at send time.
-function RichMessageEditor({ value, onChange, boldTag = ["<b>", "</b>"], rows = 4, placeholder }) {
+// NEW: rebuilt specifically around what WhatsApp text messages actually
+// support — *bold*, _italic_, ~strikethrough~, and ```monospace``` are real
+// WhatsApp formatting syntax that its app renders visually. WhatsApp has no
+// concept of headings, arbitrary font sizing, or highlight/background
+// color in a plain text message — those buttons would just insert
+// decoration that WhatsApp displays as literal, meaningless characters, so
+// they're deliberately left out rather than faked.
+function RichMessageEditor({ value, onChange, rows = 4, placeholder }) {
   const ref = useRef(null);
-  const wrap = (before, after) => {
+  const wrap = (before, after = before) => {
     const el = ref.current;
     if (!el) return;
     const start = el.selectionStart, end = el.selectionEnd;
@@ -728,7 +736,10 @@ function RichMessageEditor({ value, onChange, boldTag = ["<b>", "</b>"], rows = 
   return (
     <div>
       <div className="flex items-center gap-1.5 mb-1.5 flex-wrap">
-        <button type="button" onClick={() => wrap(boldTag[0], boldTag[1])} title="Bold" className="text-xs font-extrabold border border-gray-200 rounded px-2 py-1 bg-white hover:bg-gray-50 cursor-pointer">B</button>
+        <button type="button" onClick={() => wrap("*")} title="Bold" className="text-xs font-extrabold border border-gray-200 rounded px-2 py-1 bg-white hover:bg-gray-50 cursor-pointer">B</button>
+        <button type="button" onClick={() => wrap("_")} title="Italic" className="text-xs italic font-bold border border-gray-200 rounded px-2 py-1 bg-white hover:bg-gray-50 cursor-pointer">I</button>
+        <button type="button" onClick={() => wrap("~")} title="Strikethrough" className="text-xs line-through font-bold border border-gray-200 rounded px-2 py-1 bg-white hover:bg-gray-50 cursor-pointer">S</button>
+        <button type="button" onClick={() => wrap("```")} title="Monospace" className="text-xs font-mono border border-gray-200 rounded px-2 py-1 bg-white hover:bg-gray-50 cursor-pointer">{"</>"}</button>
         <select onChange={(e) => { if (e.target.value) insertAtCursor(`{{${e.target.value}}}`); e.target.value = ""; }} defaultValue=""
           className="text-xs border border-gray-200 rounded px-2 py-1 bg-white cursor-pointer">
           <option value="" disabled>Insert variable…</option>
@@ -911,7 +922,7 @@ function StepPanel({ meta, assignableUsers, initialStep, onSave, onRemove, onClo
             <>
               {!meta.whatsappConfigured && <p className="text-[11px] text-amber-600">WhatsApp isn't configured yet — this step will be skipped (and logged) until it is. See the guide below.</p>}
               <input value={p.to || ""} onChange={(e) => updateParam("to", e.target.value)} placeholder="To (default: {{whatsapp}})" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-              <RichMessageEditor value={p.message || ""} onChange={(v) => updateParam("message", v)} boldTag={["*", "*"]} rows={4} placeholder="WhatsApp message… (WhatsApp itself renders *text* as bold)" />
+              <RichMessageEditor value={p.message || ""} onChange={(v) => updateParam("message", v)} rows={4} placeholder="WhatsApp message…" />
             </>
           )}
           {step.actionType === "add_to_pipeline" && (
@@ -1053,10 +1064,18 @@ function AutomationWorkflowEditorPage({ toast, navigate, workflowId }) {
   const [editIndex, setEditIndex] = useState(null);
   const [runs, setRuns] = useState([]);
   const [runsLoading, setRunsLoading] = useState(false);
+  // NEW: scopes a trigger to one real, specific thing instead of "every
+  // lesson everywhere" / "every form everywhere" — { courseId, sectionId,
+  // lectureId } for lesson_started/lesson_completed, or { formSlug } for
+  // form_submitted. Empty object means unscoped (fires for everything),
+  // same behavior as before this existed.
+  const [triggerScope, setTriggerScope] = useState({});
+  const [allCourses, setAllCourses] = useState([]);
+  const [forms, setForms] = useState([]);
 
   useEffect(() => {
-    Promise.all([api.get("/admin/workflows/meta"), api.get("/admin/assignable-users")])
-      .then(([mRes, uRes]) => { setMeta(mRes.data || {}); setAssignableUsers(uRes.data || []); })
+    Promise.all([api.get("/admin/workflows/meta"), api.get("/admin/assignable-users"), api.get("/admin/courses"), api.get("/admin/forms")])
+      .then(([mRes, uRes, cRes, fRes]) => { setMeta(mRes.data || {}); setAssignableUsers(uRes.data || []); setAllCourses(cRes.data || []); setForms(fRes.data || []); })
       .catch(() => {});
   }, [api]);
 
@@ -1067,6 +1086,7 @@ function AutomationWorkflowEditorPage({ toast, navigate, workflowId }) {
         const wf = res.data;
         setName(wf.name); setTrigger(wf.trigger); setPublished(!!wf.published);
         setSteps(wf.steps?.map((s) => ({ ...s, params: { ...(s.params || {}) } })) || []);
+        setTriggerScope(wf.triggerScope || {});
         setRunCount(wf.runCount || 0); setLastRunAt(wf.lastRunAt);
       })
       .catch(() => toast("Failed to load workflow", "error"))
@@ -1097,7 +1117,7 @@ function AutomationWorkflowEditorPage({ toast, navigate, workflowId }) {
     if (!trigger) { toast("Choose a trigger first", "error"); return; }
     setSaving(true);
     try {
-      const payload = { name: name.trim(), trigger, steps, published: publishOverride !== undefined ? publishOverride : published };
+      const payload = { name: name.trim(), trigger, steps, triggerScope, published: publishOverride !== undefined ? publishOverride : published };
       const res = isNew ? await api.post("/admin/workflows", payload) : await api.put(`/admin/workflows/${workflowId}`, payload);
       setPublished(res.data.published);
       toast("Workflow saved", "success");
@@ -1145,6 +1165,52 @@ function AutomationWorkflowEditorPage({ toast, navigate, workflowId }) {
           <button onClick={() => setShowTriggerPicker(true)} className="flex items-center gap-2 px-5 py-3 rounded-xl border-2 border-dashed border-rose-300 text-rose-500 hover:bg-rose-50 bg-white cursor-pointer font-semibold text-sm transition">
             + Add New Trigger
           </button>
+        )}
+
+        {/* NEW: scopes lesson_started/lesson_completed to one real lesson
+            (Course → Section → Lecture, all real data from your courses)
+            or form_submitted to one real form, instead of firing for
+            every lesson or every form on the site. */}
+        {(trigger === "lesson_started" || trigger === "lesson_completed") && (
+          <div className="mt-3 w-full max-w-sm bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-2">
+            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Scope to one lesson (optional)</p>
+            <select value={triggerScope.courseId || ""} onChange={(e) => setTriggerScope({ courseId: e.target.value || undefined })}
+              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+              <option value="">Any course</option>
+              {allCourses.map((c) => <option key={c._id} value={c._id}>{c.title}</option>)}
+            </select>
+            {triggerScope.courseId && (
+              <select value={triggerScope.sectionId || ""} onChange={(e) => setTriggerScope((s) => ({ ...s, sectionId: e.target.value || undefined, lectureId: undefined }))}
+                className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+                <option value="">Any section</option>
+                {(allCourses.find((c) => c._id === triggerScope.courseId)?.sections || []).map((sec) => (
+                  <option key={sec._id} value={sec._id}>{sec.title}</option>
+                ))}
+              </select>
+            )}
+            {triggerScope.courseId && triggerScope.sectionId && (
+              <select value={triggerScope.lectureId || ""} onChange={(e) => setTriggerScope((s) => ({ ...s, lectureId: e.target.value || undefined }))}
+                className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+                <option value="">Any lecture in this section</option>
+                {(allCourses.find((c) => c._id === triggerScope.courseId)?.sections?.find((sec) => sec._id === triggerScope.sectionId)?.lectures || []).map((lec) => (
+                  <option key={lec._id} value={lec._id}>{lec.title}</option>
+                ))}
+              </select>
+            )}
+            {(triggerScope.courseId || triggerScope.sectionId || triggerScope.lectureId) && (
+              <button onClick={() => setTriggerScope({})} className="text-[11px] text-gray-400 hover:text-gray-700 bg-transparent border-none cursor-pointer p-0">Clear — fire for every lesson</button>
+            )}
+          </div>
+        )}
+        {trigger === "form_submitted" && (
+          <div className="mt-3 w-full max-w-sm bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-2">
+            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Scope to one form (optional)</p>
+            <select value={triggerScope.formSlug || ""} onChange={(e) => setTriggerScope({ formSlug: e.target.value || undefined })}
+              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+              <option value="">Any form</option>
+              {forms.map((f) => <option key={f._id} value={f.slug}>{f.name}</option>)}
+            </select>
+          </div>
         )}
 
         {trigger && (
@@ -1209,7 +1275,7 @@ function AutomationWorkflowEditorPage({ toast, navigate, workflowId }) {
       )}
 
       {showTriggerPicker && (
-        <TriggerSidePanel meta={meta} onClose={() => setShowTriggerPicker(false)} onPick={(t) => { setTrigger(t); setShowTriggerPicker(false); }} />
+        <TriggerSidePanel meta={meta} onClose={() => setShowTriggerPicker(false)} onPick={(t) => { setTrigger(t); setTriggerScope({}); setShowTriggerPicker(false); }} />
       )}
 
       {(insertAt !== null || editIndex !== null) && (
@@ -1518,6 +1584,143 @@ function ReviewImporterPage({ toast, courses }) {
               ))}
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FORMS — Super Admin panel
+// ─────────────────────────────────────────────────────────────────────────────
+// A catalog of the real forms already live on the site — "Form 1" (course
+// enrollment) and "Form 2" (package inquiry) are seeded automatically and
+// can't be deleted since real pages already send their slug. Their slug is
+// what the Automation Workflow's "Form Submitted" trigger can scope to, so
+// a workflow can react to just one specific form instead of every form.
+
+function FormsPage({ toast }) {
+  const { API: api } = useAuth();
+  const [forms, setForms] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null); // null | "new" | form object
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+  const [description, setDescription] = useState("");
+  const [fieldsText, setFieldsText] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.get("/admin/forms").then((res) => setForms(res.data || [])).catch(() => toast("Failed to load forms", "error")).finally(() => setLoading(false));
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { load(); }, [load]);
+
+  const openEditor = (form) => {
+    setEditing(form || "new");
+    setName(form?.name || "");
+    setSlug(form?.slug || "");
+    setDescription(form?.description || "");
+    setFieldsText((form?.fields || []).join(", "));
+  };
+
+  const save = async () => {
+    if (!name.trim()) { toast("Name is required", "error"); return; }
+    if (editing === "new" && !slug.trim()) { toast("Slug is required", "error"); return; }
+    setSaving(true);
+    try {
+      const fields = fieldsText.split(",").map((f) => f.trim()).filter(Boolean);
+      if (editing === "new") {
+        const res = await api.post("/admin/forms", { name, slug, description, fields });
+        setForms((prev) => [...prev, res.data].sort((a, b) => a.slug.localeCompare(b.slug)));
+      } else {
+        const res = await api.put(`/admin/forms/${editing._id}`, { name, description, fields });
+        setForms((prev) => prev.map((f) => (f._id === editing._id ? res.data : f)));
+      }
+      toast("Form saved", "success");
+      setEditing(null);
+    } catch (err) {
+      toast(err.response?.data?.message || "Failed to save form", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteForm = async (form) => {
+    if (!window.confirm(`Delete "${form.name}"? This can't be undone.`)) return;
+    try {
+      await api.delete(`/admin/forms/${form._id}`);
+      setForms((prev) => prev.filter((f) => f._id !== form._id));
+      toast("Form deleted", "success");
+    } catch (err) { toast(err.response?.data?.message || "Failed to delete form", "error"); }
+  };
+
+  return (
+    <div>
+      <SectionHeader title="Forms" action={<Btn onClick={() => openEditor(null)}>+ New Form</Btn>} />
+      <p className="text-sm text-gray-500 mb-5 -mt-2">A catalog of the forms live on your site — "Form 1" and "Form 2" are the ones already in use, and can be selected when scoping an Automation Workflow's "Form Submitted" trigger.</p>
+
+      {loading ? (
+        <p className="text-sm text-gray-400">Loading…</p>
+      ) : (
+        <div className="space-y-3">
+          {forms.map((f) => (
+            <div key={f._id} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <p className="font-bold text-gray-900">{f.name}</p>
+                    <span className="text-[10px] font-mono bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">{f.slug}</span>
+                  </div>
+                  {f.description && <p className="text-sm text-gray-500 mt-1">{f.description}</p>}
+                  {f.fields?.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                      {f.fields.map((field) => <span key={field} className="text-[11px] bg-rose-50 text-rose-600 px-2 py-0.5 rounded-full">{field}</span>)}
+                    </div>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Btn variant="secondary" size="sm" onClick={() => openEditor(f)}>Edit</Btn>
+                  {f.slug !== "form-1" && f.slug !== "form-2" && (
+                    <Btn variant="danger" size="sm" onClick={() => deleteForm(f)}>Delete</Btn>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {editing && (
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={() => setEditing(null)}>
+          <div className="bg-white rounded-2xl p-5 sm:p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-bold text-gray-900 mb-4">{editing === "new" ? "New Form" : "Edit Form"}</h3>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Name</label>
+                <input value={name} onChange={(e) => setName(e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
+              </div>
+              {editing === "new" && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">Slug (used to reference this form — can't be changed later)</label>
+                  <input value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="e.g. newsletter-signup" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
+                </div>
+              )}
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Description</label>
+                <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-rose-500" />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Fields (comma-separated, for reference)</label>
+                <input value={fieldsText} onChange={(e) => setFieldsText(e.target.value)} placeholder="Name, Email, Message" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-5">
+              <Btn variant="secondary" onClick={() => setEditing(null)}>Cancel</Btn>
+              <Btn onClick={save} disabled={saving}>{saving ? "Saving…" : "Save"}</Btn>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -1860,6 +2063,7 @@ function VerificationsPage({ enrollments, verifyEnrollment, rejectEnrollment, to
 export default function SuperAdminDashboard() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const [collapsed, setCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const { toasts, add: toast } = useToast();
@@ -1886,6 +2090,25 @@ export default function SuperAdminDashboard() {
     navigate("/auth/login");
   }
 
+  // NEW: creating or editing a workflow (not the plain list page) now takes
+  // over the full screen — no sidebar, no top bar — matching the reference
+  // screenshots, where GHL's own workflow builder has no left nav either
+  // once you're inside a workflow. Pulled straight from the URL rather than
+  // through a <Route> match, since this needs to short-circuit before the
+  // normal <Sidebar>/<TopBar>/<Layout> chrome ever renders.
+  const workflowEditMatch = location.pathname.match(/^\/superadmin\/automation\/(.+)$/);
+  const workflowEditId = workflowEditMatch ? workflowEditMatch[1] : null;
+
+  if (workflowEditId) {
+    return (
+      <>
+        <style>{`* { box-sizing: border-box; } html, body { overflow-x: hidden; }`}</style>
+        <AutomationWorkflowEditorPage toast={toast} navigate={navigate} workflowId={workflowEditId} />
+        <ToastContainer toasts={toasts} />
+      </>
+    );
+  }
+
   return (
     <>
       <style>{`
@@ -1906,9 +2129,9 @@ export default function SuperAdminDashboard() {
           <Route path="verifications" element={<VerificationsPage enrollments={enrollments} verifyEnrollment={verifyEnrollment} rejectEnrollment={rejectEnrollment} toast={toast} />} />
           <Route path="messages" element={<MessagesPage />} />
           <Route path="automation" element={<AutomationWorkflowPage toast={toast} />} />
-          <Route path="automation/:id" element={<AutomationWorkflowPage toast={toast} />} />
           <Route path="pipeline" element={<PipelinePage toast={toast} />} />
           <Route path="review-importer" element={<ReviewImporterPage toast={toast} courses={courses} />} />
+          <Route path="forms" element={<FormsPage toast={toast} />} />
           <Route path="settings" element={<SettingsPage toast={toast} />} />
           <Route path="*" element={<Navigate to="" replace />} />
         </Routes>
