@@ -114,10 +114,13 @@ const RECENT_REVIEWS = [
 // UTILITY HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
+// NEW: was $-formatted — this platform prices and charges everything in
+// PKR, so every revenue figure across Dashboard/Analytics was showing the
+// wrong currency symbol entirely, not just a display quirk.
 const fmt = (n) =>
-  n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(1)}M`
-  : n >= 1_000   ? `$${(n / 1_000).toFixed(1)}k`
-  : `$${n ?? 0}`;
+  n >= 1_000_000 ? `PKR ${(n / 1_000_000).toFixed(1)}M`
+  : n >= 1_000   ? `PKR ${(n / 1_000).toFixed(1)}k`
+  : `PKR ${n ?? 0}`;
 
 const fmtNum = (n) =>
   (n ?? 0) >= 1000 ? `${((n ?? 0) / 1000).toFixed(1)}k` : `${n ?? 0}`;
@@ -443,6 +446,7 @@ const NAV_ITEMS = [
   { to: "/instructor",           label: "Dashboard",     icon: "⊞", exact: true },
   { to: "/instructor/courses",   label: "My Courses",    icon: "▤" },
   { to: "/instructor/students",  label: "Students",      icon: "🧑‍🎓" },
+  { to: "/instructor/reviews",   label: "Reviews",       icon: "⭐" },
   { to: "/instructor/create",    label: "Create Course", icon: "＋" },
   { to: "/instructor/analytics", label: "Analytics",     icon: "↗" },
   { to: "/instructor/profile",   label: "Profile",       icon: "◉" },
@@ -451,41 +455,19 @@ const NAV_ITEMS = [
 
 function Sidebar({ instructor, collapsed, setCollapsed, isMobile, hasThemeAccess }) {
   const navigate = useNavigate();
-  const { logout, API: api } = useAuth();
-  // NEW: real Motiviam logo (uploaded via Super Admin → Settings), same
-  // fetch + localStorage-cache pattern used sitewide — replaces the
-  // hardcoded "LearnFlow" text + generic mountain-icon SVG that had nothing
-  // to do with this site's actual branding.
-  const [logoUrl, setLogoUrl] = useState(() => { try { return localStorage.getItem('lerni_header_logo_url') || ''; } catch { return ''; } });
-  useEffect(() => {
-    api.get('/settings')
-      .then((res) => {
-        const url = res.data?.logoUrl || '';
-        setLogoUrl(url);
-        try { localStorage.setItem('lerni_header_logo_url', url); } catch { /* cache is a nice-to-have */ }
-      })
-      .catch(() => {});
-  }, [api]);
+  const { logout } = useAuth();
 
   return (
     <aside
       className={`fixed top-0 left-0 h-screen bg-[#1a1208] flex flex-col z-50 transition-all duration-300 ${isMobile && collapsed ? "-translate-x-full" : "translate-x-0"}`}
       style={{ width: isMobile ? 240 : collapsed ? 64 : 230 }}>
-      <div className="flex items-center gap-2.5 px-4 h-16 border-b border-white/10 flex-shrink-0">
-        {logoUrl ? (
-          <img src={logoUrl} alt="Logo" className="h-9 w-auto object-contain flex-shrink-0" />
-        ) : (
-          <div className="w-8 h-8 rounded-lg bg-[#e8540a] flex items-center justify-center flex-shrink-0">
-            <svg width="18" height="18" viewBox="0 0 40 40" fill="none">
-              <path d="M8 32l12-24 12 24M12 26h16" stroke="#fff" strokeWidth="3" strokeLinecap="round"/>
-            </svg>
-          </div>
-        )}
-        {!collapsed && <span className="font-extrabold text-white text-base tracking-tight whitespace-nowrap flex-1" style={{ fontFamily: "'Playfair Display', serif" }}>Lerni</span>}
+      {/* NEW: the logo lives in the top bar now, not here — this row is
+          just the collapse/close toggle. */}
+      <div className="flex items-center justify-end px-4 h-16 border-b border-white/10 flex-shrink-0">
         {isMobile ? (
-          <button onClick={() => setCollapsed(true)} className="ml-auto text-gray-400 hover:text-white transition-colors text-lg">✕</button>
+          <button onClick={() => setCollapsed(true)} className="text-gray-400 hover:text-white transition-colors text-lg">✕</button>
         ) : (
-          <button onClick={() => setCollapsed((c) => !c)} className="ml-auto text-gray-400 hover:text-white transition-colors text-lg">
+          <button onClick={() => setCollapsed((c) => !c)} className="text-gray-400 hover:text-white transition-colors text-lg">
             {collapsed ? "›" : "‹"}
           </button>
         )}
@@ -541,13 +523,33 @@ function TopBar({ instructor, sidebarWidth, isMobile, onMenuClick }) {
     api.get('/instructor/notifications').then((res) => setNotifications(res.data || [])).catch(() => setNotifications([])).finally(() => setNotifLoading(false));
   }, [showNotifications, api]);
 
+  // NEW: the real logo now lives in this white top bar (moved here from the
+  // dark sidebar, where it wasn't supposed to be), replacing the
+  // "Instructor Studio" text entirely. Same fetch + localStorage-cache
+  // pattern used sitewide. Sized larger than before, per feedback that it
+  // was too small.
+  const [logoUrl, setLogoUrl] = useState(() => { try { return localStorage.getItem('lerni_header_logo_url') || ''; } catch { return ''; } });
+  useEffect(() => {
+    api.get('/settings')
+      .then((res) => {
+        const url = res.data?.logoUrl || '';
+        setLogoUrl(url);
+        try { localStorage.setItem('lerni_header_logo_url', url); } catch { /* cache is a nice-to-have */ }
+      })
+      .catch(() => {});
+  }, [api]);
+
   return (
     <header className="fixed top-0 right-0 h-16 bg-white border-b border-gray-100 flex items-center justify-between px-4 sm:px-6 z-40 transition-all duration-300"
       style={{ left: isMobile ? 0 : sidebarWidth }}>
       {isMobile && (
         <button onClick={onMenuClick} className="text-gray-600 hover:text-gray-900 transition text-lg">☰</button>
       )}
-      <h1 className="text-sm sm:text-base font-bold text-gray-900">Instructor Studio</h1>
+      {logoUrl ? (
+        <img src={logoUrl} alt="Logo" className="h-11 sm:h-12 w-auto object-contain" />
+      ) : (
+        <h1 className="text-sm sm:text-base font-bold text-gray-900" style={{ fontFamily: "'Playfair Display', serif" }}>Lerni</h1>
+      )}
       <div className="flex items-center gap-2 sm:gap-3 ml-auto">
         <div className="relative">
           <button onClick={() => { setShowNotifications((v) => !v); setShowProfileMenu(false); }} className="relative p-2 rounded-lg hover:bg-gray-100 transition text-gray-500">
@@ -2388,13 +2390,23 @@ function StudentsPage({ courses, loading }) {
   const [selectedCourse, setSelectedCourse] = useState(null); // null = course list view
   const [students, setStudents] = useState([]);
   const [studentsLoading, setStudentsLoading] = useState(false);
+  // NEW: this used to be swallowed silently — a genuinely empty class and a
+  // failed request (e.g. hitting the backend before it had this route
+  // deployed) both rendered the exact same "No students yet" message, with
+  // no way to tell which one you were actually looking at. Now a real
+  // failure shows its own message instead of masquerading as "no students".
+  const [studentsError, setStudentsError] = useState('');
 
   const openCourse = (course) => {
     setSelectedCourse(course);
     setStudentsLoading(true);
+    setStudentsError('');
     api.get(`/instructor/courses/${course._id}/students`)
       .then((res) => setStudents(res.data?.students || []))
-      .catch(() => setStudents([]))
+      .catch((err) => {
+        setStudents([]);
+        setStudentsError(err.response?.data?.message || 'Could not load students — please try again.');
+      })
       .finally(() => setStudentsLoading(false));
   };
 
@@ -2408,6 +2420,8 @@ function StudentsPage({ courses, loading }) {
         </div>
         {studentsLoading ? (
           <p className="text-sm text-gray-400 text-center py-16">Loading students…</p>
+        ) : studentsError ? (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-600">{studentsError}</div>
         ) : students.length === 0 ? (
           <EmptyState icon="🧑‍🎓" title="No students yet" body="Once someone enrolls and their payment is verified, they'll show up here."/>
         ) : (
@@ -2473,6 +2487,109 @@ function StudentsPage({ courses, loading }) {
               <div className="flex items-center justify-between">
                 <span className="text-xs text-gray-500">Enrolled</span>
                 <span className="text-lg font-bold text-gray-900">{fmtNum(c.studentsEnrolled)}</span>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PAGE: REVIEWS — real reviews per course, same ones shown on that course's
+// public landing page (including anything the Super Admin imported via the
+// Review Importer's CSV upload)
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ReviewsPage({ courses, loading }) {
+  const { API: api } = useAuth();
+  const [selectedCourse, setSelectedCourse] = useState(null);
+  const [reviews, setReviews] = useState([]);
+  const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [reviewsError, setReviewsError] = useState('');
+
+  const openCourse = (course) => {
+    setSelectedCourse(course);
+    setReviewsLoading(true);
+    setReviewsError('');
+    api.get(`/instructor/courses/${course._id}/reviews`)
+      .then((res) => setReviews(res.data?.reviews || []))
+      .catch((err) => {
+        setReviews([]);
+        setReviewsError(err.response?.data?.message || 'Could not load reviews — please try again.');
+      })
+      .finally(() => setReviewsLoading(false));
+  };
+
+  if (selectedCourse) {
+    const avgRating = reviews.length ? (reviews.reduce((a, r) => a + (r.rating || 0), 0) / reviews.length).toFixed(1) : null;
+    return (
+      <div className="space-y-4 sm:space-y-6">
+        <button onClick={() => setSelectedCourse(null)} className="text-sm font-semibold text-gray-500 hover:text-gray-800 bg-transparent border-none cursor-pointer p-0 flex items-center gap-1.5">← All Courses</button>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900">{selectedCourse.title}</h2>
+            <p className="text-xs sm:text-sm text-gray-500 mt-0.5">{reviews.length} review{reviews.length === 1 ? "" : "s"}</p>
+          </div>
+          {avgRating && (
+            <div className="flex items-center gap-2 bg-[#fdf2ea] px-3 py-1.5 rounded-lg">
+              <Stars rating={Number(avgRating)}/>
+              <span className="font-bold text-gray-900 text-sm">{avgRating}</span>
+            </div>
+          )}
+        </div>
+        {reviewsLoading ? (
+          <p className="text-sm text-gray-400 text-center py-16">Loading reviews…</p>
+        ) : reviewsError ? (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-600">{reviewsError}</div>
+        ) : reviews.length === 0 ? (
+          <EmptyState icon="⭐" title="No reviews yet" body="Reviews left by students — or imported via Super Admin → Review Importer — will show up here."/>
+        ) : (
+          <div className="space-y-3">
+            {reviews.map((r) => (
+              <div key={r._id} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-1.5 flex-wrap gap-1">
+                  <p className="text-sm font-bold text-gray-900">{r.authorName || "Anonymous"}</p>
+                  <div className="flex items-center gap-2">
+                    <Stars rating={r.rating}/>
+                    <span className="text-xs text-gray-400">{new Date(r.createdAt).toLocaleDateString()}</span>
+                  </div>
+                </div>
+                <p className="text-sm text-gray-600">{r.comment || r.text}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 sm:space-y-6">
+      <div>
+        <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900">Reviews</h2>
+        <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Pick a course to see its reviews — the same ones shown on its public landing page.</p>
+      </div>
+      {loading ? (
+        <p className="text-sm text-gray-400 text-center py-16">Loading courses…</p>
+      ) : courses.length === 0 ? (
+        <EmptyState icon="📭" title="No courses yet" body="Create a course first — reviews will show up here once it has some."/>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+          {courses.map((c) => (
+            <button key={c._id} onClick={() => openCourse(c)}
+              className="text-left bg-white rounded-xl border border-gray-100 p-4 sm:p-5 shadow-sm hover:shadow-md hover:border-[#e8540a]/40 transition-all cursor-pointer">
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-10 h-10 rounded-lg bg-[#fdf2ea] flex items-center justify-center text-[#e8540a] font-bold text-sm flex-shrink-0">{c.title?.charAt(0)}</div>
+                <p className="text-sm font-semibold text-gray-800 truncate">{c.title}</p>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-gray-500">Rating</span>
+                <div className="flex items-center gap-1.5">
+                  <Stars rating={c.rating || 0}/>
+                  <span className="text-sm font-bold text-gray-900">{c.rating > 0 ? c.rating : "—"}</span>
+                </div>
               </div>
             </button>
           ))}
@@ -2555,6 +2672,7 @@ export default function InstructorDashboard() {
           }/>
 
           <Route path="students" element={<StudentsPage courses={courses} loading={loading}/>}/>
+          <Route path="reviews" element={<ReviewsPage courses={courses} loading={loading}/>}/>
           <Route path="analytics" element={<AnalyticsPage courses={courses}/>}/>
           <Route path="profile"   element={<ProfilePage toast={toast}/>}/>
           <Route path="*"         element={<Navigate to="" replace/>}/>
