@@ -24,6 +24,7 @@ import AboutPage                  from "./Pages/AboutPage";
 import PrivacyPolicyPage          from "./Pages/PrivacyPolicyPage";
 import ReturnPolicyPage           from "./Pages/ReturnPolicyPage";
 import ContactUsPage              from "./Pages/ContactUsPage";
+import PackageInquiryPage         from "./Pages/PackageInquiryPage";
 import Portals                    from "./Pages/Portals";
 import InstructorDashboard        from "./Pages/InstructorDashboard";
 import SuperAdminsDashboard        from "./Pages/SuperAdminsDashboard";
@@ -125,6 +126,7 @@ function AppRoutes() {
       <Route path="/privacy-policy"  element={<PrivacyPolicyPage />} />
       <Route path="/return-policy"   element={<ReturnPolicyPage />} />
       <Route path="/contact-us"      element={<ContactUsPage />} />
+      <Route path="/get-package"     element={<PackageInquiryPage />} />
 
       {/* Auth */}
       <Route path="/auth"          element={<Navigate to="/auth/login" replace />} />
