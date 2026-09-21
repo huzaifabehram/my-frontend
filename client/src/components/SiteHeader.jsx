@@ -15,7 +15,7 @@ import { Menu, X, Search, ChevronDown } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { useCourses } from '../context/CoursesContext';
 
-export default function SiteHeader() {
+export default function SiteHeader({ showLogin = true }) {
   const navigate = useNavigate();
   const { API: api } = useAuth();
   const { courses } = useCourses();
@@ -82,7 +82,12 @@ export default function SiteHeader() {
         </nav>
         <div className="flex items-center gap-2 md:gap-3">
           <Search className="hidden lg:block text-[#9e9789] cursor-pointer hover:text-[#1a1208] transition" size={22} />
-          <button onClick={() => handleNavigate('/auth/login')} className="px-4 md:px-6 py-2 md:py-2.5 bg-[#e8540a] text-white rounded-lg hover:bg-[#c94708] transition font-semibold border-none cursor-pointer text-sm md:text-base shadow-sm">Log In</button>
+          {/* NEW: showLogin lets a page (e.g. the Services/packages page,
+              which is a sales page for prospective clients, not students)
+              opt out of showing this — defaults to true everywhere else. */}
+          {showLogin && (
+            <button onClick={() => handleNavigate('/auth/login')} className="px-4 md:px-6 py-2 md:py-2.5 bg-[#e8540a] text-white rounded-lg hover:bg-[#c94708] transition font-semibold border-none cursor-pointer text-sm md:text-base shadow-sm">Log In</button>
+          )}
         </div>
       </div>
       {mobileMenuOpen && (
