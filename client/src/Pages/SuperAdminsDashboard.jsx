@@ -190,6 +190,7 @@ const NAV_ITEMS = [
   { to: "/superadmin/pipeline",     label: "Pipeline",      icon: "📊" },
   { to: "/superadmin/review-importer", label: "Review Importer", icon: "⭐" },
   { to: "/superadmin/forms",        label: "Forms",         icon: "📄" },
+  { to: "/superadmin/tags",         label: "Tags",          icon: "🏷️" },
   { to: "/superadmin/settings",     label: "Settings",      icon: "⚙️" },
 ];
 
@@ -1212,6 +1213,18 @@ function AutomationWorkflowEditorPage({ toast, navigate, workflowId }) {
             </select>
           </div>
         )}
+        {(trigger === "category_started" || trigger === "category_completed") && (
+          <div className="mt-3 w-full max-w-sm bg-gray-50 border border-gray-200 rounded-xl p-3 space-y-2">
+            <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Scope to one category (optional)</p>
+            <select value={triggerScope.category || ""} onChange={(e) => setTriggerScope({ category: e.target.value || undefined })}
+              className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs bg-white">
+              <option value="">Any category</option>
+              {[...new Set(allCourses.map((c) => c.category).filter(Boolean))].sort().map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {trigger && (
           <>
@@ -1599,7 +1612,267 @@ function ReviewImporterPage({ toast, courses }) {
 // what the Automation Workflow's "Form Submitted" trigger can scope to, so
 // a workflow can react to just one specific form instead of every form.
 
-function FormsPage({ toast }) {
+// ─────────────────────────────────────────────────────────────────────────────
+// TAGS — Super Admin panel
+// ─────────────────────────────────────────────────────────────────────────────
+// A simple named-tag registry — two sub-tabs, "All Tags" and "Create Tag",
+// matching the Forms page's pattern. Tag names created here are meant as a
+// maintained reference list (e.g. for the Add/Remove Contact Tag actions in
+// Automation Workflow) so tag names stay consistent instead of being
+// free-typed differently each time.
+
+function TagsPage({ toast }) {
+  const { API: api } = useAuth();
+  const [subTab, setSubTab] = useState("all"); // all | create
+  const [tags, setTags] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [name, setName] = useState("");
+  const [type, setType] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.get("/admin/tags").then((res) => setTags(res.data || [])).catch(() => toast("Failed to load tags", "error")).finally(() => setLoading(false));
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { load(); }, [load]);
+
+  const createTag = async () => {
+    if (!name.trim()) { toast("Name is required", "error"); return; }
+    setSaving(true);
+    try {
+      const res = await api.post("/admin/tags", { name: name.trim(), type: type.trim() });
+      setTags((prev) => [...prev, res.data].sort((a, b) => a.name.localeCompare(b.name)));
+      setName(""); setType("");
+      toast("Tag created", "success");
+      setSubTab("all");
+    } catch (err) {
+      toast(err.response?.data?.message || "Failed to create tag", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteTag = async (tag) => {
+    if (!window.confirm(`Delete tag "${tag.name}"?`)) return;
+    try {
+      await api.delete(`/admin/tags/${tag._id}`);
+      setTags((prev) => prev.filter((t) => t._id !== tag._id));
+      toast("Tag deleted", "success");
+    } catch { toast("Failed to delete tag", "error"); }
+  };
+
+  return (
+    <div>
+      <SectionHeader title="Tags" />
+      <div className="flex gap-2 mb-5">
+        <Btn variant={subTab === "all" ? "primary" : "secondary"} size="sm" onClick={() => setSubTab("all")}>All Tags</Btn>
+        <Btn variant={subTab === "create" ? "primary" : "secondary"} size="sm" onClick={() => setSubTab("create")}>Create Tag</Btn>
+      </div>
+
+      {subTab === "create" ? (
+        <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 max-w-md">
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs font-bold text-gray-600 mb-1">Tag Name</label>
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. New Contact, VIP, Interested — Gold Package"
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
+            </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-600 mb-1">Type (optional, for grouping)</label>
+              <input value={type} onChange={(e) => setType(e.target.value)} placeholder="e.g. Contact, Form" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
+            </div>
+          </div>
+          <Btn onClick={createTag} disabled={saving} className="mt-4">{saving ? "Creating…" : "Create Tag"}</Btn>
+        </div>
+      ) : loading ? (
+        <p className="text-sm text-gray-400">Loading…</p>
+      ) : tags.length === 0 ? (
+        <EmptyState icon="🏷️" title="No tags yet" body='Create your first tag — e.g. "New Contact" — to use consistently across Automation Workflow actions.' action={<Btn onClick={() => setSubTab("create")}>+ Create Tag</Btn>} />
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {tags.map((t) => (
+            <div key={t._id} className="flex items-center gap-2 bg-white border border-gray-200 rounded-full pl-3 pr-2 py-1.5 text-sm">
+              <span className="font-semibold text-gray-800">{t.name}</span>
+              {t.type && <span className="text-[10px] text-gray-400">{t.type}</span>}
+              <button onClick={() => deleteTag(t)} className="text-gray-300 hover:text-red-500 bg-transparent border-none cursor-pointer text-xs">✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function FormsPage({ toast, courses }) {
+  const [subTab, setSubTab] = useState("submitted"); // submitted | create
+
+  return (
+    <div>
+      <SectionHeader title="Forms" />
+      <div className="flex gap-2 mb-5">
+        <Btn variant={subTab === "submitted" ? "primary" : "secondary"} size="sm" onClick={() => setSubTab("submitted")}>Submitted Forms</Btn>
+        <Btn variant={subTab === "create" ? "primary" : "secondary"} size="sm" onClick={() => setSubTab("create")}>Create Form</Btn>
+      </div>
+      {subTab === "submitted" ? <SubmittedFormsTab toast={toast} courses={courses} /> : <CreateFormTab toast={toast} />}
+    </div>
+  );
+}
+
+// ── Submitted Forms — real Form 1 (enrollment, per course) and Form 2
+// (package inquiry) submissions, with full detail, a payment-screenshot
+// lightbox, multi-select delete, and CSV export.
+function SubmittedFormsTab({ toast, courses }) {
+  const { API: api } = useAuth();
+  const [scope, setScope] = useState("services"); // "services" | a course _id
+  const [enrollments, setEnrollments] = useState([]);
+  const [inquiries, setInquiries] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selected, setSelected] = useState([]);
+  const [lightboxUrl, setLightboxUrl] = useState("");
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([api.get("/admin/enrollments"), api.get("/admin/package-inquiries")])
+      .then(([eRes, iRes]) => { setEnrollments(eRes.data || []); setInquiries(iRes.data || []); })
+      .catch(() => toast("Failed to load submitted forms", "error"))
+      .finally(() => setLoading(false));
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const isServices = scope === "services";
+  const list = isServices ? inquiries : enrollments.filter((e) => String(e.course?._id) === String(scope));
+
+  useEffect(() => { setSelected([]); }, [scope]);
+
+  const toggleOne = (id) => setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  const toggleAll = () => setSelected((prev) => (prev.length === list.length ? [] : list.map((x) => x._id)));
+
+  const deleteSelected = async () => {
+    if (selected.length === 0) return;
+    if (!window.confirm(`Delete ${selected.length} submission${selected.length === 1 ? "" : "s"}? This can't be undone.`)) return;
+    try {
+      const endpoint = isServices ? "package-inquiries" : "enrollments";
+      await Promise.all(selected.map((id) => api.delete(`/admin/${endpoint}/${id}`)));
+      if (isServices) setInquiries((prev) => prev.filter((x) => !selected.includes(x._id)));
+      else setEnrollments((prev) => prev.filter((x) => !selected.includes(x._id)));
+      setSelected([]);
+      toast("Deleted", "success");
+    } catch { toast("Failed to delete some submissions", "error"); }
+  };
+
+  const downloadSelected = () => {
+    const endpoint = isServices ? "package-inquiries" : "enrollments";
+    const ids = selected.length > 0 ? selected : list.map((x) => x._id);
+    if (ids.length === 0) { toast("Nothing to download", "error"); return; }
+    const url = `${api.defaults.baseURL}/admin/${endpoint}/export.csv?ids=${ids.join(",")}`;
+    const token = localStorage.getItem("token");
+    fetch(url, { headers: { Authorization: `Bearer ${token}` } })
+      .then((r) => r.blob())
+      .then((blob) => {
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `${endpoint}.csv`;
+        link.click();
+      })
+      .catch(() => toast("Download failed", "error"));
+  };
+
+  return (
+    <div>
+      <div className="flex flex-wrap gap-2 mb-5">
+        <button onClick={() => setScope("services")} className={`px-3 py-1.5 rounded-lg text-xs font-bold border cursor-pointer transition ${isServices ? "bg-[#e8540a] text-white border-[#e8540a]" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
+          Services ({inquiries.length})
+        </button>
+        {courses?.map((c) => {
+          const count = enrollments.filter((e) => String(e.course?._id) === String(c._id)).length;
+          return (
+            <button key={c._id} onClick={() => setScope(c._id)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border cursor-pointer transition ${scope === c._id ? "bg-[#e8540a] text-white border-[#e8540a]" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
+              {c.title} ({count})
+            </button>
+          );
+        })}
+      </div>
+
+      {loading ? (
+        <p className="text-sm text-gray-400">Loading…</p>
+      ) : list.length === 0 ? (
+        <EmptyState icon="📄" title="No submissions yet" body={isServices ? "Package inquiry submissions from the Services page will show up here." : "Enrollment submissions for this course will show up here."} />
+      ) : (
+        <>
+          <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+            <label className="flex items-center gap-2 text-xs font-semibold text-gray-600 cursor-pointer">
+              <input type="checkbox" checked={selected.length === list.length && list.length > 0} onChange={toggleAll} className="w-4 h-4 accent-rose-600" />
+              Select all ({list.length})
+            </label>
+            <div className="flex gap-2">
+              <Btn variant="secondary" size="sm" onClick={downloadSelected}>Download {selected.length > 0 ? `Selected (${selected.length})` : "All"}</Btn>
+              <Btn variant="danger" size="sm" onClick={deleteSelected} disabled={selected.length === 0}>Delete Selected</Btn>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {list.map((item) => (
+              <div key={item._id} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm flex flex-col sm:flex-row gap-4">
+                <input type="checkbox" checked={selected.includes(item._id)} onChange={() => toggleOne(item._id)} className="w-4 h-4 accent-rose-600 mt-1 flex-shrink-0" />
+
+                {!isServices && (
+                  <div className="w-full sm:w-32 h-24 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 cursor-pointer" onClick={() => item.paymentScreenshotUrl && setLightboxUrl(item.paymentScreenshotUrl)}>
+                    {item.paymentScreenshotUrl ? (
+                      <img src={item.paymentScreenshotUrl} alt="Payment screenshot" className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-gray-300 text-2xl">🧾</div>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-start justify-between gap-2 flex-wrap">
+                    {isServices ? (
+                      <div>
+                        <p className="font-bold text-gray-900">{item.name}</p>
+                        <p className="text-xs text-gray-500">{item.email} • {item.whatsapp}</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <p className="font-bold text-gray-900">{item.student?.name || "Student"}</p>
+                        <p className="text-xs text-gray-500">{item.student?.email} • {item.whatsapp}</p>
+                      </div>
+                    )}
+                    <StatusBadge status={isServices ? (item.status === "contacted" ? "verified" : "pending") : item.status} />
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 mt-2 text-xs">
+                    {isServices ? (
+                      <div><span className="text-gray-400">Package: </span><span className="text-gray-700 font-semibold">{item.package === "gold" ? "Gold" : "Premium"}</span></div>
+                    ) : (
+                      <>
+                        <div><span className="text-gray-400">Method: </span><span className="text-gray-700 font-semibold">{item.paymentMethod || "—"}</span></div>
+                        <div><span className="text-gray-400">Amount: </span><span className="text-gray-700 font-semibold">PKR {item.amount || 0}</span></div>
+                      </>
+                    )}
+                    <div><span className="text-gray-400">Submitted: </span><span className="text-gray-700">{new Date(item.createdAt).toLocaleDateString()}</span></div>
+                  </div>
+                  {!isServices && item.rejectionReason && <p className="text-xs text-red-500 italic mt-1">Reason: {item.rejectionReason}</p>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {lightboxUrl && (
+        <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4" onClick={() => setLightboxUrl("")}>
+          <button onClick={() => setLightboxUrl("")} className="absolute top-4 right-4 sm:top-6 sm:right-6 text-white/80 hover:text-white bg-transparent border-none cursor-pointer text-3xl leading-none z-10">✕</button>
+          <img src={lightboxUrl} alt="Payment screenshot full size" className="max-w-full sm:max-w-3xl max-h-[90vh] rounded-lg mx-auto block object-contain" onClick={(e) => e.stopPropagation()} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Create Form — the form catalog itself: "Form 1"/"Form 2" (seeded,
+// wired into live pages, can't be deleted) plus any new ones you add.
+function CreateFormTab({ toast }) {
   const { API: api } = useAuth();
   const [forms, setForms] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1658,8 +1931,10 @@ function FormsPage({ toast }) {
 
   return (
     <div>
-      <SectionHeader title="Forms" action={<Btn onClick={() => openEditor(null)}>+ New Form</Btn>} />
-      <p className="text-sm text-gray-500 mb-5 -mt-2">A catalog of the forms live on your site — "Form 1" and "Form 2" are the ones already in use, and can be selected when scoping an Automation Workflow's "Form Submitted" trigger.</p>
+      <div className="flex justify-end mb-4">
+        <Btn onClick={() => openEditor(null)}>+ New Form</Btn>
+      </div>
+      <p className="text-sm text-gray-500 mb-5 -mt-2">"Form 1" and "Form 2" are already live on your site and can be selected when scoping an Automation Workflow's "Form Submitted" trigger.</p>
 
       {loading ? (
         <p className="text-sm text-gray-400">Loading…</p>
@@ -2036,10 +2311,16 @@ function VerificationsPage({ enrollments, verifyEnrollment, rejectEnrollment, to
         </div>
       )}
 
+      {/* NEW: was using the shared Modal component, capped at max-w-lg
+          (512px) — too small to actually read transaction details on a
+          payment screenshot clearly. This is now its own larger, dedicated
+          lightbox sized for actually inspecting the picture before
+          deciding Verify or Reject. */}
       {lightboxUrl && (
-        <Modal onClose={() => setLightboxUrl("")}>
-          <img src={lightboxUrl} alt="Payment screenshot full size" className="max-w-full max-h-[75vh] rounded-lg mx-auto block" />
-        </Modal>
+        <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-4" onClick={() => setLightboxUrl("")}>
+          <button onClick={() => setLightboxUrl("")} className="absolute top-4 right-4 sm:top-6 sm:right-6 text-white/80 hover:text-white bg-transparent border-none cursor-pointer text-3xl leading-none z-10">✕</button>
+          <img src={lightboxUrl} alt="Payment screenshot full size" className="max-w-full sm:max-w-3xl max-h-[90vh] rounded-lg mx-auto block object-contain" onClick={(e) => e.stopPropagation()} />
+        </div>
       )}
 
       {rejectTarget && (
@@ -2131,7 +2412,8 @@ export default function SuperAdminDashboard() {
           <Route path="automation" element={<AutomationWorkflowPage toast={toast} />} />
           <Route path="pipeline" element={<PipelinePage toast={toast} />} />
           <Route path="review-importer" element={<ReviewImporterPage toast={toast} courses={courses} />} />
-          <Route path="forms" element={<FormsPage toast={toast} />} />
+          <Route path="forms" element={<FormsPage toast={toast} courses={courses} />} />
+          <Route path="tags" element={<TagsPage toast={toast} />} />
           <Route path="settings" element={<SettingsPage toast={toast} />} />
           <Route path="*" element={<Navigate to="" replace />} />
         </Routes>
