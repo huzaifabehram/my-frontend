@@ -2089,7 +2089,102 @@ function SettingsPage({ toast }) {
             initialUrl={paymentLogoEasypaisa}
             onUploaded={setPaymentLogoEasypaisa}
           />
+
+          <WhatsAppIntegrationBox toast={toast} />
         </>
+      )}
+    </div>
+  );
+}
+
+// Super Admin → Settings → WhatsApp — connects the account the "Send
+// WhatsApp Message" workflow action actually sends from. Needs a Phone
+// Number ID and an Access Token from Meta's WhatsApp Cloud API; the access
+// token is never sent back down once saved, matching how a password field
+// works everywhere else.
+function WhatsAppIntegrationBox({ toast }) {
+  const { API: api } = useAuth();
+  const [connected, setConnected] = useState(false);
+  const [phoneNumberId, setPhoneNumberId] = useState("");
+  const [accessToken, setAccessToken] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [showGuide, setShowGuide] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.get("/admin/settings/whatsapp")
+      .then((res) => { setPhoneNumberId(res.data?.whatsappPhoneNumberId || ""); setConnected(!!res.data?.whatsappConnected); })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [load]);
+
+  const save = async () => {
+    if (!phoneNumberId.trim() || !accessToken.trim()) { toast("Both fields are required", "error"); return; }
+    setSaving(true);
+    try {
+      await api.post("/admin/settings/whatsapp", { whatsappPhoneNumberId: phoneNumberId.trim(), whatsappAccessToken: accessToken.trim() });
+      setAccessToken("");
+      setConnected(true);
+      toast("WhatsApp connected", "success");
+    } catch (err) {
+      toast(err.response?.data?.message || "Failed to connect WhatsApp", "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const disconnect = async () => {
+    if (!window.confirm("Disconnect WhatsApp? The \"Send WhatsApp Message\" workflow action will stop working until you reconnect.")) return;
+    try {
+      await api.delete("/admin/settings/whatsapp");
+      setConnected(false);
+      setPhoneNumberId("");
+      toast("WhatsApp disconnected", "success");
+    } catch { toast("Failed to disconnect", "error"); }
+  };
+
+  return (
+    <div className="pt-4 border-t border-gray-100">
+      <div className="flex items-center justify-between mb-1">
+        <h3 className="font-bold text-gray-800 text-sm sm:text-base">WhatsApp Integration</h3>
+        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${connected ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-gray-500"}`}>
+          {connected ? "Connected" : "Not connected"}
+        </span>
+      </div>
+      <p className="text-xs sm:text-sm text-gray-500 mt-0.5 mb-3">Powers the "Send WhatsApp Message" action in Automation Workflow.</p>
+
+      {loading ? (
+        <p className="text-xs text-gray-400">Loading…</p>
+      ) : (
+        <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
+          <div>
+            <label className="block text-xs font-bold text-gray-600 mb-1">Phone Number ID</label>
+            <input value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)} placeholder="e.g. 109876543210987"
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 bg-white" />
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-600 mb-1">Access Token {connected && <span className="font-normal text-gray-400">(already saved — enter a new one only to change it)</span>}</label>
+            <input type="password" value={accessToken} onChange={(e) => setAccessToken(e.target.value)} placeholder={connected ? "••••••••••••••••" : "Paste your permanent access token"}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500 bg-white" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Btn onClick={save} disabled={saving}>{saving ? "Saving…" : connected ? "Update" : "Connect"}</Btn>
+            {connected && <Btn variant="danger" onClick={disconnect}>Disconnect</Btn>}
+            <Btn variant="secondary" onClick={() => setShowGuide((v) => !v)}>{showGuide ? "Hide" : "How do I get these?"}</Btn>
+          </div>
+          {showGuide && (
+            <div className="text-xs text-gray-600 leading-relaxed bg-white border border-gray-200 rounded-lg p-3 space-y-1.5">
+              <p><strong>1.</strong> Go to developers.facebook.com and create a Meta Developer account and a Business-type App.</p>
+              <p><strong>2.</strong> Add the WhatsApp product to that app.</p>
+              <p><strong>3.</strong> Under WhatsApp → API Setup, copy the Phone Number ID shown there.</p>
+              <p><strong>4.</strong> For a permanent token (the temporary one on that page expires in 24 hours): go to Business Settings → System Users, create a system user, and generate a token with the whatsapp_business_messaging permission.</p>
+              <p><strong>5.</strong> Paste both values above and click Connect.</p>
+              <p className="text-gray-400 italic">Note: WhatsApp only allows free-form messages within 24 hours of the customer's last message — outside that window, only Meta-pre-approved message templates work.</p>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
