@@ -187,6 +187,7 @@ const NAV_ITEMS = [
   { to: "/superadmin/verifications", label: "Verifications", icon: "🧾", badge: true },
   { to: "/superadmin/messages",     label: "Messages",      icon: "✉️" },
   { to: "/superadmin/automation",   label: "Automation Workflow", icon: "⚡" },
+  { to: "/superadmin/whatsapp",     label: "WhatsApp",      icon: "💬" },
   { to: "/superadmin/pipeline",     label: "Pipeline",      icon: "📊" },
   { to: "/superadmin/review-importer", label: "Review Importer", icon: "⭐" },
   { to: "/superadmin/forms",        label: "Forms",         icon: "📄" },
@@ -811,7 +812,7 @@ function TriggerSidePanel({ meta, onPick, onClose }) {
 // Handles both adding a brand-new step (starts on the "pick a type" list,
 // matching the "Actions — Pick an action for this step" reference screen)
 // and editing an existing one (opens straight into its config form).
-function StepPanel({ meta, assignableUsers, initialStep, onSave, onRemove, onClose }) {
+function StepPanel({ meta, assignableUsers, whatsappInstances, initialStep, onSave, onRemove, onClose }) {
   const [stage, setStage] = useState(initialStep ? "configure" : "pick");
   const [step, setStep] = useState(initialStep || null);
   const [search, setSearch] = useState("");
@@ -921,9 +922,40 @@ function StepPanel({ meta, assignableUsers, initialStep, onSave, onRemove, onClo
           )}
           {step.actionType === "send_whatsapp" && (
             <>
-              {!meta.whatsappConfigured && <p className="text-[11px] text-amber-600">WhatsApp isn't configured yet — this step will be skipped (and logged) until it is. See the guide below.</p>}
-              <input value={p.to || ""} onChange={(e) => updateParam("to", e.target.value)} placeholder="To (default: {{whatsapp}})" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-              <RichMessageEditor value={p.message || ""} onChange={(v) => updateParam("message", v)} rows={4} placeholder="WhatsApp message…" />
+              {whatsappInstances?.length > 0 ? (
+                <>
+                  <select value={p.instanceId || ""} onChange={(e) => updateParam("instanceId", e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                    <option value="">Choose a connected number…</option>
+                    {whatsappInstances.map((inst) => (
+                      <option key={inst._id} value={inst._id} disabled={inst.status !== "connected"}>{inst.label} {inst.status !== "connected" ? "(not connected)" : ""}</option>
+                    ))}
+                  </select>
+                  <div className="flex gap-3 text-xs">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="radio" checked={p.recipientType !== "group"} onChange={() => updateParam("recipientType", "individual")} className="accent-rose-600" /> Individual
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input type="radio" checked={p.recipientType === "group"} onChange={() => updateParam("recipientType", "group")} className="accent-rose-600" /> Group
+                    </label>
+                  </div>
+                  {p.recipientType === "group" ? (
+                    <input value={p.groupId || ""} onChange={(e) => updateParam("groupId", e.target.value)} placeholder="Group ID (e.g. 8498761234@g.us)" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                  ) : (
+                    <input value={p.to || ""} onChange={(e) => updateParam("to", e.target.value)} placeholder="To (default: {{whatsapp}})" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                  )}
+                  <RichMessageEditor value={p.message || ""} onChange={(v) => updateParam("message", v)} rows={4} placeholder="WhatsApp message…" />
+                  <div className="grid grid-cols-2 gap-2">
+                    <input value={p.mediaUrl || ""} onChange={(e) => updateParam("mediaUrl", e.target.value)} placeholder="Media URL (optional)" className="border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                    <input value={p.filename || ""} onChange={(e) => updateParam("filename", e.target.value)} placeholder="Filename (documents only)" className="border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-[11px] text-amber-600">No WhatsApp numbers connected yet — go to Super Admin → WhatsApp to add one, or this will fall back to the single Meta Cloud API connection in Settings if that's set up.</p>
+                  <input value={p.to || ""} onChange={(e) => updateParam("to", e.target.value)} placeholder="To (default: {{whatsapp}})" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                  <RichMessageEditor value={p.message || ""} onChange={(v) => updateParam("message", v)} rows={4} placeholder="WhatsApp message…" />
+                </>
+              )}
             </>
           )}
           {step.actionType === "add_to_pipeline" && (
@@ -1073,10 +1105,11 @@ function AutomationWorkflowEditorPage({ toast, navigate, workflowId }) {
   const [triggerScope, setTriggerScope] = useState({});
   const [allCourses, setAllCourses] = useState([]);
   const [forms, setForms] = useState([]);
+  const [whatsappInstances, setWhatsappInstances] = useState([]);
 
   useEffect(() => {
-    Promise.all([api.get("/admin/workflows/meta"), api.get("/admin/assignable-users"), api.get("/admin/courses"), api.get("/admin/forms")])
-      .then(([mRes, uRes, cRes, fRes]) => { setMeta(mRes.data || {}); setAssignableUsers(uRes.data || []); setAllCourses(cRes.data || []); setForms(fRes.data || []); })
+    Promise.all([api.get("/admin/workflows/meta"), api.get("/admin/assignable-users"), api.get("/admin/courses"), api.get("/admin/forms"), api.get("/admin/whatsapp/instances")])
+      .then(([mRes, uRes, cRes, fRes, wRes]) => { setMeta(mRes.data || {}); setAssignableUsers(uRes.data || []); setAllCourses(cRes.data || []); setForms(fRes.data || []); setWhatsappInstances(wRes.data || []); })
       .catch(() => {});
   }, [api]);
 
@@ -1295,6 +1328,7 @@ function AutomationWorkflowEditorPage({ toast, navigate, workflowId }) {
         <StepPanel
           meta={meta}
           assignableUsers={assignableUsers}
+          whatsappInstances={whatsappInstances}
           initialStep={editIndex !== null ? steps[editIndex] : null}
           onSave={saveStepFromPanel}
           onRemove={() => { removeStep(editIndex); setEditIndex(null); }}
@@ -1620,6 +1654,201 @@ function ReviewImporterPage({ toast, courses }) {
 // maintained reference list (e.g. for the Add/Remove Contact Tag actions in
 // Automation Workflow) so tag names stay consistent instead of being
 // free-typed differently each time.
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WHATSAPP — Super Admin panel (WaBulkify — multiple QR-connected numbers)
+// ─────────────────────────────────────────────────────────────────────────────
+// "Add a WhatsApp Number" creates an instance on WaBulkify, shows its QR
+// code to scan, then polls until the webhook (POST /api/whatsapp/webhook)
+// reports it connected — add as many numbers as you want this way. Any
+// connected instance can then be picked as the sender in the Automation
+// Workflow's "Send WhatsApp Message" action.
+
+function WhatsAppPage({ toast }) {
+  const { API: api } = useAuth();
+  const [tokenConnected, setTokenConnected] = useState(false);
+  const [tokenInput, setTokenInput] = useState("");
+  const [tokenLoading, setTokenLoading] = useState(true);
+  const [savingToken, setSavingToken] = useState(false);
+  const [instances, setInstances] = useState([]);
+  const [loadingInstances, setLoadingInstances] = useState(true);
+  const [addingLabel, setAddingLabel] = useState(null); // null | "" | label text — non-null shows the "add number" form
+  const [qrFor, setQrFor] = useState(null); // instance being scanned right now
+  const [qrImage, setQrImage] = useState("");
+  const [qrLoading, setQrLoading] = useState(false);
+  const [busyId, setBusyId] = useState(null);
+
+  const loadToken = useCallback(() => {
+    setTokenLoading(true);
+    api.get("/admin/settings/wabulkify").then((res) => setTokenConnected(!!res.data?.connected)).catch(() => {}).finally(() => setTokenLoading(false));
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadInstances = useCallback(() => {
+    setLoadingInstances(true);
+    api.get("/admin/whatsapp/instances").then((res) => setInstances(res.data || [])).catch(() => toast("Failed to load WhatsApp numbers", "error")).finally(() => setLoadingInstances(false));
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { loadToken(); loadInstances(); }, [loadToken, loadInstances]);
+
+  // While the QR panel is open for an instance, poll its connection status
+  // every few seconds — the webhook updates it in the background once
+  // WaBulkify detects the scan.
+  useEffect(() => {
+    if (!qrFor) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.get("/admin/whatsapp/instances");
+        setInstances(res.data || []);
+        const mine = (res.data || []).find((i) => i._id === qrFor._id);
+        if (mine?.status === "connected") { toast(`"${mine.label}" connected!`, "success"); setQrFor(null); setQrImage(""); }
+      } catch { /* keep polling */ }
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [qrFor, api]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveToken = async () => {
+    if (!tokenInput.trim()) { toast("Enter your WaBulkify access token", "error"); return; }
+    setSavingToken(true);
+    try {
+      await api.post("/admin/settings/wabulkify", { accessToken: tokenInput.trim() });
+      setTokenInput(""); setTokenConnected(true);
+      toast("WaBulkify connected", "success");
+    } catch (err) { toast(err.response?.data?.message || "Failed to save token", "error"); }
+    finally { setSavingToken(false); }
+  };
+  const disconnectToken = async () => {
+    if (!window.confirm("Disconnect WaBulkify? Every connected number will stop being able to send until you reconnect.")) return;
+    try { await api.delete("/admin/settings/wabulkify"); setTokenConnected(false); toast("Disconnected", "success"); }
+    catch { toast("Failed to disconnect", "error"); }
+  };
+
+  const addNumber = async () => {
+    if (!addingLabel?.trim()) { toast("Give this number a name first", "error"); return; }
+    setBusyId("new");
+    try {
+      const res = await api.post("/admin/whatsapp/instances", { label: addingLabel.trim() });
+      setInstances((prev) => [res.data, ...prev]);
+      setAddingLabel(null);
+      await openQr(res.data);
+    } catch (err) { toast(err.response?.data?.message || "Failed to create instance", "error"); }
+    finally { setBusyId(null); }
+  };
+
+  const openQr = async (instance) => {
+    setQrFor(instance);
+    setQrImage("");
+    setQrLoading(true);
+    try {
+      const res = await api.post(`/admin/whatsapp/instances/${instance._id}/qrcode`);
+      setQrImage(res.data?.qrCode || "");
+      if (!res.data?.qrCode) toast("WaBulkify didn't return a QR image directly — it may arrive via webhook instead; keep this open a moment.", "info");
+    } catch (err) { toast(err.response?.data?.message || "Failed to fetch QR code", "error"); }
+    finally { setQrLoading(false); }
+  };
+
+  const runAction = async (instance, action) => {
+    setBusyId(instance._id);
+    try {
+      const res = await api.post(`/admin/whatsapp/instances/${instance._id}/${action}`);
+      setInstances((prev) => prev.map((i) => (i._id === instance._id ? res.data : i)));
+      toast(`${action[0].toUpperCase() + action.slice(1)} done`, "success");
+    } catch (err) { toast(err.response?.data?.message || `Failed to ${action}`, "error"); }
+    finally { setBusyId(null); }
+  };
+
+  const deleteInstance = async (instance) => {
+    if (!window.confirm(`Remove "${instance.label}"? This can't be undone.`)) return;
+    try { await api.delete(`/admin/whatsapp/instances/${instance._id}`); setInstances((prev) => prev.filter((i) => i._id !== instance._id)); toast("Removed", "success"); }
+    catch { toast("Failed to remove", "error"); }
+  };
+
+  return (
+    <div>
+      <SectionHeader title="WhatsApp" />
+      <p className="text-sm text-gray-500 mb-5 -mt-2">Connect as many WhatsApp numbers as you want by scanning a QR code — each one can then be picked as the sender in Automation Workflow's "Send WhatsApp Message" action.</p>
+
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 mb-6">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-bold text-gray-800 text-sm">WaBulkify Account</h3>
+          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${tokenConnected ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-gray-500"}`}>
+            {tokenConnected ? "Connected" : "Not connected"}
+          </span>
+        </div>
+        <p className="text-xs text-gray-500 mb-3">One access token from your wabulkify.com account authenticates every number below.</p>
+        {tokenLoading ? (
+          <p className="text-xs text-gray-400">Loading…</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <input type="password" value={tokenInput} onChange={(e) => setTokenInput(e.target.value)} placeholder={tokenConnected ? "Enter a new token to replace it" : "Paste your WaBulkify access token"}
+              className="flex-1 min-w-[220px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
+            <Btn onClick={saveToken} disabled={savingToken}>{savingToken ? "Saving…" : tokenConnected ? "Update" : "Connect"}</Btn>
+            {tokenConnected && <Btn variant="danger" onClick={disconnectToken}>Disconnect</Btn>}
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-bold text-gray-800 text-sm">Connected Numbers</h3>
+        <Btn onClick={() => setAddingLabel("")} disabled={!tokenConnected}>+ Add a WhatsApp Number</Btn>
+      </div>
+      {!tokenConnected && <p className="text-xs text-amber-600 mb-3">Connect your WaBulkify account above first.</p>}
+
+      {addingLabel !== null && (
+        <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4 flex flex-wrap gap-2 items-center">
+          <input value={addingLabel} onChange={(e) => setAddingLabel(e.target.value)} placeholder="Name this number — e.g. Sales, Support"
+            className="flex-1 min-w-[200px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
+          <Btn onClick={addNumber} disabled={busyId === "new"}>{busyId === "new" ? "Creating…" : "Create & Show QR"}</Btn>
+          <Btn variant="secondary" onClick={() => setAddingLabel(null)}>Cancel</Btn>
+        </div>
+      )}
+
+      {loadingInstances ? (
+        <p className="text-sm text-gray-400">Loading…</p>
+      ) : instances.length === 0 ? (
+        <EmptyState icon="💬" title="No numbers connected yet" body='Click "Add a WhatsApp Number" to connect your first one via QR code.' />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {instances.map((inst) => (
+            <div key={inst._id} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <p className="font-bold text-gray-900">{inst.label}</p>
+                <StatusBadge status={inst.status === "connected" ? "verified" : inst.status === "disconnected" ? "rejected" : "pending"} />
+              </div>
+              <p className="text-xs text-gray-500 mb-3">{inst.phoneNumber || "Number not reported yet"}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {inst.status !== "connected" && (
+                  <Btn size="sm" variant="secondary" onClick={() => openQr(inst)} disabled={busyId === inst._id}>Show QR</Btn>
+                )}
+                <Btn size="sm" variant="secondary" onClick={() => runAction(inst, "reconnect")} disabled={busyId === inst._id}>Reconnect</Btn>
+                <Btn size="sm" variant="secondary" onClick={() => runAction(inst, "reboot")} disabled={busyId === inst._id}>Reboot</Btn>
+                <Btn size="sm" variant="danger" onClick={() => deleteInstance(inst)} disabled={busyId === inst._id}>Remove</Btn>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {qrFor && (
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={() => setQrFor(null)}>
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-bold text-gray-900 mb-1">Scan to connect "{qrFor.label}"</h3>
+            <p className="text-xs text-gray-500 mb-4">Open WhatsApp on that phone → Linked Devices → Link a Device, then scan this code.</p>
+            {qrLoading ? (
+              <p className="text-sm text-gray-400 py-10">Loading QR code…</p>
+            ) : qrImage ? (
+              <img src={qrImage.startsWith("http") || qrImage.startsWith("data:") ? qrImage : `data:image/png;base64,${qrImage}`} alt="WhatsApp QR code" className="w-56 h-56 mx-auto rounded-lg border border-gray-100" />
+            ) : (
+              <p className="text-sm text-amber-600 py-6">No QR image came back directly — it may arrive via webhook shortly. This will auto-detect once connected.</p>
+            )}
+            <p className="text-xs text-gray-400 mt-4">Checking connection status automatically…</p>
+            <Btn variant="secondary" onClick={() => setQrFor(null)} className="mt-3">Close</Btn>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
 function TagsPage({ toast }) {
   const { API: api } = useAuth();
@@ -2505,6 +2734,7 @@ export default function SuperAdminDashboard() {
           <Route path="verifications" element={<VerificationsPage enrollments={enrollments} verifyEnrollment={verifyEnrollment} rejectEnrollment={rejectEnrollment} toast={toast} />} />
           <Route path="messages" element={<MessagesPage />} />
           <Route path="automation" element={<AutomationWorkflowPage toast={toast} />} />
+          <Route path="whatsapp" element={<WhatsAppPage toast={toast} />} />
           <Route path="pipeline" element={<PipelinePage toast={toast} />} />
           <Route path="review-importer" element={<ReviewImporterPage toast={toast} courses={courses} />} />
           <Route path="forms" element={<FormsPage toast={toast} courses={courses} />} />
