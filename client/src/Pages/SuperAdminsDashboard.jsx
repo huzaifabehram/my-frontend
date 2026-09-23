@@ -1677,6 +1677,7 @@ function WhatsAppPage({ toast }) {
   const [qrImage, setQrImage] = useState("");
   const [qrLoading, setQrLoading] = useState(false);
   const [busyId, setBusyId] = useState(null);
+  const [debugRaw, setDebugRaw] = useState(""); // WaBulkify's exact raw response when something can't be parsed — shown so it can be copied/shared instead of guessed at again
 
   const loadToken = useCallback(() => {
     setTokenLoading(true);
@@ -1725,12 +1726,20 @@ function WhatsAppPage({ toast }) {
   const addNumber = async () => {
     if (!addingLabel?.trim()) { toast("Give this number a name first", "error"); return; }
     setBusyId("new");
+    setDebugRaw("");
     try {
       const res = await api.post("/admin/whatsapp/instances", { label: addingLabel.trim() });
       setInstances((prev) => [res.data, ...prev]);
       setAddingLabel(null);
       await openQr(res.data);
-    } catch (err) { toast(err.response?.data?.message || "Failed to create instance", "error"); }
+    } catch (err) {
+      toast(err.response?.data?.message || "Failed to create instance", "error");
+      // NEW: shows WaBulkify's exact raw response right on the page — the
+      // old version only showed a guessed error message ("check your
+      // access token"), which turned out to be the wrong diagnosis. With
+      // the actual response visible, it can be copied and fixed for real.
+      if (err.response?.data?.wabulkifyRaw) setDebugRaw(err.response.data.wabulkifyRaw);
+    }
     finally { setBusyId(null); }
   };
 
@@ -1799,6 +1808,13 @@ function WhatsAppPage({ toast }) {
             className="flex-1 min-w-[200px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
           <Btn onClick={addNumber} disabled={busyId === "new"}>{busyId === "new" ? "Creating…" : "Create & Show QR"}</Btn>
           <Btn variant="secondary" onClick={() => setAddingLabel(null)}>Cancel</Btn>
+        </div>
+      )}
+
+      {debugRaw && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
+          <p className="text-xs font-bold text-amber-700 mb-2">WaBulkify's exact response (couldn't find an instance ID in it) — copy this and share it so the parsing can be fixed precisely:</p>
+          <pre className="text-[11px] text-amber-800 bg-white border border-amber-100 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap break-all">{debugRaw}</pre>
         </div>
       )}
 
