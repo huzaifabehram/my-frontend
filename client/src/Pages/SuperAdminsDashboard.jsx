@@ -812,7 +812,7 @@ function TriggerSidePanel({ meta, onPick, onClose }) {
 // Handles both adding a brand-new step (starts on the "pick a type" list,
 // matching the "Actions — Pick an action for this step" reference screen)
 // and editing an existing one (opens straight into its config form).
-function StepPanel({ meta, assignableUsers, whatsappInstances, tags, initialStep, onSave, onRemove, onClose }) {
+function StepPanel({ meta, assignableUsers, whatsappInstances, tags, selfHostedSessions, initialStep, onSave, onRemove, onClose }) {
   const [stage, setStage] = useState(initialStep ? "configure" : "pick");
   const [step, setStep] = useState(initialStep || null);
   const [search, setSearch] = useState("");
@@ -939,6 +939,17 @@ function StepPanel({ meta, assignableUsers, whatsappInstances, tags, initialStep
           )}
           {step.actionType === "send_whatsapp" && (
             <>
+              {selfHostedSessions?.length > 0 && (
+                <div>
+                  <label className="block text-[11px] font-bold text-gray-500 mb-1">Self-Hosted Server number (takes priority over WaBulkify below, if set)</label>
+                  <select value={p.selfHostedSessionId || ""} onChange={(e) => updateParam("selfHostedSessionId", e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                    <option value="">Don't use — use WaBulkify below instead</option>
+                    {selfHostedSessions.map((s) => (
+                      <option key={s._id} value={s._id} disabled={s.status !== "connected"}>{s.label} {s.status !== "connected" ? "(not connected)" : ""}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               {whatsappInstances?.length > 0 ? (
                 <>
                   <select value={p.instanceId || ""} onChange={(e) => updateParam("instanceId", e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
@@ -1127,10 +1138,11 @@ function AutomationWorkflowEditorPage({ toast, navigate, workflowId }) {
   const [forms, setForms] = useState([]);
   const [whatsappInstances, setWhatsappInstances] = useState([]);
   const [tags, setTags] = useState([]);
+  const [selfHostedSessions, setSelfHostedSessions] = useState([]);
 
   useEffect(() => {
-    Promise.all([api.get("/admin/workflows/meta"), api.get("/admin/assignable-users"), api.get("/admin/courses"), api.get("/admin/forms"), api.get("/admin/whatsapp/instances"), api.get("/admin/tags")])
-      .then(([mRes, uRes, cRes, fRes, wRes, tRes]) => { setMeta(mRes.data || {}); setAssignableUsers(uRes.data || []); setAllCourses(cRes.data || []); setForms(fRes.data || []); setWhatsappInstances(wRes.data || []); setTags(tRes.data || []); })
+    Promise.all([api.get("/admin/workflows/meta"), api.get("/admin/assignable-users"), api.get("/admin/courses"), api.get("/admin/forms"), api.get("/admin/whatsapp/instances"), api.get("/admin/tags"), api.get("/admin/whatsapp-server/sessions").catch(() => ({ data: [] }))])
+      .then(([mRes, uRes, cRes, fRes, wRes, tRes, sRes]) => { setMeta(mRes.data || {}); setAssignableUsers(uRes.data || []); setAllCourses(cRes.data || []); setForms(fRes.data || []); setWhatsappInstances(wRes.data || []); setTags(tRes.data || []); setSelfHostedSessions(sRes.data || []); })
       .catch(() => {});
   }, [api]);
 
@@ -1351,6 +1363,7 @@ function AutomationWorkflowEditorPage({ toast, navigate, workflowId }) {
           assignableUsers={assignableUsers}
           whatsappInstances={whatsappInstances}
           tags={tags}
+          selfHostedSessions={selfHostedSessions}
           initialStep={editIndex !== null ? steps[editIndex] : null}
           onSave={saveStepFromPanel}
           onRemove={() => { removeStep(editIndex); setEditIndex(null); }}
@@ -1687,7 +1700,7 @@ function ReviewImporterPage({ toast, courses }) {
 // Workflow's "Send WhatsApp Message" action.
 
 function WhatsAppPage({ toast }) {
-  const [subTab, setSubTab] = useState("numbers"); // numbers | messages | aibot
+  const [subTab, setSubTab] = useState("numbers"); // numbers | messages | aibot | selfhosted
   const { API: api } = useAuth();
   const [instances, setInstances] = useState([]);
   const [loadingInstances, setLoadingInstances] = useState(true);
@@ -1702,15 +1715,18 @@ function WhatsAppPage({ toast }) {
   return (
     <div>
       <SectionHeader title="WhatsApp" />
-      <div className="flex gap-2 mb-5">
+      <div className="flex gap-2 mb-5 flex-wrap">
         <Btn variant={subTab === "numbers" ? "primary" : "secondary"} size="sm" onClick={() => setSubTab("numbers")}>Numbers</Btn>
         <Btn variant={subTab === "messages" ? "primary" : "secondary"} size="sm" onClick={() => setSubTab("messages")}>Messages</Btn>
         <Btn variant={subTab === "aibot" ? "primary" : "secondary"} size="sm" onClick={() => setSubTab("aibot")}>AI Bot</Btn>
+        <Btn variant={subTab === "selfhosted" ? "primary" : "secondary"} size="sm" onClick={() => setSubTab("selfhosted")}>Self-Hosted Server</Btn>
       </div>
       {subTab === "numbers" ? (
         <NumbersTab toast={toast} instances={instances} loadingInstances={loadingInstances} setInstances={setInstances} loadInstances={loadInstances} />
       ) : subTab === "messages" ? (
         <MessagesTab toast={toast} instances={instances} />
+      ) : subTab === "selfhosted" ? (
+        <SelfHostedServerTab toast={toast} />
       ) : (
         <AiBotTab toast={toast} instances={instances} />
       )}
@@ -2205,6 +2221,255 @@ function AiBotTab({ toast, instances }) {
             </div>
           </div>
         </>
+      )}
+    </div>
+  );
+}
+
+// Self-built WhatsApp connection (Baileys), no WaBulkify involved — real
+// numbers, real QR codes, single sends, bulk sends with pacing between
+// messages, and an external API key so another app/service can send
+// through it too.
+function SelfHostedServerTab({ toast }) {
+  const { API: api } = useAuth();
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newLabel, setNewLabel] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [qrSession, setQrSession] = useState(null);
+  const [qrImage, setQrImage] = useState("");
+  const [qrStatus, setQrStatus] = useState("pending_qr");
+  const [busyId, setBusyId] = useState(null);
+  const [apiKey, setApiKey] = useState("");
+  const [generatingKey, setGeneratingKey] = useState(false);
+  const [showSend, setShowSend] = useState(null); // session for single-send form
+  const [sendTo, setSendTo] = useState("");
+  const [sendMsg, setSendMsg] = useState("");
+  const [sending, setSending] = useState(false);
+  const [showBulk, setShowBulk] = useState(null); // session for bulk-send form
+  const [bulkNumbers, setBulkNumbers] = useState("");
+  const [bulkMsg, setBulkMsg] = useState("");
+  const [bulkJobId, setBulkJobId] = useState(null);
+  const [bulkJob, setBulkJob] = useState(null);
+  const [startingBulk, setStartingBulk] = useState(false);
+
+  const loadSessions = useCallback(() => {
+    setLoading(true);
+    api.get("/admin/whatsapp-server/sessions").then((res) => setSessions(res.data || [])).catch(() => toast("Failed to load sessions — is the server installed? See the note below if not.", "error")).finally(() => setLoading(false));
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadKey = useCallback(() => {
+    api.get("/admin/settings/whatsapp-server-key").then((res) => setApiKey(res.data?.apiKey || "")).catch(() => {});
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { loadSessions(); loadKey(); }, [loadSessions, loadKey]);
+
+  const createSession = async () => {
+    if (!newLabel.trim()) { toast("Name this number first", "error"); return; }
+    setCreating(true);
+    try {
+      const res = await api.post("/admin/whatsapp-server/sessions", { label: newLabel.trim() });
+      setSessions((prev) => [res.data, ...prev]);
+      setNewLabel(""); setShowAdd(false);
+      openQr(res.data);
+    } catch (err) { toast(err.response?.data?.message || "Failed to create session", "error"); }
+    finally { setCreating(false); }
+  };
+
+  const openQr = (session) => {
+    setQrSession(session);
+    setQrImage("");
+    setQrStatus("pending_qr");
+  };
+
+  // Polls for the QR (Baileys emits it asynchronously) and then for the
+  // connected status, while the QR modal is open.
+  useEffect(() => {
+    if (!qrSession) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.get(`/admin/whatsapp-server/sessions/${qrSession._id}/qr`);
+        setQrStatus(res.data?.status || "pending_qr");
+        if (res.data?.qr) setQrImage(`https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(res.data.qr)}`);
+        if (res.data?.status === "connected") {
+          toast(`"${qrSession.label}" connected!`, "success");
+          setQrSession(null);
+          loadSessions();
+        }
+      } catch { /* keep polling */ }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [qrSession, api]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const reconnect = async (session) => {
+    setBusyId(session._id);
+    try {
+      await api.post(`/admin/whatsapp-server/sessions/${session._id}/reconnect`);
+      toast("Reconnecting…", "success");
+      openQr(session);
+    } catch (err) { toast(err.response?.data?.message || "Failed to reconnect", "error"); }
+    finally { setBusyId(null); }
+  };
+
+  const removeSession = async (session) => {
+    if (!window.confirm(`Remove "${session.label}"? This logs it out completely.`)) return;
+    try { await api.delete(`/admin/whatsapp-server/sessions/${session._id}`); setSessions((prev) => prev.filter((s) => s._id !== session._id)); toast("Removed", "success"); }
+    catch { toast("Failed to remove", "error"); }
+  };
+
+  const generateKey = async () => {
+    setGeneratingKey(true);
+    try { const res = await api.post("/admin/settings/whatsapp-server-key"); setApiKey(res.data?.apiKey || ""); toast("New API key generated", "success"); }
+    catch { toast("Failed to generate key", "error"); }
+    finally { setGeneratingKey(false); }
+  };
+
+  const sendSingle = async () => {
+    if (!sendTo.trim() || !sendMsg.trim()) { toast("Number and message are required", "error"); return; }
+    setSending(true);
+    try {
+      await api.post("/admin/whatsapp-server/send", { sessionDocId: showSend._id, to: sendTo.trim(), message: sendMsg.trim() });
+      toast("Sent", "success");
+      setSendTo(""); setSendMsg(""); setShowSend(null);
+    } catch (err) { toast(err.response?.data?.message || "Send failed", "error"); }
+    finally { setSending(false); }
+  };
+
+  const startBulk = async () => {
+    const numbers = bulkNumbers.split(/[\n,]+/).map((n) => n.trim()).filter(Boolean);
+    if (numbers.length === 0 || !bulkMsg.trim()) { toast("Add at least one number and a message", "error"); return; }
+    setStartingBulk(true);
+    try {
+      const res = await api.post("/admin/whatsapp-server/send-bulk", { sessionDocId: showBulk._id, numbers, message: bulkMsg.trim() });
+      setBulkJobId(res.data.jobId);
+      toast(`Bulk send started for ${numbers.length} number${numbers.length === 1 ? "" : "s"}`, "success");
+    } catch (err) { toast(err.response?.data?.message || "Failed to start bulk send", "error"); }
+    finally { setStartingBulk(false); }
+  };
+
+  useEffect(() => {
+    if (!bulkJobId) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await api.get(`/admin/whatsapp-server/bulk-jobs/${bulkJobId}`);
+        setBulkJob(res.data);
+        if (res.data?.status === "done") clearInterval(interval);
+      } catch { /* keep polling */ }
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [bulkJobId, api]);
+
+  return (
+    <div>
+      <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5 text-xs text-amber-700 leading-relaxed">
+        <strong>Before you use this:</strong> this connects to WhatsApp the same unofficial way WaBulkify does — it isn't Meta's official Business API. WhatsApp's Terms of Service don't allow automated/bulk messaging this way, and numbers used for it can be banned by Meta, especially for bulk sends. Use real pacing (already built in below) and avoid sending to people who haven't messaged you first or opted in.
+      </div>
+
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+        <h3 className="font-bold text-gray-800 text-sm">Connected Numbers</h3>
+        <Btn onClick={() => setShowAdd(true)}>+ Add a Number</Btn>
+      </div>
+
+      {showAdd && (
+        <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4 flex flex-wrap gap-2 items-center">
+          <input value={newLabel} onChange={(e) => setNewLabel(e.target.value)} placeholder="Name this number — e.g. Sales, Support"
+            className="flex-1 min-w-[200px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
+          <Btn onClick={createSession} disabled={creating}>{creating ? "Creating…" : "Create & Show QR"}</Btn>
+          <Btn variant="secondary" onClick={() => setShowAdd(false)}>Cancel</Btn>
+        </div>
+      )}
+
+      {loading ? (
+        <p className="text-sm text-gray-400">Loading…</p>
+      ) : sessions.length === 0 ? (
+        <EmptyState icon="💬" title="No numbers yet" body='Click "+ Add a Number" to connect your first one by scanning a QR code.' />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
+          {sessions.map((s) => (
+            <div key={s._id} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <p className="font-bold text-gray-900">{s.label}</p>
+                <StatusBadge status={s.status === "connected" ? "verified" : s.status === "disconnected" ? "rejected" : "pending"} />
+              </div>
+              <p className="text-xs text-gray-500 mb-3">{s.phoneNumber || "Not connected yet"}</p>
+              <div className="flex flex-wrap gap-1.5">
+                {s.status !== "connected" && <Btn size="sm" onClick={() => openQr(s)}>Show QR</Btn>}
+                {s.status === "connected" && <Btn size="sm" onClick={() => setShowSend(s)}>Send Message</Btn>}
+                {s.status === "connected" && <Btn size="sm" variant="secondary" onClick={() => setShowBulk(s)}>Bulk Send</Btn>}
+                <Btn size="sm" variant="secondary" onClick={() => reconnect(s)} disabled={busyId === s._id}>Reconnect</Btn>
+                <Btn size="sm" variant="danger" onClick={() => removeSession(s)} disabled={busyId === s._id}>Remove</Btn>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5">
+        <h3 className="font-bold text-gray-800 text-sm mb-1">External API Access</h3>
+        <p className="text-xs text-gray-500 mb-3">Let another app or service send through this server too — no Super Admin login needed, just this key. POST to <code className="bg-gray-100 px-1 rounded">/api/whatsapp-server/external/send</code> with <code className="bg-gray-100 px-1 rounded">{"{ apiKey, sessionId, to, message }"}</code> (sessionId is the connected number's ID shown above).</p>
+        <div className="flex flex-wrap gap-2 items-center">
+          <input readOnly value={apiKey || "No key generated yet"} className="flex-1 min-w-[220px] border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 font-mono" />
+          <Btn variant="secondary" onClick={generateKey} disabled={generatingKey}>{generatingKey ? "Generating…" : apiKey ? "Regenerate" : "Generate Key"}</Btn>
+        </div>
+      </div>
+
+      {qrSession && (
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={() => setQrSession(null)}>
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-bold text-gray-900 mb-1">Scan to connect "{qrSession.label}"</h3>
+            <p className="text-xs text-gray-500 mb-4">Open WhatsApp on that phone → Linked Devices → Link a Device, then scan this code.</p>
+            {qrImage ? (
+              <img src={qrImage} alt="WhatsApp QR code" className="w-56 h-56 mx-auto rounded-lg border border-gray-100" />
+            ) : (
+              <p className="text-sm text-gray-400 py-10">Waiting for the QR code…</p>
+            )}
+            <p className="text-xs text-gray-400 mt-4">Checking connection status automatically…</p>
+            <Btn variant="secondary" onClick={() => setQrSession(null)} className="mt-3">Close</Btn>
+          </div>
+        </div>
+      )}
+
+      {showSend && (
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={() => setShowSend(null)}>
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-bold text-gray-900 mb-3">Send from "{showSend.label}"</h3>
+            <input value={sendTo} onChange={(e) => setSendTo(e.target.value)} placeholder="Number, with country code" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm mb-2" />
+            <textarea value={sendMsg} onChange={(e) => setSendMsg(e.target.value)} rows={3} placeholder="Message…" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none mb-3" />
+            <div className="flex gap-2">
+              <Btn onClick={sendSingle} disabled={sending}>{sending ? "Sending…" : "Send"}</Btn>
+              <Btn variant="secondary" onClick={() => setShowSend(null)}>Cancel</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBulk && (
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={() => { setShowBulk(null); setBulkJobId(null); setBulkJob(null); }}>
+          <div className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl max-h-[85vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-bold text-gray-900 mb-1">Bulk Send from "{showBulk.label}"</h3>
+            <p className="text-xs text-gray-500 mb-3">One number per line (or comma-separated). Sent with a few seconds' pace between each — this takes a while for a large list, and that's intentional.</p>
+            <textarea value={bulkNumbers} onChange={(e) => setBulkNumbers(e.target.value)} rows={5} placeholder={"923001234567\n923009876543"} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none mb-2 font-mono" />
+            <textarea value={bulkMsg} onChange={(e) => setBulkMsg(e.target.value)} rows={3} placeholder="Message…" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none mb-3" />
+            <div className="flex gap-2 mb-3">
+              <Btn onClick={startBulk} disabled={startingBulk || !!bulkJobId}>{startingBulk ? "Starting…" : "Start Bulk Send"}</Btn>
+              <Btn variant="secondary" onClick={() => { setShowBulk(null); setBulkJobId(null); setBulkJob(null); }}>Close</Btn>
+            </div>
+            {bulkJob && (
+              <div className="border border-gray-100 rounded-lg p-3 bg-gray-50">
+                <p className="text-xs font-bold text-gray-700 mb-2">
+                  {bulkJob.status === "done" ? "Done" : "Sending…"} — {bulkJob.results.length} / {bulkJob.numbers.length}
+                  {" "}({bulkJob.results.filter((r) => r.success).length} sent, {bulkJob.results.filter((r) => !r.success).length} failed)
+                </p>
+                <div className="max-h-40 overflow-y-auto space-y-1">
+                  {bulkJob.results.map((r, i) => (
+                    <p key={i} className={`text-[11px] ${r.success ? "text-emerald-600" : "text-red-500"}`}>{r.number} — {r.success ? "sent" : r.error}</p>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );
