@@ -1672,15 +1672,10 @@ function WhatsAppPage({ toast }) {
   const [savingToken, setSavingToken] = useState(false);
   const [instances, setInstances] = useState([]);
   const [loadingInstances, setLoadingInstances] = useState(true);
-  const [addingLabel, setAddingLabel] = useState(null); // null | "" | label text — non-null shows the "add number" form
-  const [qrFor, setQrFor] = useState(null); // instance being scanned right now
-  const [qrImage, setQrImage] = useState("");
-  const [qrLoading, setQrLoading] = useState(false);
   const [busyId, setBusyId] = useState(null);
-  const [debugRaw, setDebugRaw] = useState(""); // WaBulkify's exact raw response when something can't be parsed — shown so it can be copied/shared instead of guessed at again
-  const [showManualForm, setShowManualForm] = useState(false);
-  const [manualLabel, setManualLabel] = useState("");
-  const [manualInstanceId, setManualInstanceId] = useState("");
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [addLabel, setAddLabel] = useState("");
+  const [addInstanceId, setAddInstanceId] = useState("");
 
   const loadToken = useCallback(() => {
     setTokenLoading(true);
@@ -1693,22 +1688,6 @@ function WhatsAppPage({ toast }) {
   }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadToken(); loadInstances(); }, [loadToken, loadInstances]);
-
-  // While the QR panel is open for an instance, poll its connection status
-  // every few seconds — the webhook updates it in the background once
-  // WaBulkify detects the scan.
-  useEffect(() => {
-    if (!qrFor) return;
-    const interval = setInterval(async () => {
-      try {
-        const res = await api.get("/admin/whatsapp/instances");
-        setInstances(res.data || []);
-        const mine = (res.data || []).find((i) => i._id === qrFor._id);
-        if (mine?.status === "connected") { toast(`"${mine.label}" connected!`, "success"); setQrFor(null); setQrImage(""); }
-      } catch { /* keep polling */ }
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [qrFor, api]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveToken = async () => {
     if (!tokenInput.trim()) { toast("Enter your WaBulkify access token", "error"); return; }
@@ -1726,48 +1705,25 @@ function WhatsAppPage({ toast }) {
     catch { toast("Failed to disconnect", "error"); }
   };
 
-  const addNumber = async () => {
-    if (!addingLabel?.trim()) { toast("Give this number a name first", "error"); return; }
-    setBusyId("new");
-    setDebugRaw("");
+  // NEW: this is now the only way to add a number — WaBulkify's own
+  // support team confirmed QR scanning only works on their dashboard, not
+  // through a custom one, so "create instance, show our own QR" (the old
+  // primary flow) genuinely can't work here. You connect the number on
+  // wabulkify.com, then register its Instance ID here so it shows up as an
+  // option in Automation Workflow. There's also no "list all my instances"
+  // endpoint in WaBulkify's documented API, so each number has to be added
+  // this way, one at a time — there isn't a way to auto-sync everything
+  // connected on their dashboard automatically.
+  const addInstance = async () => {
+    if (!addLabel.trim() || !addInstanceId.trim()) { toast("Both fields are required", "error"); return; }
+    setBusyId("add");
     try {
-      const res = await api.post("/admin/whatsapp/instances", { label: addingLabel.trim() });
+      const res = await api.post("/admin/whatsapp/instances/manual", { label: addLabel.trim(), instanceId: addInstanceId.trim() });
       setInstances((prev) => [res.data, ...prev]);
-      setAddingLabel(null);
-      await openQr(res.data);
-    } catch (err) {
-      toast(err.response?.data?.message || "Failed to create instance", "error");
-      // NEW: shows WaBulkify's exact raw response right on the page — the
-      // old version only showed a guessed error message ("check your
-      // access token"), which turned out to be the wrong diagnosis. With
-      // the actual response visible, it can be copied and fixed for real.
-      if (err.response?.data?.wabulkifyRaw) setDebugRaw(err.response.data.wabulkifyRaw);
-    }
-    finally { setBusyId(null); }
-  };
-
-  const addManualInstance = async () => {
-    if (!manualLabel.trim() || !manualInstanceId.trim()) { toast("Both fields are required", "error"); return; }
-    setBusyId("manual");
-    try {
-      const res = await api.post("/admin/whatsapp/instances/manual", { label: manualLabel.trim(), instanceId: manualInstanceId.trim() });
-      setInstances((prev) => [res.data, ...prev]);
-      setManualLabel(""); setManualInstanceId(""); setShowManualForm(false);
-      toast(`"${res.data.label}" added — try sending a test message to confirm it works`, "success");
+      setAddLabel(""); setAddInstanceId(""); setShowAddForm(false);
+      toast(`"${res.data.label}" added`, "success");
     } catch (err) { toast(err.response?.data?.message || "Failed to add instance", "error"); }
     finally { setBusyId(null); }
-  };
-
-  const openQr = async (instance) => {
-    setQrFor(instance);
-    setQrImage("");
-    setQrLoading(true);
-    try {
-      const res = await api.post(`/admin/whatsapp/instances/${instance._id}/qrcode`);
-      setQrImage(res.data?.qrCode || "");
-      if (!res.data?.qrCode) toast("WaBulkify didn't return a QR image directly — it may arrive via webhook instead; keep this open a moment.", "info");
-    } catch (err) { toast(err.response?.data?.message || "Failed to fetch QR code", "error"); }
-    finally { setQrLoading(false); }
   };
 
   const runAction = async (instance, action) => {
@@ -1781,7 +1737,7 @@ function WhatsAppPage({ toast }) {
   };
 
   const deleteInstance = async (instance) => {
-    if (!window.confirm(`Remove "${instance.label}"? This can't be undone.`)) return;
+    if (!window.confirm(`Remove "${instance.label}"? This only removes it here — it stays connected on WaBulkify's dashboard.`)) return;
     try { await api.delete(`/admin/whatsapp/instances/${instance._id}`); setInstances((prev) => prev.filter((i) => i._id !== instance._id)); toast("Removed", "success"); }
     catch { toast("Failed to remove", "error"); }
   };
@@ -1789,7 +1745,9 @@ function WhatsAppPage({ toast }) {
   return (
     <div>
       <SectionHeader title="WhatsApp" />
-      <p className="text-sm text-gray-500 mb-5 -mt-2">Connect as many WhatsApp numbers as you want by scanning a QR code — each one can then be picked as the sender in Automation Workflow's "Send WhatsApp Message" action.</p>
+      <p className="text-sm text-gray-500 mb-5 -mt-2">
+        Per WaBulkify support: numbers are connected by scanning a QR code on <a href="https://wabulkify.com" target="_blank" rel="noreferrer" className="text-rose-600 underline">wabulkify.com</a> directly — that step can't happen here. Once a number is connected there, register it below with its Instance ID so it becomes available as a sender in Automation Workflow's "Send WhatsApp Message" action (for individual messages and groups alike).
+      </p>
 
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 mb-6">
         <div className="flex items-center justify-between mb-1">
@@ -1798,7 +1756,7 @@ function WhatsAppPage({ toast }) {
             {tokenConnected ? "Connected" : "Not connected"}
           </span>
         </div>
-        <p className="text-xs text-gray-500 mb-3">One access token from your wabulkify.com account authenticates every number below.</p>
+        <p className="text-xs text-gray-500 mb-3">One access token from your wabulkify.com account authenticates every number below — needed for sending, reboot, reconnect, etc.</p>
         {tokenLoading ? (
           <p className="text-xs text-gray-400">Loading…</p>
         ) : (
@@ -1813,47 +1771,32 @@ function WhatsAppPage({ toast }) {
 
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <h3 className="font-bold text-gray-800 text-sm">Connected Numbers</h3>
-        <div className="flex gap-2">
-          <Btn onClick={() => setAddingLabel("")} disabled={!tokenConnected}>+ Add a WhatsApp Number</Btn>
-          <Btn variant="secondary" onClick={() => setShowManualForm(true)} disabled={!tokenConnected}>Add Existing Instance ID</Btn>
-        </div>
+        <Btn onClick={() => setShowAddForm(true)} disabled={!tokenConnected}>+ Add WhatsApp Number</Btn>
       </div>
       {!tokenConnected && <p className="text-xs text-amber-600 mb-3">Connect your WaBulkify account above first.</p>}
 
-      {addingLabel !== null && (
-        <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4 flex flex-wrap gap-2 items-center">
-          <input value={addingLabel} onChange={(e) => setAddingLabel(e.target.value)} placeholder="Name this number — e.g. Sales, Support"
-            className="flex-1 min-w-[200px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
-          <Btn onClick={addNumber} disabled={busyId === "new"}>{busyId === "new" ? "Creating…" : "Create & Show QR"}</Btn>
-          <Btn variant="secondary" onClick={() => setAddingLabel(null)}>Cancel</Btn>
-        </div>
-      )}
-
-      {showManualForm && (
+      {showAddForm && (
         <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4">
-          <p className="text-xs text-gray-500 mb-3">If "Create & Show QR" isn't working, create the instance directly in your <a href="https://wabulkify.com" target="_blank" rel="noreferrer" className="text-rose-600 underline">WaBulkify dashboard</a> instead, scan its QR there, then paste its Instance ID here — this registers it for use in Automation Workflow without going through the API's create step.</p>
+          <p className="text-xs text-gray-500 mb-3">
+            1. Go to your <a href="https://wabulkify.com" target="_blank" rel="noreferrer" className="text-rose-600 underline">WaBulkify dashboard</a> and add/scan a WhatsApp number there.<br/>
+            2. Copy the Instance ID it shows you (e.g. <code className="bg-gray-100 px-1 rounded">6AB3A1A76BD76</code>).<br/>
+            3. Paste it below to make it available here.
+          </p>
           <div className="flex flex-wrap gap-2">
-            <input value={manualLabel} onChange={(e) => setManualLabel(e.target.value)} placeholder="Name this number"
+            <input value={addLabel} onChange={(e) => setAddLabel(e.target.value)} placeholder="Name this number — e.g. Sales, Support"
               className="flex-1 min-w-[160px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
-            <input value={manualInstanceId} onChange={(e) => setManualInstanceId(e.target.value)} placeholder="Instance ID from WaBulkify's dashboard"
+            <input value={addInstanceId} onChange={(e) => setAddInstanceId(e.target.value)} placeholder="Instance ID from WaBulkify's dashboard"
               className="flex-1 min-w-[200px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
-            <Btn onClick={addManualInstance} disabled={busyId === "manual"}>{busyId === "manual" ? "Adding…" : "Add"}</Btn>
-            <Btn variant="secondary" onClick={() => setShowManualForm(false)}>Cancel</Btn>
+            <Btn onClick={addInstance} disabled={busyId === "add"}>{busyId === "add" ? "Adding…" : "Add"}</Btn>
+            <Btn variant="secondary" onClick={() => setShowAddForm(false)}>Cancel</Btn>
           </div>
-        </div>
-      )}
-
-      {debugRaw && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-4">
-          <p className="text-xs font-bold text-amber-700 mb-2">WaBulkify's exact response (couldn't find an instance ID in it) — copy this and share it so the parsing can be fixed precisely:</p>
-          <pre className="text-[11px] text-amber-800 bg-white border border-amber-100 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap break-all">{debugRaw}</pre>
         </div>
       )}
 
       {loadingInstances ? (
         <p className="text-sm text-gray-400">Loading…</p>
       ) : instances.length === 0 ? (
-        <EmptyState icon="💬" title="No numbers connected yet" body='Click "Add a WhatsApp Number" to connect your first one via QR code.' />
+        <EmptyState icon="💬" title="No numbers added yet" body={'Connect a number on WaBulkify\'s dashboard first, then click "+ Add WhatsApp Number" and paste its Instance ID here.'} />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {instances.map((inst) => (
@@ -1862,35 +1805,14 @@ function WhatsAppPage({ toast }) {
                 <p className="font-bold text-gray-900">{inst.label}</p>
                 <StatusBadge status={inst.status === "connected" ? "verified" : inst.status === "disconnected" ? "rejected" : "pending"} />
               </div>
-              <p className="text-xs text-gray-500 mb-3">{inst.phoneNumber || "Number not reported yet"}</p>
+              <p className="text-xs text-gray-500 mb-3 font-mono">{inst.instanceId}</p>
               <div className="flex flex-wrap gap-1.5">
-                {inst.status !== "connected" && (
-                  <Btn size="sm" variant="secondary" onClick={() => openQr(inst)} disabled={busyId === inst._id}>Show QR</Btn>
-                )}
                 <Btn size="sm" variant="secondary" onClick={() => runAction(inst, "reconnect")} disabled={busyId === inst._id}>Reconnect</Btn>
                 <Btn size="sm" variant="secondary" onClick={() => runAction(inst, "reboot")} disabled={busyId === inst._id}>Reboot</Btn>
                 <Btn size="sm" variant="danger" onClick={() => deleteInstance(inst)} disabled={busyId === inst._id}>Remove</Btn>
               </div>
             </div>
           ))}
-        </div>
-      )}
-
-      {qrFor && (
-        <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={() => setQrFor(null)}>
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-bold text-gray-900 mb-1">Scan to connect "{qrFor.label}"</h3>
-            <p className="text-xs text-gray-500 mb-4">Open WhatsApp on that phone → Linked Devices → Link a Device, then scan this code.</p>
-            {qrLoading ? (
-              <p className="text-sm text-gray-400 py-10">Loading QR code…</p>
-            ) : qrImage ? (
-              <img src={qrImage.startsWith("http") || qrImage.startsWith("data:") ? qrImage : `data:image/png;base64,${qrImage}`} alt="WhatsApp QR code" className="w-56 h-56 mx-auto rounded-lg border border-gray-100" />
-            ) : (
-              <p className="text-sm text-amber-600 py-6">No QR image came back directly — it may arrive via webhook shortly. This will auto-detect once connected.</p>
-            )}
-            <p className="text-xs text-gray-400 mt-4">Checking connection status automatically…</p>
-            <Btn variant="secondary" onClick={() => setQrFor(null)} className="mt-3">Close</Btn>
-          </div>
         </div>
       )}
     </div>
