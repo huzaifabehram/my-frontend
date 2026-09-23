@@ -1678,6 +1678,9 @@ function WhatsAppPage({ toast }) {
   const [qrLoading, setQrLoading] = useState(false);
   const [busyId, setBusyId] = useState(null);
   const [debugRaw, setDebugRaw] = useState(""); // WaBulkify's exact raw response when something can't be parsed — shown so it can be copied/shared instead of guessed at again
+  const [showManualForm, setShowManualForm] = useState(false);
+  const [manualLabel, setManualLabel] = useState("");
+  const [manualInstanceId, setManualInstanceId] = useState("");
 
   const loadToken = useCallback(() => {
     setTokenLoading(true);
@@ -1743,6 +1746,18 @@ function WhatsAppPage({ toast }) {
     finally { setBusyId(null); }
   };
 
+  const addManualInstance = async () => {
+    if (!manualLabel.trim() || !manualInstanceId.trim()) { toast("Both fields are required", "error"); return; }
+    setBusyId("manual");
+    try {
+      const res = await api.post("/admin/whatsapp/instances/manual", { label: manualLabel.trim(), instanceId: manualInstanceId.trim() });
+      setInstances((prev) => [res.data, ...prev]);
+      setManualLabel(""); setManualInstanceId(""); setShowManualForm(false);
+      toast(`"${res.data.label}" added — try sending a test message to confirm it works`, "success");
+    } catch (err) { toast(err.response?.data?.message || "Failed to add instance", "error"); }
+    finally { setBusyId(null); }
+  };
+
   const openQr = async (instance) => {
     setQrFor(instance);
     setQrImage("");
@@ -1796,9 +1811,12 @@ function WhatsAppPage({ toast }) {
         )}
       </div>
 
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
         <h3 className="font-bold text-gray-800 text-sm">Connected Numbers</h3>
-        <Btn onClick={() => setAddingLabel("")} disabled={!tokenConnected}>+ Add a WhatsApp Number</Btn>
+        <div className="flex gap-2">
+          <Btn onClick={() => setAddingLabel("")} disabled={!tokenConnected}>+ Add a WhatsApp Number</Btn>
+          <Btn variant="secondary" onClick={() => setShowManualForm(true)} disabled={!tokenConnected}>Add Existing Instance ID</Btn>
+        </div>
       </div>
       {!tokenConnected && <p className="text-xs text-amber-600 mb-3">Connect your WaBulkify account above first.</p>}
 
@@ -1808,6 +1826,20 @@ function WhatsAppPage({ toast }) {
             className="flex-1 min-w-[200px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
           <Btn onClick={addNumber} disabled={busyId === "new"}>{busyId === "new" ? "Creating…" : "Create & Show QR"}</Btn>
           <Btn variant="secondary" onClick={() => setAddingLabel(null)}>Cancel</Btn>
+        </div>
+      )}
+
+      {showManualForm && (
+        <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4">
+          <p className="text-xs text-gray-500 mb-3">If "Create & Show QR" isn't working, create the instance directly in your <a href="https://wabulkify.com" target="_blank" rel="noreferrer" className="text-rose-600 underline">WaBulkify dashboard</a> instead, scan its QR there, then paste its Instance ID here — this registers it for use in Automation Workflow without going through the API's create step.</p>
+          <div className="flex flex-wrap gap-2">
+            <input value={manualLabel} onChange={(e) => setManualLabel(e.target.value)} placeholder="Name this number"
+              className="flex-1 min-w-[160px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
+            <input value={manualInstanceId} onChange={(e) => setManualInstanceId(e.target.value)} placeholder="Instance ID from WaBulkify's dashboard"
+              className="flex-1 min-w-[200px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
+            <Btn onClick={addManualInstance} disabled={busyId === "manual"}>{busyId === "manual" ? "Adding…" : "Add"}</Btn>
+            <Btn variant="secondary" onClick={() => setShowManualForm(false)}>Cancel</Btn>
+          </div>
         </div>
       )}
 
