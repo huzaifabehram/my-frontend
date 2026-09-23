@@ -812,15 +812,22 @@ function TriggerSidePanel({ meta, onPick, onClose }) {
 // Handles both adding a brand-new step (starts on the "pick a type" list,
 // matching the "Actions — Pick an action for this step" reference screen)
 // and editing an existing one (opens straight into its config form).
-function StepPanel({ meta, assignableUsers, whatsappInstances, initialStep, onSave, onRemove, onClose }) {
+function StepPanel({ meta, assignableUsers, whatsappInstances, tags, initialStep, onSave, onRemove, onClose }) {
   const [stage, setStage] = useState(initialStep ? "configure" : "pick");
   const [step, setStep] = useState(initialStep || null);
   const [search, setSearch] = useState("");
 
   const pickType = (kind, actionType) => {
+    // NEW: send_whatsapp starts with "To" already filled in as {{whatsapp}}
+    // instead of blank with a placeholder — leaving it blank technically
+    // already fell back to the same thing at send time, but it looked like
+    // something still needed typing in. Now it's visibly there from the
+    // start: nothing to fill in, the real number is pulled automatically
+    // from whichever form/trigger fired the workflow.
+    const defaultParams = actionType === "send_whatsapp" ? { to: "{{whatsapp}}" } : {};
     setStep(kind === "condition"
       ? { type: "condition", conditionField: "courseTitle", conditionOperator: "equals", conditionValue: "" }
-      : { type: "action", actionType, params: {} });
+      : { type: "action", actionType, params: defaultParams });
     setStage("configure");
   };
   const updateStep = (patch) => setStep((s) => ({ ...s, ...patch }));
@@ -892,7 +899,17 @@ function StepPanel({ meta, assignableUsers, whatsappInstances, initialStep, onSa
             </>
           )}
           {(step.actionType === "add_contact_tag" || step.actionType === "remove_contact_tag") && (
-            <input value={p.tag || ""} onChange={(e) => updateParam("tag", e.target.value)} placeholder="Tag name" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+            tags?.length > 0 ? (
+              <select value={p.tag || ""} onChange={(e) => updateParam("tag", e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                <option value="">Choose a tag…</option>
+                {tags.map((t) => <option key={t._id} value={t.name}>{t.name}</option>)}
+              </select>
+            ) : (
+              <>
+                <p className="text-[11px] text-amber-600">No tags created yet — go to Super Admin → Tags → Create Tag first, or type one here.</p>
+                <input value={p.tag || ""} onChange={(e) => updateParam("tag", e.target.value)} placeholder="Tag name" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+              </>
+            )
           )}
           {step.actionType === "assign_user" && (
             <select value={p.userId || ""} onChange={(e) => updateParam("userId", e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
@@ -941,7 +958,10 @@ function StepPanel({ meta, assignableUsers, whatsappInstances, initialStep, onSa
                   {p.recipientType === "group" ? (
                     <input value={p.groupId || ""} onChange={(e) => updateParam("groupId", e.target.value)} placeholder="Group ID (e.g. 8498761234@g.us)" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
                   ) : (
-                    <input value={p.to || ""} onChange={(e) => updateParam("to", e.target.value)} placeholder="To (default: {{whatsapp}})" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-500 mb-1">To — leave as {"{{whatsapp}}"} to auto-fill from the form/trigger; only change this if you need a different number</label>
+                      <input value={p.to || ""} onChange={(e) => updateParam("to", e.target.value)} placeholder="{{whatsapp}}" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono" />
+                    </div>
                   )}
                   <RichMessageEditor value={p.message || ""} onChange={(v) => updateParam("message", v)} rows={4} placeholder="WhatsApp message…" />
                   <div className="grid grid-cols-2 gap-2">
@@ -1106,10 +1126,11 @@ function AutomationWorkflowEditorPage({ toast, navigate, workflowId }) {
   const [allCourses, setAllCourses] = useState([]);
   const [forms, setForms] = useState([]);
   const [whatsappInstances, setWhatsappInstances] = useState([]);
+  const [tags, setTags] = useState([]);
 
   useEffect(() => {
-    Promise.all([api.get("/admin/workflows/meta"), api.get("/admin/assignable-users"), api.get("/admin/courses"), api.get("/admin/forms"), api.get("/admin/whatsapp/instances")])
-      .then(([mRes, uRes, cRes, fRes, wRes]) => { setMeta(mRes.data || {}); setAssignableUsers(uRes.data || []); setAllCourses(cRes.data || []); setForms(fRes.data || []); setWhatsappInstances(wRes.data || []); })
+    Promise.all([api.get("/admin/workflows/meta"), api.get("/admin/assignable-users"), api.get("/admin/courses"), api.get("/admin/forms"), api.get("/admin/whatsapp/instances"), api.get("/admin/tags")])
+      .then(([mRes, uRes, cRes, fRes, wRes, tRes]) => { setMeta(mRes.data || {}); setAssignableUsers(uRes.data || []); setAllCourses(cRes.data || []); setForms(fRes.data || []); setWhatsappInstances(wRes.data || []); setTags(tRes.data || []); })
       .catch(() => {});
   }, [api]);
 
@@ -1329,6 +1350,7 @@ function AutomationWorkflowEditorPage({ toast, navigate, workflowId }) {
           meta={meta}
           assignableUsers={assignableUsers}
           whatsappInstances={whatsappInstances}
+          tags={tags}
           initialStep={editIndex !== null ? steps[editIndex] : null}
           onSave={saveStepFromPanel}
           onRemove={() => { removeStep(editIndex); setEditIndex(null); }}
@@ -1701,6 +1723,10 @@ function NumbersTab({ toast, instances, loadingInstances, setInstances, loadInst
   const [showAddForm, setShowAddForm] = useState(false);
   const [addLabel, setAddLabel] = useState("");
   const [addInstanceId, setAddInstanceId] = useState("");
+  const [qrFor, setQrFor] = useState(null); // instance currently showing its QR
+  const [qrImage, setQrImage] = useState("");
+  const [qrLoading, setQrLoading] = useState(false);
+  const [qrDebugRaw, setQrDebugRaw] = useState("");
 
   const loadToken = useCallback(() => {
     setTokenLoading(true);
@@ -1708,6 +1734,23 @@ function NumbersTab({ toast, instances, loadingInstances, setInstances, loadInst
   }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadToken(); }, [loadToken]);
+
+  const openQr = async (instance) => {
+    setQrFor(instance);
+    setQrImage("");
+    setQrDebugRaw("");
+    setQrLoading(true);
+    try {
+      const res = await api.post(`/admin/whatsapp/instances/${instance._id}/qrcode`);
+      if (res.data?.qrCode) {
+        setQrImage(res.data.qrCode);
+      } else {
+        setQrDebugRaw(res.data?.raw || "");
+        toast("WaBulkify didn't return a QR image — see the details below.", "error");
+      }
+    } catch (err) { toast(err.response?.data?.message || "Failed to fetch QR code", "error"); }
+    finally { setQrLoading(false); }
+  };
 
   const saveToken = async () => {
     if (!tokenInput.trim()) { toast("Enter your WaBulkify access token", "error"); return; }
@@ -1824,12 +1867,35 @@ function NumbersTab({ toast, instances, loadingInstances, setInstances, loadInst
               </div>
               <p className="text-xs text-gray-500 mb-3 font-mono">{inst.instanceId}</p>
               <div className="flex flex-wrap gap-1.5">
+                <Btn size="sm" onClick={() => openQr(inst)} disabled={qrLoading && qrFor?._id === inst._id}>Show QR</Btn>
                 <Btn size="sm" variant="secondary" onClick={() => runAction(inst, "reconnect")} disabled={busyId === inst._id}>Reconnect</Btn>
                 <Btn size="sm" variant="secondary" onClick={() => runAction(inst, "reboot")} disabled={busyId === inst._id}>Reboot</Btn>
                 <Btn size="sm" variant="danger" onClick={() => deleteInstance(inst)} disabled={busyId === inst._id}>Remove</Btn>
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {qrFor && (
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={() => setQrFor(null)}>
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-bold text-gray-900 mb-1">Scan to connect "{qrFor.label}"</h3>
+            <p className="text-xs text-gray-500 mb-4">Open WhatsApp on that phone → Linked Devices → Link a Device, then scan this code.</p>
+            {qrLoading ? (
+              <p className="text-sm text-gray-400 py-10">Loading QR code…</p>
+            ) : qrImage ? (
+              <img src={qrImage.startsWith("http") || qrImage.startsWith("data:") ? qrImage : `data:image/png;base64,${qrImage}`} alt="WhatsApp QR code" className="w-56 h-56 mx-auto rounded-lg border border-gray-100" />
+            ) : (
+              <div className="text-left">
+                <p className="text-sm text-amber-600 mb-2">No QR image came back — WaBulkify's response didn't contain one.</p>
+                {qrDebugRaw && (
+                  <pre className="text-[10px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-32">{qrDebugRaw}</pre>
+                )}
+              </div>
+            )}
+            <Btn variant="secondary" onClick={() => setQrFor(null)} className="mt-4">Close</Btn>
+          </div>
         </div>
       )}
     </div>
