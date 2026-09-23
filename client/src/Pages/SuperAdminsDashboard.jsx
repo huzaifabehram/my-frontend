@@ -1687,7 +1687,7 @@ function ReviewImporterPage({ toast, courses }) {
 // Workflow's "Send WhatsApp Message" action.
 
 function WhatsAppPage({ toast }) {
-  const [subTab, setSubTab] = useState("numbers"); // numbers | messages
+  const [subTab, setSubTab] = useState("numbers"); // numbers | messages | aibot
   const { API: api } = useAuth();
   const [instances, setInstances] = useState([]);
   const [loadingInstances, setLoadingInstances] = useState(true);
@@ -1705,10 +1705,15 @@ function WhatsAppPage({ toast }) {
       <div className="flex gap-2 mb-5">
         <Btn variant={subTab === "numbers" ? "primary" : "secondary"} size="sm" onClick={() => setSubTab("numbers")}>Numbers</Btn>
         <Btn variant={subTab === "messages" ? "primary" : "secondary"} size="sm" onClick={() => setSubTab("messages")}>Messages</Btn>
+        <Btn variant={subTab === "aibot" ? "primary" : "secondary"} size="sm" onClick={() => setSubTab("aibot")}>AI Bot</Btn>
       </div>
-      {subTab === "numbers"
-        ? <NumbersTab toast={toast} instances={instances} loadingInstances={loadingInstances} setInstances={setInstances} loadInstances={loadInstances} />
-        : <MessagesTab toast={toast} instances={instances} />}
+      {subTab === "numbers" ? (
+        <NumbersTab toast={toast} instances={instances} loadingInstances={loadingInstances} setInstances={setInstances} loadInstances={loadInstances} />
+      ) : subTab === "messages" ? (
+        <MessagesTab toast={toast} instances={instances} />
+      ) : (
+        <AiBotTab toast={toast} instances={instances} />
+      )}
     </div>
   );
 }
@@ -2022,6 +2027,188 @@ function MessagesTab({ toast, instances }) {
   );
 }
 
+
+// "Train AI Bot" — write instructions (system prompt), pick a model, choose
+// exactly which connected numbers should auto-reply, and test it live
+// before turning it on for real customers. Uses Anthropic's Messages API
+// directly — a real, documented API, unlike the WaBulkify field-guessing
+// this has needed elsewhere.
+function AiBotTab({ toast, instances }) {
+  const { API: api } = useAuth();
+  const [tokenConnected, setTokenConnected] = useState(false);
+  const [tokenInput, setTokenInput] = useState("");
+  const [tokenLoading, setTokenLoading] = useState(true);
+  const [savingToken, setSavingToken] = useState(false);
+  const [settings, setSettings] = useState({ enabled: false, instructions: "", model: "claude-haiku-4-5-20251001", enabledInstanceIds: [] });
+  const [loadingSettings, setLoadingSettings] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testInput, setTestInput] = useState("");
+  const [testHistory, setTestHistory] = useState([]); // [{role, content}]
+  const [testing, setTesting] = useState(false);
+
+  const loadToken = useCallback(() => {
+    setTokenLoading(true);
+    api.get("/admin/settings/anthropic").then((res) => setTokenConnected(!!res.data?.connected)).catch(() => {}).finally(() => setTokenLoading(false));
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadSettings = useCallback(() => {
+    setLoadingSettings(true);
+    api.get("/admin/whatsapp/bot-settings").then((res) => setSettings(res.data || {})).catch(() => toast("Failed to load bot settings", "error")).finally(() => setLoadingSettings(false));
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { loadToken(); loadSettings(); }, [loadToken, loadSettings]);
+
+  const saveToken = async () => {
+    if (!tokenInput.trim()) { toast("Enter your Anthropic API key", "error"); return; }
+    setSavingToken(true);
+    try {
+      await api.post("/admin/settings/anthropic", { apiKey: tokenInput.trim() });
+      setTokenInput(""); setTokenConnected(true);
+      toast("Anthropic API connected", "success");
+    } catch (err) { toast(err.response?.data?.message || "Failed to save key", "error"); }
+    finally { setSavingToken(false); }
+  };
+  const disconnectToken = async () => {
+    if (!window.confirm("Disconnect the Anthropic API key? The AI Bot will stop working until you reconnect.")) return;
+    try { await api.delete("/admin/settings/anthropic"); setTokenConnected(false); toast("Disconnected", "success"); }
+    catch { toast("Failed to disconnect", "error"); }
+  };
+
+  const saveSettings = async (patch) => {
+    const next = { ...settings, ...patch };
+    setSettings(next);
+    setSaving(true);
+    try {
+      const res = await api.post("/admin/whatsapp/bot-settings", next);
+      setSettings(res.data);
+    } catch (err) { toast(err.response?.data?.message || "Failed to save", "error"); }
+    finally { setSaving(false); }
+  };
+
+  const toggleInstanceEnabled = (instanceId) => {
+    const has = settings.enabledInstanceIds.includes(instanceId);
+    const next = has ? settings.enabledInstanceIds.filter((id) => id !== instanceId) : [...settings.enabledInstanceIds, instanceId];
+    saveSettings({ enabledInstanceIds: next });
+  };
+
+  const sendTest = async () => {
+    if (!testInput.trim()) return;
+    const userMsg = { role: "user", content: testInput.trim() };
+    setTestHistory((prev) => [...prev, userMsg]);
+    setTestInput("");
+    setTesting(true);
+    try {
+      const res = await api.post("/admin/whatsapp/bot-test", { message: userMsg.content, history: testHistory });
+      setTestHistory((prev) => [...prev, { role: "assistant", content: res.data?.reply || "" }]);
+    } catch (err) {
+      toast(err.response?.data?.message || "Test failed", "error");
+      setTestHistory((prev) => prev.slice(0, -1));
+    } finally { setTesting(false); }
+  };
+
+  return (
+    <div>
+      <p className="text-sm text-gray-500 mb-5">
+        Auto-replies to incoming WhatsApp messages using Claude, based on the instructions you write below. It only runs on numbers you explicitly turn it on for — connecting a new number never starts auto-responding by itself.
+      </p>
+
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 mb-6">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="font-bold text-gray-800 text-sm">Anthropic API</h3>
+          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${tokenConnected ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-gray-500"}`}>
+            {tokenConnected ? "Connected" : "Not connected"}
+          </span>
+        </div>
+        <p className="text-xs text-gray-500 mb-3">Get a key from <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" className="text-rose-600 underline">console.anthropic.com</a> → API Keys.</p>
+        {tokenLoading ? (
+          <p className="text-xs text-gray-400">Loading…</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            <input type="password" value={tokenInput} onChange={(e) => setTokenInput(e.target.value)} placeholder={tokenConnected ? "Enter a new key to replace it" : "Paste your Anthropic API key"}
+              className="flex-1 min-w-[220px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
+            <Btn onClick={saveToken} disabled={savingToken}>{savingToken ? "Saving…" : tokenConnected ? "Update" : "Connect"}</Btn>
+            {tokenConnected && <Btn variant="danger" onClick={disconnectToken}>Disconnect</Btn>}
+          </div>
+        )}
+      </div>
+
+      {loadingSettings ? (
+        <p className="text-sm text-gray-400">Loading…</p>
+      ) : (
+        <>
+          <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-gray-800 text-sm">Bot Status</h3>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" checked={settings.enabled} onChange={(e) => saveSettings({ enabled: e.target.checked })} className="w-4 h-4 accent-rose-600" disabled={!tokenConnected} />
+                <span className="text-sm font-semibold text-gray-700">{settings.enabled ? "Enabled" : "Disabled"}</span>
+              </label>
+            </div>
+            {!tokenConnected && <p className="text-xs text-amber-600 mb-3">Connect your Anthropic API key above first.</p>}
+
+            <label className="block text-xs font-bold text-gray-600 mb-1">Model</label>
+            <select value={settings.model} onChange={(e) => saveSettings({ model: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white mb-4">
+              <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fastest, cheapest, good for quick replies</option>
+              <option value="claude-sonnet-5">Claude Sonnet 5 — more capable, a bit slower</option>
+            </select>
+
+            <label className="block text-xs font-bold text-gray-600 mb-1">Which numbers should auto-reply?</label>
+            {instances.length === 0 ? (
+              <p className="text-xs text-gray-400">Add a WhatsApp number in the Numbers tab first.</p>
+            ) : (
+              <div className="space-y-1.5">
+                {instances.map((inst) => (
+                  <label key={inst._id} className="flex items-center gap-2 cursor-pointer text-sm">
+                    <input type="checkbox" checked={settings.enabledInstanceIds.includes(inst.instanceId)} onChange={() => toggleInstanceEnabled(inst.instanceId)} className="w-4 h-4 accent-rose-600" />
+                    {inst.label}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 mb-6">
+            <h3 className="font-bold text-gray-800 text-sm mb-1">Train the Bot</h3>
+            <p className="text-xs text-gray-500 mb-3">Describe your business, what it should answer, its tone, and when it should say it can't help and a human will follow up — the more specific, the better.</p>
+            <textarea
+              value={settings.instructions}
+              onChange={(e) => setSettings((s) => ({ ...s, instructions: e.target.value }))}
+              onBlur={() => saveSettings({ instructions: settings.instructions })}
+              rows={8}
+              placeholder={'e.g. "You are a support assistant for Motiviam, an e-commerce and digital marketing course platform. Answer questions about course pricing, content, and enrollment using only the facts given here: [list your courses/prices]. Keep replies short and friendly, in the language the customer writes in. If asked about a refund or anything you\'re unsure about, say a team member will follow up shortly — never promise a refund or discount yourself."'}
+              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-rose-500"
+            />
+            {saving && <p className="text-[11px] text-gray-400 mt-1">Saving…</p>}
+          </div>
+
+          <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5">
+            <h3 className="font-bold text-gray-800 text-sm mb-1">Test Chat</h3>
+            <p className="text-xs text-gray-500 mb-3">Try it here — this never touches real WhatsApp, it's just you and the bot, using whatever's saved above.</p>
+            <div className="border border-gray-100 rounded-lg p-3 h-64 overflow-y-auto mb-3 bg-gray-50 space-y-2">
+              {testHistory.length === 0 ? (
+                <p className="text-xs text-gray-400 text-center py-8">Send a message below to try it out.</p>
+              ) : (
+                testHistory.map((m, i) => (
+                  <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${m.role === "user" ? "bg-rose-100 text-gray-800" : "bg-white border border-gray-200 text-gray-700"}`}>{m.content}</div>
+                  </div>
+                ))
+              )}
+              {testing && <p className="text-xs text-gray-400">Thinking…</p>}
+            </div>
+            <div className="flex gap-2">
+              <input value={testInput} onChange={(e) => setTestInput(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendTest()}
+                placeholder="Type a message as a customer would…" disabled={!tokenConnected}
+                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
+              <Btn onClick={sendTest} disabled={testing || !tokenConnected}>Send</Btn>
+              {testHistory.length > 0 && <Btn variant="secondary" onClick={() => setTestHistory([])}>Clear</Btn>}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 
 function TagsPage({ toast }) {
   const { API: api } = useAuth();
