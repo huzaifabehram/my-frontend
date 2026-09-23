@@ -1665,13 +1665,38 @@ function ReviewImporterPage({ toast, courses }) {
 // Workflow's "Send WhatsApp Message" action.
 
 function WhatsAppPage({ toast }) {
+  const [subTab, setSubTab] = useState("numbers"); // numbers | messages
+  const { API: api } = useAuth();
+  const [instances, setInstances] = useState([]);
+  const [loadingInstances, setLoadingInstances] = useState(true);
+
+  const loadInstances = useCallback(() => {
+    setLoadingInstances(true);
+    api.get("/admin/whatsapp/instances").then((res) => setInstances(res.data || [])).catch(() => toast("Failed to load WhatsApp numbers", "error")).finally(() => setLoadingInstances(false));
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { loadInstances(); }, [loadInstances]);
+
+  return (
+    <div>
+      <SectionHeader title="WhatsApp" />
+      <div className="flex gap-2 mb-5">
+        <Btn variant={subTab === "numbers" ? "primary" : "secondary"} size="sm" onClick={() => setSubTab("numbers")}>Numbers</Btn>
+        <Btn variant={subTab === "messages" ? "primary" : "secondary"} size="sm" onClick={() => setSubTab("messages")}>Messages</Btn>
+      </div>
+      {subTab === "numbers"
+        ? <NumbersTab toast={toast} instances={instances} loadingInstances={loadingInstances} setInstances={setInstances} loadInstances={loadInstances} />
+        : <MessagesTab toast={toast} instances={instances} />}
+    </div>
+  );
+}
+
+function NumbersTab({ toast, instances, loadingInstances, setInstances, loadInstances }) {
   const { API: api } = useAuth();
   const [tokenConnected, setTokenConnected] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
   const [tokenLoading, setTokenLoading] = useState(true);
   const [savingToken, setSavingToken] = useState(false);
-  const [instances, setInstances] = useState([]);
-  const [loadingInstances, setLoadingInstances] = useState(true);
   const [busyId, setBusyId] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [addLabel, setAddLabel] = useState("");
@@ -1682,12 +1707,7 @@ function WhatsAppPage({ toast }) {
     api.get("/admin/settings/wabulkify").then((res) => setTokenConnected(!!res.data?.connected)).catch(() => {}).finally(() => setTokenLoading(false));
   }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const loadInstances = useCallback(() => {
-    setLoadingInstances(true);
-    api.get("/admin/whatsapp/instances").then((res) => setInstances(res.data || [])).catch(() => toast("Failed to load WhatsApp numbers", "error")).finally(() => setLoadingInstances(false));
-  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => { loadToken(); loadInstances(); }, [loadToken, loadInstances]);
+  useEffect(() => { loadToken(); }, [loadToken]);
 
   const saveToken = async () => {
     if (!tokenInput.trim()) { toast("Enter your WaBulkify access token", "error"); return; }
@@ -1705,15 +1725,13 @@ function WhatsAppPage({ toast }) {
     catch { toast("Failed to disconnect", "error"); }
   };
 
-  // NEW: this is now the only way to add a number — WaBulkify's own
-  // support team confirmed QR scanning only works on their dashboard, not
-  // through a custom one, so "create instance, show our own QR" (the old
-  // primary flow) genuinely can't work here. You connect the number on
-  // wabulkify.com, then register its Instance ID here so it shows up as an
-  // option in Automation Workflow. There's also no "list all my instances"
-  // endpoint in WaBulkify's documented API, so each number has to be added
-  // this way, one at a time — there isn't a way to auto-sync everything
-  // connected on their dashboard automatically.
+  // This is the only way to add a number — WaBulkify's own support team
+  // confirmed QR scanning only works on their dashboard, not through a
+  // custom one, so "create instance, show our own QR" genuinely can't work
+  // here. You connect the number on wabulkify.com, then register its
+  // Instance ID here so it shows up as an option in Automation Workflow.
+  // There's also no "list all my instances" endpoint in WaBulkify's
+  // documented API, so each number has to be added this way, one at a time.
   const addInstance = async () => {
     if (!addLabel.trim() || !addInstanceId.trim()) { toast("Both fields are required", "error"); return; }
     setBusyId("add");
@@ -1721,7 +1739,7 @@ function WhatsAppPage({ toast }) {
       const res = await api.post("/admin/whatsapp/instances/manual", { label: addLabel.trim(), instanceId: addInstanceId.trim() });
       setInstances((prev) => [res.data, ...prev]);
       setAddLabel(""); setAddInstanceId(""); setShowAddForm(false);
-      toast(`"${res.data.label}" added`, "success");
+      toast(`"${res.data.label}" added — send a test message from the Messages tab to confirm it's really connected`, "success");
     } catch (err) { toast(err.response?.data?.message || "Failed to add instance", "error"); }
     finally { setBusyId(null); }
   };
@@ -1744,9 +1762,8 @@ function WhatsAppPage({ toast }) {
 
   return (
     <div>
-      <SectionHeader title="WhatsApp" />
-      <p className="text-sm text-gray-500 mb-5 -mt-2">
-        Per WaBulkify support: numbers are connected by scanning a QR code on <a href="https://wabulkify.com" target="_blank" rel="noreferrer" className="text-rose-600 underline">wabulkify.com</a> directly — that step can't happen here. Once a number is connected there, register it below with its Instance ID so it becomes available as a sender in Automation Workflow's "Send WhatsApp Message" action (for individual messages and groups alike).
+      <p className="text-sm text-gray-500 mb-5">
+        Per WaBulkify support: numbers are connected by scanning a QR code on <a href="https://wabulkify.com" target="_blank" rel="noreferrer" className="text-rose-600 underline">wabulkify.com</a> directly — that step can't happen here. Once a number is connected there, register it below with its Instance ID so it becomes available as a sender in Automation Workflow's "Send WhatsApp Message" action (for individual messages and groups alike). Not sure it's really connected? Use the <strong>Messages</strong> tab above to send a real test message.
       </p>
 
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 mb-6">
@@ -1811,6 +1828,126 @@ function WhatsAppPage({ toast }) {
                 <Btn size="sm" variant="secondary" onClick={() => runAction(inst, "reboot")} disabled={busyId === inst._id}>Reboot</Btn>
                 <Btn size="sm" variant="danger" onClick={() => deleteInstance(inst)} disabled={busyId === inst._id}>Remove</Btn>
               </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Per-account message history + "Send a Message" — the most reliable way
+// to actually confirm a number is connected: if a real message goes out
+// (and, ideally, arrives), it's genuinely connected, independent of
+// whatever the status badge says.
+function MessagesTab({ toast, instances }) {
+  const { API: api } = useAuth();
+  const [selectedId, setSelectedId] = useState("");
+  const [data, setData] = useState({ messages: [], sentCount: 0, receivedCount: 0, failedCount: 0 });
+  const [loading, setLoading] = useState(false);
+  const [showSend, setShowSend] = useState(false);
+  const [recipientType, setRecipientType] = useState("individual");
+  const [to, setTo] = useState("");
+  const [groupId, setGroupId] = useState("");
+  const [messageText, setMessageText] = useState("");
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    if (instances.length > 0 && !selectedId) setSelectedId(instances[0]._id);
+  }, [instances]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const loadMessages = useCallback(() => {
+    if (!selectedId) return;
+    setLoading(true);
+    api.get(`/admin/whatsapp/messages?instanceId=${instances.find((i) => i._id === selectedId)?.instanceId}`)
+      .then((res) => setData(res.data || {}))
+      .catch(() => toast("Failed to load messages", "error"))
+      .finally(() => setLoading(false));
+  }, [api, selectedId, instances]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { loadMessages(); }, [loadMessages]);
+
+  const sendMessage = async () => {
+    if (!messageText.trim()) { toast("Write a message first", "error"); return; }
+    if (recipientType === "group" ? !groupId.trim() : !to.trim()) { toast(recipientType === "group" ? "Group ID is required" : "Recipient number is required", "error"); return; }
+    setSending(true);
+    try {
+      await api.post("/admin/whatsapp/send", { instanceId: selectedId, recipientType, to, groupId, message: messageText.trim() });
+      toast("Sent — check the recipient's WhatsApp to confirm it arrived", "success");
+      setMessageText(""); setTo(""); setGroupId(""); setShowSend(false);
+      loadMessages();
+    } catch (err) { toast(err.response?.data?.message || "Send failed — this number likely isn't really connected", "error"); }
+    finally { setSending(false); }
+  };
+
+  if (instances.length === 0) {
+    return <EmptyState icon="💬" title="No numbers yet" body='Add a WhatsApp number in the "Numbers" tab first.' />;
+  }
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+          {instances.map((i) => <option key={i._id} value={i._id}>{i.label}</option>)}
+        </select>
+        <Btn onClick={() => setShowSend(true)}>Send a Message</Btn>
+      </div>
+
+      <div className="grid grid-cols-3 gap-3 mb-5">
+        <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
+          <p className="text-2xl font-bold text-gray-900">{data.sentCount || 0}</p>
+          <p className="text-xs text-gray-500">Sent</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
+          <p className="text-2xl font-bold text-gray-900">{data.receivedCount || 0}</p>
+          <p className="text-xs text-gray-500">Received</p>
+        </div>
+        <div className="bg-white rounded-xl border border-gray-100 p-4 text-center">
+          <p className="text-2xl font-bold text-red-500">{data.failedCount || 0}</p>
+          <p className="text-xs text-gray-500">Failed</p>
+        </div>
+      </div>
+
+      {showSend && (
+        <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4 space-y-2.5">
+          <div className="flex gap-3 text-xs">
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" checked={recipientType !== "group"} onChange={() => setRecipientType("individual")} className="accent-rose-600" /> Individual
+            </label>
+            <label className="flex items-center gap-1.5 cursor-pointer">
+              <input type="radio" checked={recipientType === "group"} onChange={() => setRecipientType("group")} className="accent-rose-600" /> Group
+            </label>
+          </div>
+          {recipientType === "group" ? (
+            <input value={groupId} onChange={(e) => setGroupId(e.target.value)} placeholder="Group ID (e.g. 8498761234@g.us)" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          ) : (
+            <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="Phone number, with country code" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
+          )}
+          <textarea value={messageText} onChange={(e) => setMessageText(e.target.value)} rows={3} placeholder="Message…" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none" />
+          <div className="flex gap-2">
+            <Btn onClick={sendMessage} disabled={sending}>{sending ? "Sending…" : "Send"}</Btn>
+            <Btn variant="secondary" onClick={() => setShowSend(false)}>Cancel</Btn>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <p className="text-sm text-gray-400">Loading…</p>
+      ) : data.messages?.length === 0 ? (
+        <EmptyState icon="📭" title="No messages yet" body="Messages sent from this number (via workflows or manually) and any WaBulkify reports as incoming will show up here." />
+      ) : (
+        <div className="space-y-2">
+          {data.messages?.map((m) => (
+            <div key={m._id} className={`rounded-xl p-3 border text-sm ${m.direction === "outgoing" ? "bg-rose-50/50 border-rose-100" : "bg-gray-50 border-gray-100"}`}>
+              <div className="flex items-center justify-between mb-1 flex-wrap gap-1">
+                <span className="text-xs font-bold text-gray-700">{m.direction === "outgoing" ? "→" : "←"} {m.groupId || m.number || "Unknown"}</span>
+                <div className="flex items-center gap-2">
+                  {m.status === "failed" && <span className="text-[10px] font-bold text-red-500">FAILED</span>}
+                  {m.source && <span className="text-[10px] text-gray-400">{m.source}</span>}
+                  <span className="text-[11px] text-gray-400">{new Date(m.createdAt).toLocaleString()}</span>
+                </div>
+              </div>
+              <p className="text-gray-700">{m.message}</p>
             </div>
           ))}
         </div>
