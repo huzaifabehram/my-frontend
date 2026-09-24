@@ -188,6 +188,7 @@ const NAV_ITEMS = [
   { to: "/superadmin/messages",     label: "Messages",      icon: "✉️" },
   { to: "/superadmin/automation",   label: "Automation Workflow", icon: "⚡" },
   { to: "/superadmin/whatsapp",     label: "WhatsApp",      icon: "💬" },
+  { to: "/superadmin/conversation", label: "Conversation",  icon: "🗨️" },
   { to: "/superadmin/pipeline",     label: "Pipeline",      icon: "📊" },
   { to: "/superadmin/review-importer", label: "Review Importer", icon: "⭐" },
   { to: "/superadmin/forms",        label: "Forms",         icon: "📄" },
@@ -812,7 +813,7 @@ function TriggerSidePanel({ meta, onPick, onClose }) {
 // Handles both adding a brand-new step (starts on the "pick a type" list,
 // matching the "Actions — Pick an action for this step" reference screen)
 // and editing an existing one (opens straight into its config form).
-function StepPanel({ meta, assignableUsers, whatsappInstances, tags, selfHostedSessions, initialStep, onSave, onRemove, onClose }) {
+function StepPanel({ meta, assignableUsers, tags, selfHostedSessions, initialStep, onSave, onRemove, onClose }) {
   const [stage, setStage] = useState(initialStep ? "configure" : "pick");
   const [step, setStep] = useState(initialStep || null);
   const [search, setSearch] = useState("");
@@ -939,50 +940,23 @@ function StepPanel({ meta, assignableUsers, whatsappInstances, tags, selfHostedS
           )}
           {step.actionType === "send_whatsapp" && (
             <>
-              {selfHostedSessions?.length > 0 && (
-                <div>
-                  <label className="block text-[11px] font-bold text-gray-500 mb-1">Self-Hosted Server number (takes priority over WaBulkify below, if set)</label>
+              {selfHostedSessions?.length > 0 ? (
+                <>
                   <select value={p.selfHostedSessionId || ""} onChange={(e) => updateParam("selfHostedSessionId", e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
-                    <option value="">Don't use — use WaBulkify below instead</option>
+                    <option value="">Choose a connected number…</option>
                     {selfHostedSessions.map((s) => (
                       <option key={s._id} value={s._id} disabled={s.status !== "connected"}>{s.label} {s.status !== "connected" ? "(not connected)" : ""}</option>
                     ))}
                   </select>
-                </div>
-              )}
-              {whatsappInstances?.length > 0 ? (
-                <>
-                  <select value={p.instanceId || ""} onChange={(e) => updateParam("instanceId", e.target.value)} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
-                    <option value="">Choose a connected number…</option>
-                    {whatsappInstances.map((inst) => (
-                      <option key={inst._id} value={inst._id} disabled={inst.status !== "connected"}>{inst.label} {inst.status !== "connected" ? "(not connected)" : ""}</option>
-                    ))}
-                  </select>
-                  <div className="flex gap-3 text-xs">
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="radio" checked={p.recipientType !== "group"} onChange={() => updateParam("recipientType", "individual")} className="accent-rose-600" /> Individual
-                    </label>
-                    <label className="flex items-center gap-1.5 cursor-pointer">
-                      <input type="radio" checked={p.recipientType === "group"} onChange={() => updateParam("recipientType", "group")} className="accent-rose-600" /> Group
-                    </label>
+                  <div>
+                    <label className="block text-[11px] font-bold text-gray-500 mb-1">To — leave as {"{{whatsapp}}"} to auto-fill from the form/trigger; only change this if you need a different number</label>
+                    <input value={p.to || ""} onChange={(e) => updateParam("to", e.target.value)} placeholder="{{whatsapp}}" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono" />
                   </div>
-                  {p.recipientType === "group" ? (
-                    <input value={p.groupId || ""} onChange={(e) => updateParam("groupId", e.target.value)} placeholder="Group ID (e.g. 8498761234@g.us)" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-                  ) : (
-                    <div>
-                      <label className="block text-[11px] font-bold text-gray-500 mb-1">To — leave as {"{{whatsapp}}"} to auto-fill from the form/trigger; only change this if you need a different number</label>
-                      <input value={p.to || ""} onChange={(e) => updateParam("to", e.target.value)} placeholder="{{whatsapp}}" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm font-mono" />
-                    </div>
-                  )}
                   <RichMessageEditor value={p.message || ""} onChange={(v) => updateParam("message", v)} rows={4} placeholder="WhatsApp message…" />
-                  <div className="grid grid-cols-2 gap-2">
-                    <input value={p.mediaUrl || ""} onChange={(e) => updateParam("mediaUrl", e.target.value)} placeholder="Media URL (optional)" className="border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-                    <input value={p.filename || ""} onChange={(e) => updateParam("filename", e.target.value)} placeholder="Filename (documents only)" className="border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-                  </div>
                 </>
               ) : (
                 <>
-                  <p className="text-[11px] text-amber-600">No WhatsApp numbers connected yet — go to Super Admin → WhatsApp to add one, or this will fall back to the single Meta Cloud API connection in Settings if that's set up.</p>
+                  <p className="text-[11px] text-amber-600">No WhatsApp numbers connected yet — go to Super Admin → WhatsApp → Self-Hosted Server to add one, or this will fall back to the single Meta Cloud API connection in Settings if that's set up.</p>
                   <input value={p.to || ""} onChange={(e) => updateParam("to", e.target.value)} placeholder="To (default: {{whatsapp}})" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
                   <RichMessageEditor value={p.message || ""} onChange={(v) => updateParam("message", v)} rows={4} placeholder="WhatsApp message…" />
                 </>
@@ -1136,13 +1110,12 @@ function AutomationWorkflowEditorPage({ toast, navigate, workflowId }) {
   const [triggerScope, setTriggerScope] = useState({});
   const [allCourses, setAllCourses] = useState([]);
   const [forms, setForms] = useState([]);
-  const [whatsappInstances, setWhatsappInstances] = useState([]);
   const [tags, setTags] = useState([]);
   const [selfHostedSessions, setSelfHostedSessions] = useState([]);
 
   useEffect(() => {
-    Promise.all([api.get("/admin/workflows/meta"), api.get("/admin/assignable-users"), api.get("/admin/courses"), api.get("/admin/forms"), api.get("/admin/whatsapp/instances"), api.get("/admin/tags"), api.get("/admin/whatsapp-server/sessions").catch(() => ({ data: [] }))])
-      .then(([mRes, uRes, cRes, fRes, wRes, tRes, sRes]) => { setMeta(mRes.data || {}); setAssignableUsers(uRes.data || []); setAllCourses(cRes.data || []); setForms(fRes.data || []); setWhatsappInstances(wRes.data || []); setTags(tRes.data || []); setSelfHostedSessions(sRes.data || []); })
+    Promise.all([api.get("/admin/workflows/meta"), api.get("/admin/assignable-users"), api.get("/admin/courses"), api.get("/admin/forms"), api.get("/admin/tags"), api.get("/admin/whatsapp-server/sessions").catch(() => ({ data: [] }))])
+      .then(([mRes, uRes, cRes, fRes, tRes, sRes]) => { setMeta(mRes.data || {}); setAssignableUsers(uRes.data || []); setAllCourses(cRes.data || []); setForms(fRes.data || []); setTags(tRes.data || []); setSelfHostedSessions(sRes.data || []); })
       .catch(() => {});
   }, [api]);
 
@@ -1361,7 +1334,6 @@ function AutomationWorkflowEditorPage({ toast, navigate, workflowId }) {
         <StepPanel
           meta={meta}
           assignableUsers={assignableUsers}
-          whatsappInstances={whatsappInstances}
           tags={tags}
           selfHostedSessions={selfHostedSessions}
           initialStep={editIndex !== null ? steps[editIndex] : null}
@@ -1691,291 +1663,92 @@ function ReviewImporterPage({ toast, courses }) {
 // free-typed differently each time.
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WHATSAPP — Super Admin panel (WaBulkify — multiple QR-connected numbers)
+// WHATSAPP — Super Admin panel (self-hosted server — connect as many numbers as you want)
 // ─────────────────────────────────────────────────────────────────────────────
-// "Add a WhatsApp Number" creates an instance on WaBulkify, shows its QR
-// code to scan, then polls until the webhook (POST /api/whatsapp/webhook)
-// reports it connected — add as many numbers as you want this way. Any
-// connected instance can then be picked as the sender in the Automation
-// Workflow's "Send WhatsApp Message" action.
+// Numbers are connected by scanning a QR code (Self-Hosted Server tab),
+// then usable as a sender in Automation Workflow's "Send WhatsApp Message"
+// action, and viewable message-by-message here or per-contact in the
+// Conversation tab.
 
 function WhatsAppPage({ toast }) {
-  const [subTab, setSubTab] = useState("numbers"); // numbers | messages | aibot | selfhosted
+  const [subTab, setSubTab] = useState("selfhosted"); // selfhosted | messages | aibot
   const { API: api } = useAuth();
-  const [instances, setInstances] = useState([]);
-  const [loadingInstances, setLoadingInstances] = useState(true);
+  const [sessions, setSessions] = useState([]);
+  const [loadingSessions, setLoadingSessions] = useState(true);
 
-  const loadInstances = useCallback(() => {
-    setLoadingInstances(true);
-    api.get("/admin/whatsapp/instances").then((res) => setInstances(res.data || [])).catch(() => toast("Failed to load WhatsApp numbers", "error")).finally(() => setLoadingInstances(false));
+  const loadSessions = useCallback(() => {
+    setLoadingSessions(true);
+    api.get("/admin/whatsapp-server/sessions").then((res) => setSessions(res.data || [])).catch(() => toast("Failed to load WhatsApp numbers — is the self-hosted server installed?", "error")).finally(() => setLoadingSessions(false));
   }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  useEffect(() => { loadInstances(); }, [loadInstances]);
+  useEffect(() => { loadSessions(); }, [loadSessions]);
 
   return (
     <div>
       <SectionHeader title="WhatsApp" />
       <div className="flex gap-2 mb-5 flex-wrap">
-        <Btn variant={subTab === "numbers" ? "primary" : "secondary"} size="sm" onClick={() => setSubTab("numbers")}>Numbers</Btn>
+        <Btn variant={subTab === "selfhosted" ? "primary" : "secondary"} size="sm" onClick={() => setSubTab("selfhosted")}>Self-Hosted Server</Btn>
         <Btn variant={subTab === "messages" ? "primary" : "secondary"} size="sm" onClick={() => setSubTab("messages")}>Messages</Btn>
         <Btn variant={subTab === "aibot" ? "primary" : "secondary"} size="sm" onClick={() => setSubTab("aibot")}>AI Bot</Btn>
-        <Btn variant={subTab === "selfhosted" ? "primary" : "secondary"} size="sm" onClick={() => setSubTab("selfhosted")}>Self-Hosted Server</Btn>
       </div>
-      {subTab === "numbers" ? (
-        <NumbersTab toast={toast} instances={instances} loadingInstances={loadingInstances} setInstances={setInstances} loadInstances={loadInstances} />
+      {subTab === "selfhosted" ? (
+        <SelfHostedServerTab toast={toast} sessions={sessions} loadingSessions={loadingSessions} loadSessions={loadSessions} />
       ) : subTab === "messages" ? (
-        <MessagesTab toast={toast} instances={instances} />
-      ) : subTab === "selfhosted" ? (
-        <SelfHostedServerTab toast={toast} />
+        <MessagesTab toast={toast} sessions={sessions} />
       ) : (
-        <AiBotTab toast={toast} instances={instances} />
+        <AiBotTab toast={toast} sessions={sessions} />
       )}
     </div>
   );
 }
 
-function NumbersTab({ toast, instances, loadingInstances, setInstances, loadInstances }) {
-  const { API: api } = useAuth();
-  const [tokenConnected, setTokenConnected] = useState(false);
-  const [tokenInput, setTokenInput] = useState("");
-  const [tokenLoading, setTokenLoading] = useState(true);
-  const [savingToken, setSavingToken] = useState(false);
-  const [busyId, setBusyId] = useState(null);
-  const [showAddForm, setShowAddForm] = useState(false);
-  const [addLabel, setAddLabel] = useState("");
-  const [addInstanceId, setAddInstanceId] = useState("");
-  const [qrFor, setQrFor] = useState(null); // instance currently showing its QR
-  const [qrImage, setQrImage] = useState("");
-  const [qrLoading, setQrLoading] = useState(false);
-  const [qrDebugRaw, setQrDebugRaw] = useState("");
-
-  const loadToken = useCallback(() => {
-    setTokenLoading(true);
-    api.get("/admin/settings/wabulkify").then((res) => setTokenConnected(!!res.data?.connected)).catch(() => {}).finally(() => setTokenLoading(false));
-  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  useEffect(() => { loadToken(); }, [loadToken]);
-
-  const openQr = async (instance) => {
-    setQrFor(instance);
-    setQrImage("");
-    setQrDebugRaw("");
-    setQrLoading(true);
-    try {
-      const res = await api.post(`/admin/whatsapp/instances/${instance._id}/qrcode`);
-      if (res.data?.qrCode) {
-        setQrImage(res.data.qrCode);
-      } else {
-        setQrDebugRaw(res.data?.raw || "");
-        toast("WaBulkify didn't return a QR image — see the details below.", "error");
-      }
-    } catch (err) { toast(err.response?.data?.message || "Failed to fetch QR code", "error"); }
-    finally { setQrLoading(false); }
-  };
-
-  const saveToken = async () => {
-    if (!tokenInput.trim()) { toast("Enter your WaBulkify access token", "error"); return; }
-    setSavingToken(true);
-    try {
-      await api.post("/admin/settings/wabulkify", { accessToken: tokenInput.trim() });
-      setTokenInput(""); setTokenConnected(true);
-      toast("WaBulkify connected", "success");
-    } catch (err) { toast(err.response?.data?.message || "Failed to save token", "error"); }
-    finally { setSavingToken(false); }
-  };
-  const disconnectToken = async () => {
-    if (!window.confirm("Disconnect WaBulkify? Every connected number will stop being able to send until you reconnect.")) return;
-    try { await api.delete("/admin/settings/wabulkify"); setTokenConnected(false); toast("Disconnected", "success"); }
-    catch { toast("Failed to disconnect", "error"); }
-  };
-
-  // This is the only way to add a number — WaBulkify's own support team
-  // confirmed QR scanning only works on their dashboard, not through a
-  // custom one, so "create instance, show our own QR" genuinely can't work
-  // here. You connect the number on wabulkify.com, then register its
-  // Instance ID here so it shows up as an option in Automation Workflow.
-  // There's also no "list all my instances" endpoint in WaBulkify's
-  // documented API, so each number has to be added this way, one at a time.
-  const addInstance = async () => {
-    if (!addLabel.trim() || !addInstanceId.trim()) { toast("Both fields are required", "error"); return; }
-    setBusyId("add");
-    try {
-      const res = await api.post("/admin/whatsapp/instances/manual", { label: addLabel.trim(), instanceId: addInstanceId.trim() });
-      setInstances((prev) => [res.data, ...prev]);
-      setAddLabel(""); setAddInstanceId(""); setShowAddForm(false);
-      toast(`"${res.data.label}" added — send a test message from the Messages tab to confirm it's really connected`, "success");
-    } catch (err) { toast(err.response?.data?.message || "Failed to add instance", "error"); }
-    finally { setBusyId(null); }
-  };
-
-  const runAction = async (instance, action) => {
-    setBusyId(instance._id);
-    try {
-      const res = await api.post(`/admin/whatsapp/instances/${instance._id}/${action}`);
-      setInstances((prev) => prev.map((i) => (i._id === instance._id ? res.data : i)));
-      toast(`${action[0].toUpperCase() + action.slice(1)} done`, "success");
-    } catch (err) { toast(err.response?.data?.message || `Failed to ${action}`, "error"); }
-    finally { setBusyId(null); }
-  };
-
-  const deleteInstance = async (instance) => {
-    if (!window.confirm(`Remove "${instance.label}"? This only removes it here — it stays connected on WaBulkify's dashboard.`)) return;
-    try { await api.delete(`/admin/whatsapp/instances/${instance._id}`); setInstances((prev) => prev.filter((i) => i._id !== instance._id)); toast("Removed", "success"); }
-    catch { toast("Failed to remove", "error"); }
-  };
-
-  return (
-    <div>
-      <p className="text-sm text-gray-500 mb-5">
-        Per WaBulkify support: numbers are connected by scanning a QR code on <a href="https://wabulkify.com" target="_blank" rel="noreferrer" className="text-rose-600 underline">wabulkify.com</a> directly — that step can't happen here. Once a number is connected there, register it below with its Instance ID so it becomes available as a sender in Automation Workflow's "Send WhatsApp Message" action (for individual messages and groups alike). Not sure it's really connected? Use the <strong>Messages</strong> tab above to send a real test message.
-      </p>
-
-      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 mb-6">
-        <div className="flex items-center justify-between mb-1">
-          <h3 className="font-bold text-gray-800 text-sm">WaBulkify Account</h3>
-          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${tokenConnected ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-gray-500"}`}>
-            {tokenConnected ? "Connected" : "Not connected"}
-          </span>
-        </div>
-        <p className="text-xs text-gray-500 mb-3">One access token from your wabulkify.com account authenticates every number below — needed for sending, reboot, reconnect, etc.</p>
-        {tokenLoading ? (
-          <p className="text-xs text-gray-400">Loading…</p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            <input type="password" value={tokenInput} onChange={(e) => setTokenInput(e.target.value)} placeholder={tokenConnected ? "Enter a new token to replace it" : "Paste your WaBulkify access token"}
-              className="flex-1 min-w-[220px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
-            <Btn onClick={saveToken} disabled={savingToken}>{savingToken ? "Saving…" : tokenConnected ? "Update" : "Connect"}</Btn>
-            {tokenConnected && <Btn variant="danger" onClick={disconnectToken}>Disconnect</Btn>}
-          </div>
-        )}
-      </div>
-
-      <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-        <h3 className="font-bold text-gray-800 text-sm">Connected Numbers</h3>
-        <Btn onClick={() => setShowAddForm(true)} disabled={!tokenConnected}>+ Add WhatsApp Number</Btn>
-      </div>
-      {!tokenConnected && <p className="text-xs text-amber-600 mb-3">Connect your WaBulkify account above first.</p>}
-
-      {showAddForm && (
-        <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4">
-          <p className="text-xs text-gray-500 mb-3">
-            1. Go to your <a href="https://wabulkify.com" target="_blank" rel="noreferrer" className="text-rose-600 underline">WaBulkify dashboard</a> and add/scan a WhatsApp number there.<br/>
-            2. Copy the Instance ID it shows you (e.g. <code className="bg-gray-100 px-1 rounded">6AB3A1A76BD76</code>).<br/>
-            3. Paste it below to make it available here.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <input value={addLabel} onChange={(e) => setAddLabel(e.target.value)} placeholder="Name this number — e.g. Sales, Support"
-              className="flex-1 min-w-[160px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
-            <input value={addInstanceId} onChange={(e) => setAddInstanceId(e.target.value)} placeholder="Instance ID from WaBulkify's dashboard"
-              className="flex-1 min-w-[200px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
-            <Btn onClick={addInstance} disabled={busyId === "add"}>{busyId === "add" ? "Adding…" : "Add"}</Btn>
-            <Btn variant="secondary" onClick={() => setShowAddForm(false)}>Cancel</Btn>
-          </div>
-        </div>
-      )}
-
-      {loadingInstances ? (
-        <p className="text-sm text-gray-400">Loading…</p>
-      ) : instances.length === 0 ? (
-        <EmptyState icon="💬" title="No numbers added yet" body={'Connect a number on WaBulkify\'s dashboard first, then click "+ Add WhatsApp Number" and paste its Instance ID here.'} />
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {instances.map((inst) => (
-            <div key={inst._id} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <p className="font-bold text-gray-900">{inst.label}</p>
-                <StatusBadge status={inst.status === "connected" ? "verified" : inst.status === "disconnected" ? "rejected" : "pending"} />
-              </div>
-              <p className="text-xs text-gray-500 mb-3 font-mono">{inst.instanceId}</p>
-              <div className="flex flex-wrap gap-1.5">
-                <Btn size="sm" onClick={() => openQr(inst)} disabled={qrLoading && qrFor?._id === inst._id}>Show QR</Btn>
-                <Btn size="sm" variant="secondary" onClick={() => runAction(inst, "reconnect")} disabled={busyId === inst._id}>Reconnect</Btn>
-                <Btn size="sm" variant="secondary" onClick={() => runAction(inst, "reboot")} disabled={busyId === inst._id}>Reboot</Btn>
-                <Btn size="sm" variant="danger" onClick={() => deleteInstance(inst)} disabled={busyId === inst._id}>Remove</Btn>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {qrFor && (
-        <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={() => setQrFor(null)}>
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-bold text-gray-900 mb-1">Scan to connect "{qrFor.label}"</h3>
-            <p className="text-xs text-gray-500 mb-4">Open WhatsApp on that phone → Linked Devices → Link a Device, then scan this code.</p>
-            {qrLoading ? (
-              <p className="text-sm text-gray-400 py-10">Loading QR code…</p>
-            ) : qrImage ? (
-              <img src={qrImage.startsWith("http") || qrImage.startsWith("data:") ? qrImage : `data:image/png;base64,${qrImage}`} alt="WhatsApp QR code" className="w-56 h-56 mx-auto rounded-lg border border-gray-100" />
-            ) : (
-              <div className="text-left">
-                <p className="text-sm text-amber-600 mb-2">No QR image came back — WaBulkify's response didn't contain one.</p>
-                {qrDebugRaw && (
-                  <pre className="text-[10px] text-gray-500 bg-gray-50 border border-gray-100 rounded-lg p-2 overflow-x-auto whitespace-pre-wrap break-all max-h-32">{qrDebugRaw}</pre>
-                )}
-              </div>
-            )}
-            <Btn variant="secondary" onClick={() => setQrFor(null)} className="mt-4">Close</Btn>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Per-account message history + "Send a Message" — the most reliable way
-// to actually confirm a number is connected: if a real message goes out
-// (and, ideally, arrives), it's genuinely connected, independent of
-// whatever the status badge says.
-function MessagesTab({ toast, instances }) {
+function MessagesTab({ toast, sessions }) {
   const { API: api } = useAuth();
   const [selectedId, setSelectedId] = useState("");
   const [data, setData] = useState({ messages: [], sentCount: 0, receivedCount: 0, failedCount: 0 });
   const [loading, setLoading] = useState(false);
   const [showSend, setShowSend] = useState(false);
-  const [recipientType, setRecipientType] = useState("individual");
   const [to, setTo] = useState("");
-  const [groupId, setGroupId] = useState("");
   const [messageText, setMessageText] = useState("");
   const [sending, setSending] = useState(false);
 
   useEffect(() => {
-    if (instances.length > 0 && !selectedId) setSelectedId(instances[0]._id);
-  }, [instances]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (sessions.length > 0 && !selectedId) setSelectedId(sessions[0]._id);
+  }, [sessions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadMessages = useCallback(() => {
     if (!selectedId) return;
     setLoading(true);
-    api.get(`/admin/whatsapp/messages?instanceId=${instances.find((i) => i._id === selectedId)?.instanceId}`)
+    api.get(`/admin/whatsapp/messages?instanceId=${sessions.find((s) => s._id === selectedId)?.sessionId}`)
       .then((res) => setData(res.data || {}))
       .catch(() => toast("Failed to load messages", "error"))
       .finally(() => setLoading(false));
-  }, [api, selectedId, instances]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [api, selectedId, sessions]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadMessages(); }, [loadMessages]);
 
   const sendMessage = async () => {
     if (!messageText.trim()) { toast("Write a message first", "error"); return; }
-    if (recipientType === "group" ? !groupId.trim() : !to.trim()) { toast(recipientType === "group" ? "Group ID is required" : "Recipient number is required", "error"); return; }
+    if (!to.trim()) { toast("Recipient number is required", "error"); return; }
     setSending(true);
     try {
-      await api.post("/admin/whatsapp/send", { instanceId: selectedId, recipientType, to, groupId, message: messageText.trim() });
+      await api.post("/admin/whatsapp-server/send", { sessionDocId: selectedId, to: to.trim(), message: messageText.trim() });
       toast("Sent — check the recipient's WhatsApp to confirm it arrived", "success");
-      setMessageText(""); setTo(""); setGroupId(""); setShowSend(false);
+      setMessageText(""); setTo(""); setShowSend(false);
       loadMessages();
-    } catch (err) { toast(err.response?.data?.message || "Send failed — this number likely isn't really connected", "error"); }
+    } catch (err) { toast(err.response?.data?.message || "Send failed — is this number connected?", "error"); }
     finally { setSending(false); }
   };
 
-  if (instances.length === 0) {
-    return <EmptyState icon="💬" title="No numbers yet" body='Add a WhatsApp number in the "Numbers" tab first.' />;
+  if (sessions.length === 0) {
+    return <EmptyState icon="💬" title="No numbers yet" body='Add a WhatsApp number in the "Self-Hosted Server" tab first.' />;
   }
 
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <select value={selectedId} onChange={(e) => setSelectedId(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
-          {instances.map((i) => <option key={i._id} value={i._id}>{i.label}</option>)}
+          {sessions.map((s) => <option key={s._id} value={s._id}>{s.label}</option>)}
         </select>
         <Btn onClick={() => setShowSend(true)}>Send a Message</Btn>
       </div>
@@ -1997,19 +1770,7 @@ function MessagesTab({ toast, instances }) {
 
       {showSend && (
         <div className="bg-white rounded-xl border border-gray-100 p-4 mb-4 space-y-2.5">
-          <div className="flex gap-3 text-xs">
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input type="radio" checked={recipientType !== "group"} onChange={() => setRecipientType("individual")} className="accent-rose-600" /> Individual
-            </label>
-            <label className="flex items-center gap-1.5 cursor-pointer">
-              <input type="radio" checked={recipientType === "group"} onChange={() => setRecipientType("group")} className="accent-rose-600" /> Group
-            </label>
-          </div>
-          {recipientType === "group" ? (
-            <input value={groupId} onChange={(e) => setGroupId(e.target.value)} placeholder="Group ID (e.g. 8498761234@g.us)" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-          ) : (
-            <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="Phone number, with country code" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
-          )}
+          <input value={to} onChange={(e) => setTo(e.target.value)} placeholder="Phone number, with country code" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm" />
           <textarea value={messageText} onChange={(e) => setMessageText(e.target.value)} rows={3} placeholder="Message…" className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none" />
           <div className="flex gap-2">
             <Btn onClick={sendMessage} disabled={sending}>{sending ? "Sending…" : "Send"}</Btn>
@@ -2021,7 +1782,7 @@ function MessagesTab({ toast, instances }) {
       {loading ? (
         <p className="text-sm text-gray-400">Loading…</p>
       ) : data.messages?.length === 0 ? (
-        <EmptyState icon="📭" title="No messages yet" body="Messages sent from this number (via workflows or manually) and any WaBulkify reports as incoming will show up here." />
+        <EmptyState icon="📭" title="No messages yet" body="Messages sent from this number (via workflows or manually) and anything received will show up here." />
       ) : (
         <div className="space-y-2">
           {data.messages?.map((m) => (
@@ -2046,16 +1807,16 @@ function MessagesTab({ toast, instances }) {
 
 // "Train AI Bot" — write instructions (system prompt), pick a model, choose
 // exactly which connected numbers should auto-reply, and test it live
-// before turning it on for real customers. Uses Anthropic's Messages API
+// before turning it on for real customers. Uses OpenAI's Chat Completions API
 // directly — a real, documented API, unlike the WaBulkify field-guessing
 // this has needed elsewhere.
-function AiBotTab({ toast, instances }) {
+function AiBotTab({ toast, sessions }) {
   const { API: api } = useAuth();
   const [tokenConnected, setTokenConnected] = useState(false);
   const [tokenInput, setTokenInput] = useState("");
   const [tokenLoading, setTokenLoading] = useState(true);
   const [savingToken, setSavingToken] = useState(false);
-  const [settings, setSettings] = useState({ enabled: false, instructions: "", model: "claude-haiku-4-5-20251001", enabledInstanceIds: [] });
+  const [settings, setSettings] = useState({ enabled: false, instructions: "", model: "gpt-4o-mini", enabledInstanceIds: [] });
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testInput, setTestInput] = useState("");
@@ -2064,7 +1825,7 @@ function AiBotTab({ toast, instances }) {
 
   const loadToken = useCallback(() => {
     setTokenLoading(true);
-    api.get("/admin/settings/anthropic").then((res) => setTokenConnected(!!res.data?.connected)).catch(() => {}).finally(() => setTokenLoading(false));
+    api.get("/admin/settings/openai").then((res) => setTokenConnected(!!res.data?.connected)).catch(() => {}).finally(() => setTokenLoading(false));
   }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadSettings = useCallback(() => {
@@ -2075,18 +1836,18 @@ function AiBotTab({ toast, instances }) {
   useEffect(() => { loadToken(); loadSettings(); }, [loadToken, loadSettings]);
 
   const saveToken = async () => {
-    if (!tokenInput.trim()) { toast("Enter your Anthropic API key", "error"); return; }
+    if (!tokenInput.trim()) { toast("Enter your OpenAI API key", "error"); return; }
     setSavingToken(true);
     try {
-      await api.post("/admin/settings/anthropic", { apiKey: tokenInput.trim() });
+      await api.post("/admin/settings/openai", { apiKey: tokenInput.trim() });
       setTokenInput(""); setTokenConnected(true);
-      toast("Anthropic API connected", "success");
+      toast("OpenAI API connected", "success");
     } catch (err) { toast(err.response?.data?.message || "Failed to save key", "error"); }
     finally { setSavingToken(false); }
   };
   const disconnectToken = async () => {
-    if (!window.confirm("Disconnect the Anthropic API key? The AI Bot will stop working until you reconnect.")) return;
-    try { await api.delete("/admin/settings/anthropic"); setTokenConnected(false); toast("Disconnected", "success"); }
+    if (!window.confirm("Disconnect the OpenAI API key? The AI Bot will stop working until you reconnect.")) return;
+    try { await api.delete("/admin/settings/openai"); setTokenConnected(false); toast("Disconnected", "success"); }
     catch { toast("Failed to disconnect", "error"); }
   };
 
@@ -2101,9 +1862,9 @@ function AiBotTab({ toast, instances }) {
     finally { setSaving(false); }
   };
 
-  const toggleInstanceEnabled = (instanceId) => {
-    const has = settings.enabledInstanceIds.includes(instanceId);
-    const next = has ? settings.enabledInstanceIds.filter((id) => id !== instanceId) : [...settings.enabledInstanceIds, instanceId];
+  const toggleInstanceEnabled = (sessionId) => {
+    const has = settings.enabledInstanceIds.includes(sessionId);
+    const next = has ? settings.enabledInstanceIds.filter((id) => id !== sessionId) : [...settings.enabledInstanceIds, sessionId];
     saveSettings({ enabledInstanceIds: next });
   };
 
@@ -2125,22 +1886,22 @@ function AiBotTab({ toast, instances }) {
   return (
     <div>
       <p className="text-sm text-gray-500 mb-5">
-        Auto-replies to incoming WhatsApp messages using Claude, based on the instructions you write below. It only runs on numbers you explicitly turn it on for — connecting a new number never starts auto-responding by itself.
+        Auto-replies to incoming WhatsApp messages using ChatGPT, based on the instructions you write below. It only runs on numbers you explicitly turn it on for — connecting a new number never starts auto-responding by itself.
       </p>
 
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-5 mb-6">
         <div className="flex items-center justify-between mb-1">
-          <h3 className="font-bold text-gray-800 text-sm">Anthropic API</h3>
+          <h3 className="font-bold text-gray-800 text-sm">OpenAI API</h3>
           <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${tokenConnected ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-gray-500"}`}>
             {tokenConnected ? "Connected" : "Not connected"}
           </span>
         </div>
-        <p className="text-xs text-gray-500 mb-3">Get a key from <a href="https://console.anthropic.com" target="_blank" rel="noreferrer" className="text-rose-600 underline">console.anthropic.com</a> → API Keys.</p>
+        <p className="text-xs text-gray-500 mb-3">Get a key from <a href="https://platform.openai.com/api-keys" target="_blank" rel="noreferrer" className="text-rose-600 underline">platform.openai.com</a> → API Keys.</p>
         {tokenLoading ? (
           <p className="text-xs text-gray-400">Loading…</p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            <input type="password" value={tokenInput} onChange={(e) => setTokenInput(e.target.value)} placeholder={tokenConnected ? "Enter a new key to replace it" : "Paste your Anthropic API key"}
+            <input type="password" value={tokenInput} onChange={(e) => setTokenInput(e.target.value)} placeholder={tokenConnected ? "Enter a new key to replace it" : "Paste your OpenAI API key"}
               className="flex-1 min-w-[220px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
             <Btn onClick={saveToken} disabled={savingToken}>{savingToken ? "Saving…" : tokenConnected ? "Update" : "Connect"}</Btn>
             {tokenConnected && <Btn variant="danger" onClick={disconnectToken}>Disconnect</Btn>}
@@ -2160,23 +1921,23 @@ function AiBotTab({ toast, instances }) {
                 <span className="text-sm font-semibold text-gray-700">{settings.enabled ? "Enabled" : "Disabled"}</span>
               </label>
             </div>
-            {!tokenConnected && <p className="text-xs text-amber-600 mb-3">Connect your Anthropic API key above first.</p>}
+            {!tokenConnected && <p className="text-xs text-amber-600 mb-3">Connect your OpenAI API key above first.</p>}
 
             <label className="block text-xs font-bold text-gray-600 mb-1">Model</label>
             <select value={settings.model} onChange={(e) => saveSettings({ model: e.target.value })} className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white mb-4">
-              <option value="claude-haiku-4-5-20251001">Claude Haiku 4.5 — fastest, cheapest, good for quick replies</option>
-              <option value="claude-sonnet-5">Claude Sonnet 5 — more capable, a bit slower</option>
+              <option value="gpt-4o-mini">GPT-4o mini — fastest, cheapest, good for quick replies</option>
+              <option value="gpt-4o">GPT-4o — more capable, a bit slower and pricier</option>
             </select>
 
             <label className="block text-xs font-bold text-gray-600 mb-1">Which numbers should auto-reply?</label>
-            {instances.length === 0 ? (
-              <p className="text-xs text-gray-400">Add a WhatsApp number in the Numbers tab first.</p>
+            {sessions.length === 0 ? (
+              <p className="text-xs text-gray-400">Add a WhatsApp number in the Self-Hosted Server tab first.</p>
             ) : (
               <div className="space-y-1.5">
-                {instances.map((inst) => (
-                  <label key={inst._id} className="flex items-center gap-2 cursor-pointer text-sm">
-                    <input type="checkbox" checked={settings.enabledInstanceIds.includes(inst.instanceId)} onChange={() => toggleInstanceEnabled(inst.instanceId)} className="w-4 h-4 accent-rose-600" />
-                    {inst.label}
+                {sessions.map((s) => (
+                  <label key={s._id} className="flex items-center gap-2 cursor-pointer text-sm">
+                    <input type="checkbox" checked={settings.enabledInstanceIds.includes(s.sessionId)} onChange={() => toggleInstanceEnabled(s.sessionId)} className="w-4 h-4 accent-rose-600" />
+                    {s.label}
                   </label>
                 ))}
               </div>
@@ -2230,10 +1991,8 @@ function AiBotTab({ toast, instances }) {
 // numbers, real QR codes, single sends, bulk sends with pacing between
 // messages, and an external API key so another app/service can send
 // through it too.
-function SelfHostedServerTab({ toast }) {
+function SelfHostedServerTab({ toast, sessions, loadingSessions, loadSessions }) {
   const { API: api } = useAuth();
-  const [sessions, setSessions] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [newLabel, setNewLabel] = useState("");
   const [creating, setCreating] = useState(false);
@@ -2254,11 +2013,6 @@ function SelfHostedServerTab({ toast }) {
   const [bulkJob, setBulkJob] = useState(null);
   const [startingBulk, setStartingBulk] = useState(false);
 
-  const loadSessions = useCallback(() => {
-    setLoading(true);
-    api.get("/admin/whatsapp-server/sessions").then((res) => setSessions(res.data || [])).catch(() => toast("Failed to load sessions — is the server installed? See the note below if not.", "error")).finally(() => setLoading(false));
-  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const loadKey = useCallback(() => {
     api.get("/admin/settings/whatsapp-server-key").then((res) => setApiKey(res.data?.apiKey || "")).catch(() => {});
   }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -2270,7 +2024,7 @@ function SelfHostedServerTab({ toast }) {
     setCreating(true);
     try {
       const res = await api.post("/admin/whatsapp-server/sessions", { label: newLabel.trim() });
-      setSessions((prev) => [res.data, ...prev]);
+      loadSessions();
       setNewLabel(""); setShowAdd(false);
       openQr(res.data);
     } catch (err) { toast(err.response?.data?.message || "Failed to create session", "error"); }
@@ -2314,7 +2068,7 @@ function SelfHostedServerTab({ toast }) {
 
   const removeSession = async (session) => {
     if (!window.confirm(`Remove "${session.label}"? This logs it out completely.`)) return;
-    try { await api.delete(`/admin/whatsapp-server/sessions/${session._id}`); setSessions((prev) => prev.filter((s) => s._id !== session._id)); toast("Removed", "success"); }
+    try { await api.delete(`/admin/whatsapp-server/sessions/${session._id}`); loadSessions(); toast("Removed", "success"); }
     catch { toast("Failed to remove", "error"); }
   };
 
@@ -2363,7 +2117,7 @@ function SelfHostedServerTab({ toast }) {
   return (
     <div>
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5 text-xs text-amber-700 leading-relaxed">
-        <strong>Before you use this:</strong> this connects to WhatsApp the same unofficial way WaBulkify does — it isn't Meta's official Business API. WhatsApp's Terms of Service don't allow automated/bulk messaging this way, and numbers used for it can be banned by Meta, especially for bulk sends. Use real pacing (already built in below) and avoid sending to people who haven't messaged you first or opted in.
+        <strong>Before you use this:</strong> this connects to WhatsApp an unofficial way, not through Meta's official Business API. WhatsApp's Terms of Service don't allow automated/bulk messaging this way, and numbers used for it can be banned by Meta, especially for bulk sends. Use real pacing (already built in below) and avoid sending to people who haven't messaged you first or opted in.
       </div>
 
       <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
@@ -2380,7 +2134,7 @@ function SelfHostedServerTab({ toast }) {
         </div>
       )}
 
-      {loading ? (
+      {loadingSessions ? (
         <p className="text-sm text-gray-400">Loading…</p>
       ) : sessions.length === 0 ? (
         <EmptyState icon="💬" title="No numbers yet" body='Click "+ Add a Number" to connect your first one by scanning a QR code.' />
@@ -2471,6 +2225,143 @@ function SelfHostedServerTab({ toast }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CONVERSATION — real per-contact chat threads
+// ─────────────────────────────────────────────────────────────────────────────
+// For now this covers WhatsApp only (via the self-hosted server) — the plan
+// is for this to eventually also carry email and Messenger threads in the
+// same place, once those are built. Pick a connected number, see everyone
+// who's messaged it (or been messaged), click one to see the full
+// back-and-forth, reply right there.
+
+function ConversationPage({ toast }) {
+  const { API: api } = useAuth();
+  const [sessions, setSessions] = useState([]);
+  const [loadingSessions, setLoadingSessions] = useState(true);
+  const [selectedSessionId, setSelectedSessionId] = useState("");
+  const [threads, setThreads] = useState([]);
+  const [loadingThreads, setLoadingThreads] = useState(false);
+  const [activeNumber, setActiveNumber] = useState("");
+  const [messages, setMessages] = useState([]);
+  const [loadingMessages, setLoadingMessages] = useState(false);
+  const [replyText, setReplyText] = useState("");
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    setLoadingSessions(true);
+    api.get("/admin/whatsapp-server/sessions")
+      .then((res) => { setSessions(res.data || []); if (res.data?.length > 0) setSelectedSessionId(res.data[0]._id); })
+      .catch(() => toast("Failed to load WhatsApp numbers", "error"))
+      .finally(() => setLoadingSessions(false));
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const selectedSession = sessions.find((s) => s._id === selectedSessionId);
+
+  const loadThreads = useCallback(() => {
+    if (!selectedSession) return;
+    setLoadingThreads(true);
+    api.get(`/admin/whatsapp/conversations?instanceId=${selectedSession.sessionId}`)
+      .then((res) => setThreads(res.data || []))
+      .catch(() => toast("Failed to load conversations", "error"))
+      .finally(() => setLoadingThreads(false));
+  }, [api, selectedSession]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { loadThreads(); setActiveNumber(""); setMessages([]); }, [loadThreads]);
+
+  const openThread = useCallback((number) => {
+    if (!selectedSession) return;
+    setActiveNumber(number);
+    setLoadingMessages(true);
+    api.get(`/admin/whatsapp/conversations/${selectedSession.sessionId}/${number}`)
+      .then((res) => setMessages(res.data?.messages || []))
+      .catch(() => toast("Failed to load this conversation", "error"))
+      .finally(() => setLoadingMessages(false));
+  }, [api, selectedSession]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const sendReply = async () => {
+    if (!replyText.trim() || !activeNumber || !selectedSession) return;
+    setSending(true);
+    try {
+      await api.post("/admin/whatsapp-server/send", { sessionDocId: selectedSession._id, to: activeNumber, message: replyText.trim() });
+      setReplyText("");
+      openThread(activeNumber);
+      loadThreads();
+    } catch (err) { toast(err.response?.data?.message || "Send failed", "error"); }
+    finally { setSending(false); }
+  };
+
+  if (loadingSessions) return <div className="text-center py-16 text-gray-400">Loading…</div>;
+  if (sessions.length === 0) {
+    return (
+      <div>
+        <SectionHeader title="Conversation" />
+        <EmptyState icon="🗨️" title="No numbers connected yet" body='Connect a WhatsApp number in Super Admin → WhatsApp → Self-Hosted Server first.' />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <SectionHeader title="Conversation" />
+      <select value={selectedSessionId} onChange={(e) => setSelectedSessionId(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white mb-4">
+        {sessions.map((s) => <option key={s._id} value={s._id}>{s.label}</option>)}
+      </select>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" style={{ minHeight: 420 }}>
+        <div className="bg-white rounded-xl border border-gray-100 overflow-hidden sm:col-span-1">
+          {loadingThreads ? (
+            <p className="text-sm text-gray-400 p-4">Loading…</p>
+          ) : threads.length === 0 ? (
+            <p className="text-sm text-gray-400 p-4">No conversations yet for this number.</p>
+          ) : (
+            <div className="divide-y divide-gray-100 max-h-[480px] overflow-y-auto">
+              {threads.map((t) => (
+                <button key={t.number} onClick={() => openThread(t.number)}
+                  className={`w-full text-left p-3 cursor-pointer border-none bg-transparent ${activeNumber === t.number ? "bg-rose-50" : "hover:bg-gray-50"}`}>
+                  <p className="text-sm font-semibold text-gray-800">{t.number}</p>
+                  <p className="text-xs text-gray-500 truncate">{t.lastDirection === "outgoing" ? "You: " : ""}{t.lastMessage}</p>
+                  <p className="text-[10px] text-gray-400 mt-0.5">{new Date(t.lastAt).toLocaleString()}</p>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-xl border border-gray-100 sm:col-span-2 flex flex-col">
+          {!activeNumber ? (
+            <div className="flex-1 flex items-center justify-center text-sm text-gray-400 p-8 text-center">Select a conversation on the left to see the full chat.</div>
+          ) : (
+            <>
+              <div className="p-3 border-b border-gray-100">
+                <p className="font-bold text-gray-900 text-sm">{activeNumber}</p>
+              </div>
+              <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-[420px]">
+                {loadingMessages ? (
+                  <p className="text-xs text-gray-400">Loading…</p>
+                ) : (
+                  messages.map((m) => (
+                    <div key={m._id} className={`flex ${m.direction === "outgoing" ? "justify-end" : "justify-start"}`}>
+                      <div className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${m.direction === "outgoing" ? "bg-rose-100 text-gray-800" : "bg-gray-100 text-gray-700"}`}>
+                        <p>{m.message}</p>
+                        <p className="text-[10px] text-gray-400 mt-1">{new Date(m.createdAt).toLocaleString()}{m.status === "failed" ? " — failed" : ""}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+              <div className="p-3 border-t border-gray-100 flex gap-2">
+                <input value={replyText} onChange={(e) => setReplyText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && sendReply()}
+                  placeholder="Type a reply…" className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
+                <Btn onClick={sendReply} disabled={sending}>Send</Btn>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -3360,6 +3251,7 @@ export default function SuperAdminDashboard() {
           <Route path="messages" element={<MessagesPage />} />
           <Route path="automation" element={<AutomationWorkflowPage toast={toast} />} />
           <Route path="whatsapp" element={<WhatsAppPage toast={toast} />} />
+          <Route path="conversation" element={<ConversationPage toast={toast} />} />
           <Route path="pipeline" element={<PipelinePage toast={toast} />} />
           <Route path="review-importer" element={<ReviewImporterPage toast={toast} courses={courses} />} />
           <Route path="forms" element={<FormsPage toast={toast} courses={courses} />} />
