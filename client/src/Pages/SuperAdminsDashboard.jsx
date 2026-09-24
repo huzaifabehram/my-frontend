@@ -2250,6 +2250,9 @@ function ConversationPage({ toast }) {
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [replyText, setReplyText] = useState("");
   const [sending, setSending] = useState(false);
+  const [myPhoto, setMyPhoto] = useState("");
+  const [contactPhoto, setContactPhoto] = useState("");
+  const [presence, setPresence] = useState(null); // null | { lastKnownPresence, lastSeen }
 
   useEffect(() => {
     setLoadingSessions(true);
@@ -2272,14 +2275,27 @@ function ConversationPage({ toast }) {
 
   useEffect(() => { loadThreads(); setActiveNumber(""); setMessages([]); }, [loadThreads]);
 
+  // The connected number's own photo — fetched once per session, shown next
+  // to every message you sent.
+  useEffect(() => {
+    if (!selectedSession) { setMyPhoto(""); return; }
+    api.get(`/admin/whatsapp/profile-photo/${selectedSession.sessionId}/me`).then((res) => setMyPhoto(res.data?.url || "")).catch(() => setMyPhoto(""));
+  }, [selectedSession, api]);
+
   const openThread = useCallback((number) => {
     if (!selectedSession) return;
     setActiveNumber(number);
     setLoadingMessages(true);
+    setContactPhoto("");
+    setPresence(null);
     api.get(`/admin/whatsapp/conversations/${selectedSession.sessionId}/${number}`)
       .then((res) => setMessages(res.data?.messages || []))
       .catch(() => toast("Failed to load this conversation", "error"))
       .finally(() => setLoadingMessages(false));
+    api.get(`/admin/whatsapp/profile-photo/${selectedSession.sessionId}/${number}`).then((res) => setContactPhoto(res.data?.url || "")).catch(() => setContactPhoto(""));
+    // Last seen: many people hide this in their privacy settings, in which
+    // case this comes back null — that's WhatsApp's own behavior, not a bug.
+    api.get(`/admin/whatsapp/presence/${selectedSession.sessionId}/${number}`).then((res) => setPresence(res.data?.presence || null)).catch(() => setPresence(null));
   }, [api, selectedSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sendReply = async () => {
@@ -2292,6 +2308,14 @@ function ConversationPage({ toast }) {
       loadThreads();
     } catch (err) { toast(err.response?.data?.message || "Send failed", "error"); }
     finally { setSending(false); }
+  };
+
+  const presenceLabel = () => {
+    if (!presence) return null;
+    if (presence.lastKnownPresence === "composing") return "typing…";
+    if (presence.lastKnownPresence === "available") return "online";
+    if (presence.lastSeen) return `last seen ${new Date(presence.lastSeen * 1000).toLocaleString()}`;
+    return null;
   };
 
   if (loadingSessions) return <div className="text-center py-16 text-gray-400">Loading…</div>;
@@ -2321,10 +2345,13 @@ function ConversationPage({ toast }) {
             <div className="divide-y divide-gray-100 max-h-[480px] overflow-y-auto">
               {threads.map((t) => (
                 <button key={t.number} onClick={() => openThread(t.number)}
-                  className={`w-full text-left p-3 cursor-pointer border-none bg-transparent ${activeNumber === t.number ? "bg-rose-50" : "hover:bg-gray-50"}`}>
-                  <p className="text-sm font-semibold text-gray-800">{t.number}</p>
-                  <p className="text-xs text-gray-500 truncate">{t.lastDirection === "outgoing" ? "You: " : ""}{t.lastMessage}</p>
-                  <p className="text-[10px] text-gray-400 mt-0.5">{new Date(t.lastAt).toLocaleString()}</p>
+                  className={`w-full text-left p-3 cursor-pointer border-none bg-transparent flex items-center gap-2.5 ${activeNumber === t.number ? "bg-rose-50" : "hover:bg-gray-50"}`}>
+                  <ThreadAvatar sessionId={selectedSession?.sessionId} number={t.number} api={api} />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-gray-800">{t.number}</p>
+                    <p className="text-xs text-gray-500 truncate">{t.lastDirection === "outgoing" ? "You: " : ""}{t.lastMessage}</p>
+                    <p className="text-[10px] text-gray-400 mt-0.5">{new Date(t.lastAt).toLocaleString()}</p>
+                  </div>
                 </button>
               ))}
             </div>
@@ -2336,19 +2363,33 @@ function ConversationPage({ toast }) {
             <div className="flex-1 flex items-center justify-center text-sm text-gray-400 p-8 text-center">Select a conversation on the left to see the full chat.</div>
           ) : (
             <>
-              <div className="p-3 border-b border-gray-100">
-                <p className="font-bold text-gray-900 text-sm">{activeNumber}</p>
+              <div className="p-3 border-b border-gray-100 flex items-center gap-2.5">
+                {contactPhoto ? (
+                  <img src={contactPhoto} alt="" className="w-9 h-9 rounded-full object-cover" />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-xs">👤</div>
+                )}
+                <div>
+                  <p className="font-bold text-gray-900 text-sm">{activeNumber}</p>
+                  {presenceLabel() && <p className="text-[11px] text-gray-400">{presenceLabel()}</p>}
+                </div>
               </div>
               <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-[420px]">
                 {loadingMessages ? (
                   <p className="text-xs text-gray-400">Loading…</p>
                 ) : (
                   messages.map((m) => (
-                    <div key={m._id} className={`flex ${m.direction === "outgoing" ? "justify-end" : "justify-start"}`}>
+                    <div key={m._id} className={`flex items-end gap-2 ${m.direction === "outgoing" ? "justify-end" : "justify-start"}`}>
+                      {m.direction !== "outgoing" && (
+                        contactPhoto ? <img src={contactPhoto} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" /> : <div className="w-6 h-6 rounded-full bg-gray-200 flex-shrink-0" />
+                      )}
                       <div className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${m.direction === "outgoing" ? "bg-rose-100 text-gray-800" : "bg-gray-100 text-gray-700"}`}>
                         <p>{m.message}</p>
                         <p className="text-[10px] text-gray-400 mt-1">{new Date(m.createdAt).toLocaleString()}{m.status === "failed" ? " — failed" : ""}</p>
                       </div>
+                      {m.direction === "outgoing" && (
+                        myPhoto ? <img src={myPhoto} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" /> : <div className="w-6 h-6 rounded-full bg-rose-200 flex-shrink-0" />
+                      )}
                     </div>
                   ))
                 )}
@@ -2364,6 +2405,21 @@ function ConversationPage({ toast }) {
       </div>
     </div>
   );
+}
+
+// Small avatar for the thread list — fetched per-row lazily so opening the
+// list doesn't wait on every contact's photo before showing anything.
+function ThreadAvatar({ sessionId, number, api }) {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    if (!sessionId) return;
+    let cancelled = false;
+    api.get(`/admin/whatsapp/profile-photo/${sessionId}/${number}`).then((res) => { if (!cancelled) setUrl(res.data?.url || ""); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [sessionId, number, api]);
+  return url
+    ? <img src={url} alt="" className="w-9 h-9 rounded-full object-cover flex-shrink-0" />
+    : <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-xs flex-shrink-0">👤</div>;
 }
 
 function TagsPage({ toast }) {
