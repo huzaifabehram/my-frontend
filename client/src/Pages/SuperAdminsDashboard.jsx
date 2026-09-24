@@ -2356,6 +2356,13 @@ function ConversationPage({ toast }) {
     return `+${number}`;
   };
 
+  // Matches WhatsApp's own behavior: show the saved contact name when
+  // there is one, otherwise fall back to the formatted number.
+  const displayLabel = (number) => {
+    const thread = threads.find((t) => t.number === number);
+    return thread?.name || formatDisplayNumber(number);
+  };
+
   const presenceLabel = () => {
     if (!presence) return null;
     if (presence.lastKnownPresence === "composing") return "typing…";
@@ -2394,7 +2401,7 @@ function ConversationPage({ toast }) {
                   className={`w-full text-left p-3 cursor-pointer border-none bg-transparent flex items-center gap-2.5 ${activeNumber === t.number ? "bg-rose-50" : "hover:bg-gray-50"}`}>
                   <ThreadAvatar sessionId={selectedSession?.sessionId} number={t.number} api={api} />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-gray-800">{formatDisplayNumber(t.number)}</p>
+                    <p className="text-sm font-semibold text-gray-800">{displayLabel(t.number)}</p>
                     <p className="text-xs text-gray-500 truncate">{t.lastDirection === "outgoing" ? "You: " : ""}{t.lastMessage}</p>
                     <p className="text-[10px] text-gray-400 mt-0.5">{new Date(t.lastAt).toLocaleString()}</p>
                   </div>
@@ -2416,7 +2423,7 @@ function ConversationPage({ toast }) {
                   <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-xs">👤</div>
                 )}
                 <div>
-                  <p className="font-bold text-gray-900 text-sm">{formatDisplayNumber(activeNumber)}</p>
+                  <p className="font-bold text-gray-900 text-sm">{displayLabel(activeNumber)}</p>
                   {presenceLabel() && <p className="text-[11px] text-gray-400">{presenceLabel()}</p>}
                 </div>
               </button>
@@ -2458,7 +2465,10 @@ function ConversationPage({ toast }) {
             ) : (
               <div className="w-40 h-40 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-5xl mx-auto mb-4">👤</div>
             )}
-            <p className="font-bold text-gray-900 text-lg">{formatDisplayNumber(activeNumber)}</p>
+            <p className="font-bold text-gray-900 text-lg">{displayLabel(activeNumber)}</p>
+            {threads.find((t) => t.number === activeNumber)?.name && (
+              <p className="text-sm text-gray-500">{formatDisplayNumber(activeNumber)}</p>
+            )}
             {presenceLabel() && <p className="text-sm text-gray-400 mt-1">{presenceLabel()}</p>}
             {aboutText && (
               <div className="mt-4 pt-4 border-t border-gray-100 text-left">
