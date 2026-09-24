@@ -2253,6 +2253,8 @@ function ConversationPage({ toast }) {
   const [myPhoto, setMyPhoto] = useState("");
   const [contactPhoto, setContactPhoto] = useState("");
   const [presence, setPresence] = useState(null); // null | { lastKnownPresence, lastSeen }
+  const [showContactInfo, setShowContactInfo] = useState(false);
+  const [aboutText, setAboutText] = useState("");
 
   useEffect(() => {
     setLoadingSessions(true);
@@ -2288,6 +2290,8 @@ function ConversationPage({ toast }) {
     setLoadingMessages(true);
     setContactPhoto("");
     setPresence(null);
+    setAboutText("");
+    setShowContactInfo(false);
     api.get(`/admin/whatsapp/conversations/${selectedSession.sessionId}/${number}`)
       .then((res) => setMessages(res.data?.messages || []))
       .catch(() => toast("Failed to load this conversation", "error"))
@@ -2296,6 +2300,7 @@ function ConversationPage({ toast }) {
     // Last seen: many people hide this in their privacy settings, in which
     // case this comes back null — that's WhatsApp's own behavior, not a bug.
     api.get(`/admin/whatsapp/presence/${selectedSession.sessionId}/${number}`).then((res) => setPresence(res.data?.presence || null)).catch(() => setPresence(null));
+    api.get(`/admin/whatsapp/about/${selectedSession.sessionId}/${number}`).then((res) => setAboutText(res.data?.status || "")).catch(() => setAboutText(""));
   }, [api, selectedSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const sendReply = async () => {
@@ -2363,7 +2368,7 @@ function ConversationPage({ toast }) {
             <div className="flex-1 flex items-center justify-center text-sm text-gray-400 p-8 text-center">Select a conversation on the left to see the full chat.</div>
           ) : (
             <>
-              <div className="p-3 border-b border-gray-100 flex items-center gap-2.5">
+              <button onClick={() => setShowContactInfo(true)} className="p-3 border-b border-gray-100 flex items-center gap-2.5 w-full text-left bg-transparent border-0 border-b border-gray-100 cursor-pointer hover:bg-gray-50">
                 {contactPhoto ? (
                   <img src={contactPhoto} alt="" className="w-9 h-9 rounded-full object-cover" />
                 ) : (
@@ -2373,7 +2378,7 @@ function ConversationPage({ toast }) {
                   <p className="font-bold text-gray-900 text-sm">{activeNumber}</p>
                   {presenceLabel() && <p className="text-[11px] text-gray-400">{presenceLabel()}</p>}
                 </div>
-              </div>
+              </button>
               <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-[420px]">
                 {loadingMessages ? (
                   <p className="text-xs text-gray-400">Loading…</p>
@@ -2403,6 +2408,27 @@ function ConversationPage({ toast }) {
           )}
         </div>
       </div>
+
+      {showContactInfo && (
+        <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-4" onClick={() => setShowContactInfo(false)}>
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center" onClick={(e) => e.stopPropagation()}>
+            {contactPhoto ? (
+              <img src={contactPhoto} alt="" className="w-40 h-40 rounded-full object-cover mx-auto mb-4" />
+            ) : (
+              <div className="w-40 h-40 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-5xl mx-auto mb-4">👤</div>
+            )}
+            <p className="font-bold text-gray-900 text-lg">{activeNumber}</p>
+            {presenceLabel() && <p className="text-sm text-gray-400 mt-1">{presenceLabel()}</p>}
+            {aboutText && (
+              <div className="mt-4 pt-4 border-t border-gray-100 text-left">
+                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wide mb-1">About</p>
+                <p className="text-sm text-gray-700">{aboutText}</p>
+              </div>
+            )}
+            <Btn variant="secondary" onClick={() => setShowContactInfo(false)} className="mt-5">Close</Btn>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
