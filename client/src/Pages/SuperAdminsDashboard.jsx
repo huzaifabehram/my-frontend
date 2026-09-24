@@ -2303,6 +2303,23 @@ function ConversationPage({ toast }) {
     api.get(`/admin/whatsapp/about/${selectedSession.sessionId}/${number}`).then((res) => setAboutText(res.data?.status || "")).catch(() => setAboutText(""));
   }, [api, selectedSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // NEW: real-time-ish updates — plain polling rather than a full
+  // WebSocket push system, refreshing the thread list and (if one is open)
+  // the active conversation every few seconds. Deliberately silent (no
+  // loading spinner, doesn't touch photo/presence/about) so it doesn't
+  // flicker the screen every few seconds — it just quietly keeps messages
+  // current instead of only updating on a manual click/refresh.
+  useEffect(() => {
+    if (!selectedSession) return;
+    const interval = setInterval(() => {
+      api.get(`/admin/whatsapp/conversations?instanceId=${selectedSession.sessionId}`).then((res) => setThreads(res.data || [])).catch(() => {});
+      if (activeNumber) {
+        api.get(`/admin/whatsapp/conversations/${selectedSession.sessionId}/${activeNumber}`).then((res) => setMessages(res.data?.messages || [])).catch(() => {});
+      }
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [selectedSession, activeNumber, api]);
+
   const sendReply = async () => {
     if (!replyText.trim() || !activeNumber || !selectedSession) return;
     setSending(true);
@@ -2313,6 +2330,15 @@ function ConversationPage({ toast }) {
       loadThreads();
     } catch (err) { toast(err.response?.data?.message || "Send failed", "error"); }
     finally { setSending(false); }
+  };
+
+  // "+92 300 1234567"-style display for a real phone number; an unresolved
+  // LID-based contact (see resolveMessageIdentity on the server) is shown
+  // honestly as "Contact" rather than a fake-looking phone number.
+  const formatDisplayNumber = (number) => {
+    if (!number) return "";
+    if (number.startsWith("lid:")) return `Contact (${number.slice(4, 10)}…)`;
+    return `+${number}`;
   };
 
   const presenceLabel = () => {
@@ -2353,7 +2379,7 @@ function ConversationPage({ toast }) {
                   className={`w-full text-left p-3 cursor-pointer border-none bg-transparent flex items-center gap-2.5 ${activeNumber === t.number ? "bg-rose-50" : "hover:bg-gray-50"}`}>
                   <ThreadAvatar sessionId={selectedSession?.sessionId} number={t.number} api={api} />
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold text-gray-800">{t.number}</p>
+                    <p className="text-sm font-semibold text-gray-800">{formatDisplayNumber(t.number)}</p>
                     <p className="text-xs text-gray-500 truncate">{t.lastDirection === "outgoing" ? "You: " : ""}{t.lastMessage}</p>
                     <p className="text-[10px] text-gray-400 mt-0.5">{new Date(t.lastAt).toLocaleString()}</p>
                   </div>
@@ -2375,7 +2401,7 @@ function ConversationPage({ toast }) {
                   <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-xs">👤</div>
                 )}
                 <div>
-                  <p className="font-bold text-gray-900 text-sm">{activeNumber}</p>
+                  <p className="font-bold text-gray-900 text-sm">{formatDisplayNumber(activeNumber)}</p>
                   {presenceLabel() && <p className="text-[11px] text-gray-400">{presenceLabel()}</p>}
                 </div>
               </button>
@@ -2417,7 +2443,7 @@ function ConversationPage({ toast }) {
             ) : (
               <div className="w-40 h-40 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-5xl mx-auto mb-4">👤</div>
             )}
-            <p className="font-bold text-gray-900 text-lg">{activeNumber}</p>
+            <p className="font-bold text-gray-900 text-lg">{formatDisplayNumber(activeNumber)}</p>
             {presenceLabel() && <p className="text-sm text-gray-400 mt-1">{presenceLabel()}</p>}
             {aboutText && (
               <div className="mt-4 pt-4 border-t border-gray-100 text-left">
