@@ -2072,6 +2072,12 @@ function SelfHostedServerTab({ toast, sessions, loadingSessions, loadSessions })
     catch { toast("Failed to remove", "error"); }
   };
 
+  const clearHistory = async (session) => {
+    if (!window.confirm(`Clear all stored message history for "${session.label}"? This doesn't disconnect the number — new messages (and any fresh history WhatsApp resyncs) will still come in.`)) return;
+    try { const res = await api.delete(`/admin/whatsapp-server/sessions/${session._id}/messages`); toast(`Cleared ${res.data?.deletedCount || 0} message(s)`, "success"); }
+    catch { toast("Failed to clear history", "error"); }
+  };
+
   const generateKey = async () => {
     setGeneratingKey(true);
     try { const res = await api.post("/admin/settings/whatsapp-server-key"); setApiKey(res.data?.apiKey || ""); toast("New API key generated", "success"); }
@@ -2152,6 +2158,7 @@ function SelfHostedServerTab({ toast, sessions, loadingSessions, loadSessions })
                 {s.status === "connected" && <Btn size="sm" onClick={() => setShowSend(s)}>Send Message</Btn>}
                 {s.status === "connected" && <Btn size="sm" variant="secondary" onClick={() => setShowBulk(s)}>Bulk Send</Btn>}
                 <Btn size="sm" variant="secondary" onClick={() => reconnect(s)} disabled={busyId === s._id}>Reconnect</Btn>
+                <Btn size="sm" variant="secondary" onClick={() => clearHistory(s)}>Clear History</Btn>
                 <Btn size="sm" variant="danger" onClick={() => removeSession(s)} disabled={busyId === s._id}>Remove</Btn>
               </div>
             </div>
@@ -2303,6 +2310,16 @@ function ConversationPage({ toast }) {
     api.get(`/admin/whatsapp/about/${selectedSession.sessionId}/${number}`).then((res) => setAboutText(res.data?.status || "")).catch(() => setAboutText(""));
   }, [api, selectedSession]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Lightweight message-only refresh — used by the polling interval AND
+  // right after sending, instead of the full openThread(). openThread
+  // resets the loading spinner and re-fetches photo/presence/about every
+  // time, which is exactly what was making the whole chat visibly
+  // "reload" on every send — this only touches the message list.
+  const refreshMessages = useCallback((number) => {
+    if (!selectedSession || !number) return;
+    api.get(`/admin/whatsapp/conversations/${selectedSession.sessionId}/${number}`).then((res) => setMessages(res.data?.messages || [])).catch(() => {});
+  }, [selectedSession, api]);
+
   // NEW: real-time-ish updates — plain polling rather than a full
   // WebSocket push system, refreshing the thread list and (if one is open)
   // the active conversation every few seconds. Deliberately silent (no
@@ -2313,12 +2330,10 @@ function ConversationPage({ toast }) {
     if (!selectedSession) return;
     const interval = setInterval(() => {
       api.get(`/admin/whatsapp/conversations?instanceId=${selectedSession.sessionId}`).then((res) => setThreads(res.data || [])).catch(() => {});
-      if (activeNumber) {
-        api.get(`/admin/whatsapp/conversations/${selectedSession.sessionId}/${activeNumber}`).then((res) => setMessages(res.data?.messages || [])).catch(() => {});
-      }
+      if (activeNumber) refreshMessages(activeNumber);
     }, 4000);
     return () => clearInterval(interval);
-  }, [selectedSession, activeNumber, api]);
+  }, [selectedSession, activeNumber, api, refreshMessages]);
 
   const sendReply = async () => {
     if (!replyText.trim() || !activeNumber || !selectedSession) return;
@@ -2326,7 +2341,7 @@ function ConversationPage({ toast }) {
     try {
       await api.post("/admin/whatsapp-server/send", { sessionDocId: selectedSession._id, to: activeNumber, message: replyText.trim() });
       setReplyText("");
-      openThread(activeNumber);
+      refreshMessages(activeNumber);
       loadThreads();
     } catch (err) { toast(err.response?.data?.message || "Send failed", "error"); }
     finally { setSending(false); }
