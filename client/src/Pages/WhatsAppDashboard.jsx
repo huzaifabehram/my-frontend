@@ -1,51 +1,21 @@
 // WhatsAppDashboard.jsx
 // ══════════════════════════════════════════════════════════════════════════════
-// Super Admin → WhatsApp — pulled out of SuperAdminsDashboard.jsx into its own
-// file, same reason as the backend split (whatsapp.js): that file had grown
-// large enough to be unreliable to keep editing directly.
+// Super Admin → WhatsApp — see the wiring notes in the previous version
+// (import in SuperAdminsDashboard.jsx, route "whatsapp", shared UI from
+// SuperAdminUI.jsx). Nothing about the wiring changed.
 //
-// HOW TO WIRE THIS INTO SuperAdminsDashboard.jsx:
-//
-// 1. Add this import near the top, with the other imports:
-//      import WhatsAppDashboard from "./WhatsAppDashboard";
-//    (adjust the "./" if this file isn't saved in the same folder as
-//    SuperAdminsDashboard.jsx — it must be able to reach
-//    "../context/AuthContext" the same way SuperAdminsDashboard.jsx does)
-//
-// 2. In the <Routes> block inside SuperAdminDashboard(), replace the
-//    existing WhatsApp route:
-//      <Route path="whatsapp" element={<WhatsAppPage toast={toast} />} />
-//    with:
-//      <Route path="whatsapp" element={<WhatsAppDashboard toast={toast} />} />
-//
-// 3. Remove the separate "Conversation" nav item and its route/component
-//    (ConversationPage) — Chats now lives inside this WhatsApp dashboard
-//    instead of being a separate top-level tab, per the new layout.
-//
-// 4. Remove from SuperAdminsDashboard.jsx (now living here instead):
-//      WhatsAppPage, MessagesTab, AiBotTab, SelfHostedServerTab,
-//      ConversationPage, ThreadAvatar — the whole contiguous block from the
-//      "WHATSAPP — Super Admin panel" header comment through the end of
-//      ThreadAvatar, right before TagsPage.
-//    Leave TagsPage and everything else untouched.
-//
-// 5. This file imports four small shared UI primitives — Btn,
-//    SectionHeader, EmptyState, StatusBadge — from a new SuperAdminUI.jsx
-//    file (also provided), not from SuperAdminsDashboard.jsx directly.
-//    That's deliberate: SuperAdminsDashboard.jsx imports this file as a
-//    component, so importing back from it here would be a circular import,
-//    which can cause subtle runtime errors depending on the bundler.
-//    SuperAdminsDashboard.jsx has also been updated to import these same
-//    four from SuperAdminUI.jsx instead of defining them itself — its own
-//    old copies were removed.
-//
-// Backend routes used here are unchanged — this only reorganizes how the
-// existing WhatsApp features are laid out and navigated, per the reference
-// screenshot: an "Add Account" action up top, then a feature list down the
-// left (Chats, Profile, Bulk messaging, Autoresponder, Chatbot, API)
-// instead of the previous flat row of tabs.
+// WHAT CHANGED IN THIS VERSION:
+// - Reconnect now opens the QR modal and shows a fresh QR code to scan
+//   (before, it only showed a "Reconnecting…" toast and no QR at all).
+// - The QR modal detects an expired QR and offers "Get a new QR".
+// - Chat list/header: saved contact name if the number is saved, otherwise
+//   the full number (+92…) with the person's own WhatsApp name as a small
+//   "~name" hint, like WhatsApp Web.
+// - Chat view opens scrolled to the newest message.
+// - Clear History explains the next step (Reconnect → scan) to re-import
+//   the full history.
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
 import { Btn, SectionHeader, EmptyState, StatusBadge } from "./SuperAdminUI";
 
@@ -70,8 +40,9 @@ export default function WhatsAppDashboard({ toast }) {
     setLoadingSessions(true);
     api.get("/admin/whatsapp-server/sessions")
       .then((res) => {
-        setSessions(res.data || []);
-        setSelectedSessionId((prev) => prev || res.data?.[0]?._id || "");
+        const list = res.data || [];
+        setSessions(list);
+        setSelectedSessionId((prev) => (prev && list.some((s) => s._id === prev) ? prev : list[0]?._id || ""));
       })
       .catch(() => toast("Failed to load WhatsApp accounts — is the self-hosted server installed?", "error"))
       .finally(() => setLoadingSessions(false));
@@ -88,7 +59,7 @@ export default function WhatsAppDashboard({ toast }) {
         <Btn onClick={() => setShowAdd(true)}>+ Add account</Btn>
       </div>
 
-      {loadingSessions ? (
+      {loadingSessions && sessions.length === 0 ? (
         <p className="text-sm text-gray-400">Loading…</p>
       ) : sessions.length === 0 ? (
         <EmptyState icon="💬" title="No WhatsApp accounts yet" body='Click "+ Add account" to connect your first number by scanning a QR code.' action={<Btn onClick={() => setShowAdd(true)}>+ Add account</Btn>} />
@@ -144,16 +115,19 @@ export default function WhatsAppDashboard({ toast }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ADD ACCOUNT — QR scan flow
+// ADD ACCOUNT / RECONNECT — QR scan flow
+// Pass `existingSession` to skip the name step and go straight to the QR
+// (used by Profile → Reconnect).
 // ─────────────────────────────────────────────────────────────────────────────
-function AddAccountModal({ toast, onClose, onAdded }) {
+function AddAccountModal({ toast, onClose, onAdded, existingSession }) {
   const { API: api } = useAuth();
-  const [step, setStep] = useState("name"); // name | qr
+  const [step, setStep] = useState(existingSession ? "qr" : "name"); // name | qr
   const [label, setLabel] = useState("");
   const [creating, setCreating] = useState(false);
-  const [session, setSession] = useState(null);
+  const [session, setSession] = useState(existingSession || null);
   const [qrImage, setQrImage] = useState("");
-  const [status, setStatus] = useState("pending_qr");
+  const [expired, setExpired] = useState(false);
+  const [retrying, setRetrying] = useState(false);
 
   const createAccount = async () => {
     if (!label.trim()) { toast("Name this account first", "error"); return; }
@@ -166,21 +140,44 @@ function AddAccountModal({ toast, onClose, onAdded }) {
     finally { setCreating(false); }
   };
 
+  const getNewQr = async () => {
+    if (!session) return;
+    setRetrying(true);
+    try {
+      await api.post(`/admin/whatsapp-server/sessions/${session._id}/reconnect`);
+      setExpired(false);
+      setQrImage("");
+    } catch (err) { toast(err.response?.data?.message || "Failed to get a new QR", "error"); }
+    finally { setRetrying(false); }
+  };
+
   useEffect(() => {
     if (step !== "qr" || !session) return;
-    const interval = setInterval(async () => {
+    let stopped = false;
+    const poll = async () => {
       try {
         const res = await api.get(`/admin/whatsapp-server/sessions/${session._id}/qr`);
-        setStatus(res.data?.status || "pending_qr");
-        if (res.data?.qr) setQrImage(`https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(res.data.qr)}`);
-        if (res.data?.status === "connected") {
-          toast(`"${session.label}" connected!`, "success");
+        if (stopped) return;
+        const { qr, status } = res.data || {};
+        if (status === "connected") {
+          stopped = true;
+          toast(`"${session.label}" connected! Chat history is importing in the background.`, "success");
           onAdded();
           onClose();
+          return;
+        }
+        if (qr) {
+          setExpired(false);
+          setQrImage(`https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(qr)}`);
+        } else {
+          setQrImage("");
+          if (status === "disconnected") setExpired(true);
         }
       } catch { /* keep polling */ }
-    }, 3000);
-    return () => clearInterval(interval);
+    };
+    poll();
+    const interval = setInterval(poll, 2500);
+    return () => { stopped = true; clearInterval(interval); };
   }, [step, session, api]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -200,7 +197,12 @@ function AddAccountModal({ toast, onClose, onAdded }) {
           <>
             <h3 className="font-bold text-gray-900 mb-1">Scan to connect "{session?.label}"</h3>
             <p className="text-xs text-gray-500 mb-4">Open WhatsApp on that phone → Linked Devices → Link a Device, then scan this code.</p>
-            {qrImage ? (
+            {expired ? (
+              <div className="py-8">
+                <p className="text-sm text-gray-500 mb-3">This QR code expired.</p>
+                <Btn onClick={getNewQr} disabled={retrying}>{retrying ? "Getting QR…" : "Get a new QR"}</Btn>
+              </div>
+            ) : qrImage ? (
               <img src={qrImage} alt="WhatsApp QR code" className="w-56 h-56 mx-auto rounded-lg border border-gray-100" />
             ) : (
               <p className="text-sm text-gray-400 py-10">Waiting for the QR code…</p>
@@ -215,9 +217,8 @@ function AddAccountModal({ toast, onClose, onAdded }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CHATS — real per-contact conversation threads, matching WhatsApp itself:
-// saved contact name where available, real number otherwise, profile
-// photos, and a reply box right in the open thread.
+// CHATS — per-contact threads like WhatsApp Web: saved name if saved,
+// otherwise the full number.
 // ─────────────────────────────────────────────────────────────────────────────
 function ChatsFeature({ toast, session }) {
   const { API: api } = useAuth();
@@ -232,41 +233,50 @@ function ChatsFeature({ toast, session }) {
   const [presence, setPresence] = useState(null);
   const [aboutText, setAboutText] = useState("");
   const [showContactInfo, setShowContactInfo] = useState(false);
+  const scrollRef = useRef(null);
 
-  const loadThreads = useCallback(() => {
-    setLoadingThreads(true);
+  const loadThreads = useCallback((silent = false) => {
+    if (!silent) setLoadingThreads(true);
     api.get(`/admin/whatsapp/conversations?instanceId=${session.sessionId}`)
       .then((res) => setThreads(res.data || []))
-      .catch(() => toast("Failed to load conversations", "error"))
-      .finally(() => setLoadingThreads(false));
+      .catch(() => { if (!silent) toast("Failed to load conversations", "error"); })
+      .finally(() => { if (!silent) setLoadingThreads(false); });
   }, [api, session]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { loadThreads(); setActiveNumber(""); setMessages([]); }, [loadThreads]);
 
   const refreshMessages = useCallback((number) => {
     if (!number) return;
-    api.get(`/admin/whatsapp/conversations/${session.sessionId}/${number}`).then((res) => setMessages(res.data?.messages || [])).catch(() => {});
+    api.get(`/admin/whatsapp/conversations/${session.sessionId}/${encodeURIComponent(number)}`)
+      .then((res) => setMessages(res.data?.messages || []))
+      .catch(() => {});
   }, [session, api]);
 
   useEffect(() => {
     const interval = setInterval(() => {
-      loadThreads();
+      loadThreads(true);
       if (activeNumber) refreshMessages(activeNumber);
     }, 4000);
     return () => clearInterval(interval);
   }, [activeNumber, loadThreads, refreshMessages]);
 
+  // Scroll to the newest message when a chat opens or a new message arrives
+  useEffect(() => {
+    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+  }, [messages.length, activeNumber]);
+
   const openThread = (number) => {
     setActiveNumber(number);
     setLoadingMessages(true);
     setContactPhoto(""); setPresence(null); setAboutText(""); setShowContactInfo(false);
-    api.get(`/admin/whatsapp/conversations/${session.sessionId}/${number}`)
+    const n = encodeURIComponent(number);
+    api.get(`/admin/whatsapp/conversations/${session.sessionId}/${n}`)
       .then((res) => setMessages(res.data?.messages || []))
       .catch(() => toast("Failed to load this conversation", "error"))
       .finally(() => setLoadingMessages(false));
-    api.get(`/admin/whatsapp/profile-photo/${session.sessionId}/${number}`).then((res) => setContactPhoto(res.data?.url || "")).catch(() => setContactPhoto(""));
-    api.get(`/admin/whatsapp/presence/${session.sessionId}/${number}`).then((res) => setPresence(res.data?.presence || null)).catch(() => setPresence(null));
-    api.get(`/admin/whatsapp/about/${session.sessionId}/${number}`).then((res) => setAboutText(res.data?.status || "")).catch(() => setAboutText(""));
+    api.get(`/admin/whatsapp/profile-photo/${session.sessionId}/${n}`).then((res) => setContactPhoto(res.data?.url || "")).catch(() => setContactPhoto(""));
+    api.get(`/admin/whatsapp/presence/${session.sessionId}/${n}`).then((res) => setPresence(res.data?.presence || null)).catch(() => setPresence(null));
+    api.get(`/admin/whatsapp/about/${session.sessionId}/${n}`).then((res) => setAboutText(res.data?.status || "")).catch(() => setAboutText(""));
   };
 
   const sendReply = async () => {
@@ -276,17 +286,29 @@ function ChatsFeature({ toast, session }) {
       await api.post("/admin/whatsapp-server/send", { sessionDocId: session._id, to: activeNumber, message: replyText.trim() });
       setReplyText("");
       refreshMessages(activeNumber);
-      loadThreads();
+      loadThreads(true);
     } catch (err) { toast(err.response?.data?.message || "Send failed", "error"); }
     finally { setSending(false); }
   };
 
+  const threadFor = (number) => threads.find((t) => t.number === number);
+  const isLid = (number) => String(number || "").startsWith("lid:");
   const formatDisplayNumber = (number) => {
     if (!number) return "";
-    if (number.startsWith("lid:")) return `Contact (${number.slice(4, 10)}…)`;
+    if (isLid(number)) return `Contact (${number.slice(4, 10)}…)`;
     return `+${number}`;
   };
-  const displayLabel = (number) => threads.find((t) => t.number === number)?.name || formatDisplayNumber(number);
+  // Saved name → full number → (only if WhatsApp hasn't revealed the number yet) their WhatsApp name
+  const displayLabel = (number) => {
+    const t = threadFor(number);
+    if (t?.name) return t.name;
+    if (isLid(number) && t?.pushName) return `~${t.pushName}`;
+    return formatDisplayNumber(number);
+  };
+  const pushNameHint = (number) => {
+    const t = threadFor(number);
+    return !t?.name && !isLid(number) && t?.pushName ? `~${t.pushName}` : "";
+  };
   const presenceLabel = () => {
     if (!presence) return null;
     if (presence.lastKnownPresence === "composing") return "typing…";
@@ -296,7 +318,7 @@ function ChatsFeature({ toast, session }) {
   };
 
   if (session.status !== "connected") {
-    return <EmptyState icon="💬" title="This account isn't connected" body='Go to Profile and reconnect this account to see its chats.' />;
+    return <EmptyState icon="💬" title="This account isn't connected" body='Go to Profile → Reconnect and scan the QR code to see its chats.' />;
   }
 
   return (
@@ -305,15 +327,18 @@ function ChatsFeature({ toast, session }) {
         {loadingThreads ? (
           <p className="text-sm text-gray-400 p-4">Loading…</p>
         ) : threads.length === 0 ? (
-          <p className="text-sm text-gray-400 p-4">No conversations yet.</p>
+          <p className="text-sm text-gray-400 p-4">No conversations yet. If you just connected, chat history is still importing — it appears here automatically.</p>
         ) : (
-          <div className="divide-y divide-gray-100 max-h-[480px] overflow-y-auto">
+          <div className="divide-y divide-gray-100 max-h-[560px] overflow-y-auto">
             {threads.map((t) => (
               <button key={t.number} onClick={() => openThread(t.number)}
                 className={`w-full text-left p-3 cursor-pointer border-none bg-transparent flex items-center gap-2.5 ${activeNumber === t.number ? "bg-rose-50" : "hover:bg-gray-50"}`}>
                 <ThreadAvatar sessionId={session.sessionId} number={t.number} api={api} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-gray-800 truncate">{displayLabel(t.number)}</p>
+                  <p className="text-sm font-semibold text-gray-800 truncate">
+                    {displayLabel(t.number)}
+                    {pushNameHint(t.number) && <span className="ml-1 text-[11px] font-normal text-gray-400">{pushNameHint(t.number)}</span>}
+                  </p>
                   <p className="text-xs text-gray-500 truncate">{t.lastDirection === "outgoing" ? "You: " : ""}{t.lastMessage}</p>
                   <p className="text-[10px] text-gray-400 mt-0.5">{new Date(t.lastAt).toLocaleString()}</p>
                 </div>
@@ -328,19 +353,22 @@ function ChatsFeature({ toast, session }) {
           <div className="flex-1 flex items-center justify-center text-sm text-gray-400 p-8 text-center">Select a conversation on the left to see the full chat.</div>
         ) : (
           <>
-            <button onClick={() => setShowContactInfo(true)} className="p-3 border-b border-gray-100 flex items-center gap-2.5 w-full text-left bg-transparent border-0 border-b border-gray-100 cursor-pointer hover:bg-gray-50">
+            <button onClick={() => setShowContactInfo(true)} className="p-3 flex items-center gap-2.5 w-full text-left bg-transparent border-0 border-b border-gray-100 cursor-pointer hover:bg-gray-50">
               {contactPhoto ? <img src={contactPhoto} alt="" className="w-9 h-9 rounded-full object-cover" /> : <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-xs">👤</div>}
               <div>
-                <p className="font-bold text-gray-900 text-sm">{displayLabel(activeNumber)}</p>
+                <p className="font-bold text-gray-900 text-sm">
+                  {displayLabel(activeNumber)}
+                  {pushNameHint(activeNumber) && <span className="ml-1 text-[11px] font-normal text-gray-400">{pushNameHint(activeNumber)}</span>}
+                </p>
                 {presenceLabel() && <p className="text-[11px] text-gray-400">{presenceLabel()}</p>}
               </div>
             </button>
-            <div className="flex-1 overflow-y-auto p-3 space-y-2 max-h-[420px]">
+            <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-2 max-h-[460px]">
               {loadingMessages ? <p className="text-xs text-gray-400">Loading…</p> : messages.map((m) => (
                 <div key={m._id} className={`flex items-end gap-2 ${m.direction === "outgoing" ? "justify-end" : "justify-start"}`}>
                   {m.direction !== "outgoing" && (contactPhoto ? <img src={contactPhoto} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" /> : <div className="w-6 h-6 rounded-full bg-gray-200 flex-shrink-0" />)}
                   <div className={`max-w-[75%] rounded-lg px-3 py-2 text-sm ${m.direction === "outgoing" ? "bg-rose-100 text-gray-800" : "bg-gray-100 text-gray-700"}`}>
-                    <p>{m.message}</p>
+                    <p className="whitespace-pre-wrap break-words">{m.message}</p>
                     <p className="text-[10px] text-gray-400 mt-1">{new Date(m.createdAt).toLocaleString()}{m.status === "failed" ? " — failed" : ""}</p>
                   </div>
                 </div>
@@ -360,7 +388,8 @@ function ChatsFeature({ toast, session }) {
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center" onClick={(e) => e.stopPropagation()}>
             {contactPhoto ? <img src={contactPhoto} alt="" className="w-40 h-40 rounded-full object-cover mx-auto mb-4" /> : <div className="w-40 h-40 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-5xl mx-auto mb-4">👤</div>}
             <p className="font-bold text-gray-900 text-lg">{displayLabel(activeNumber)}</p>
-            {threads.find((t) => t.number === activeNumber)?.name && <p className="text-sm text-gray-500">{formatDisplayNumber(activeNumber)}</p>}
+            {threadFor(activeNumber)?.name && <p className="text-sm text-gray-500">{formatDisplayNumber(activeNumber)}</p>}
+            {pushNameHint(activeNumber) && <p className="text-sm text-gray-400">{pushNameHint(activeNumber)}</p>}
             {presenceLabel() && <p className="text-sm text-gray-400 mt-1">{presenceLabel()}</p>}
             {aboutText && (
               <div className="mt-4 pt-4 border-t border-gray-100 text-left">
@@ -381,7 +410,7 @@ function ThreadAvatar({ sessionId, number, api }) {
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
-    api.get(`/admin/whatsapp/profile-photo/${sessionId}/${number}`).then((res) => { if (!cancelled) setUrl(res.data?.url || ""); }).catch(() => {});
+    api.get(`/admin/whatsapp/profile-photo/${sessionId}/${encodeURIComponent(number)}`).then((res) => { if (!cancelled) setUrl(res.data?.url || ""); }).catch(() => {});
     return () => { cancelled = true; };
   }, [sessionId, number, api]);
   return url
@@ -390,21 +419,29 @@ function ThreadAvatar({ sessionId, number, api }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PROFILE — this account's own info + connection controls
+// PROFILE — this account's info + connection controls
 // ─────────────────────────────────────────────────────────────────────────────
 function ProfileFeature({ toast, session, onChanged }) {
   const { API: api } = useAuth();
   const [busy, setBusy] = useState(false);
+  const [qrSession, setQrSession] = useState(null);
 
   const reconnect = async () => {
+    if (!window.confirm(`Reconnect "${session.label}"?\n\nThis unlinks the current connection and shows a NEW QR code. Scanning it also re-imports the full chat history.`)) return;
     setBusy(true);
-    try { await api.post(`/admin/whatsapp-server/sessions/${session._id}/reconnect`); toast("Reconnecting…", "success"); onChanged(); }
+    try {
+      await api.post(`/admin/whatsapp-server/sessions/${session._id}/reconnect`);
+      setQrSession(session); // opens the QR modal
+    }
     catch (err) { toast(err.response?.data?.message || "Failed to reconnect", "error"); }
     finally { setBusy(false); }
   };
   const clearHistory = async () => {
-    if (!window.confirm(`Clear all stored message history for "${session.label}"? This doesn't disconnect the account.`)) return;
-    try { const res = await api.delete(`/admin/whatsapp-server/sessions/${session._id}/messages`); toast(`Cleared ${res.data?.deletedCount || 0} message(s)`, "success"); }
+    if (!window.confirm(`Clear all stored message history for "${session.label}"?\n\nThis doesn't disconnect the account. To re-import the full history afterwards, click Reconnect and scan the QR.`)) return;
+    try {
+      const res = await api.delete(`/admin/whatsapp-server/sessions/${session._id}/messages`);
+      toast(`Cleared ${res.data?.deletedCount || 0} message(s). Now click Reconnect and scan the QR to re-import the full history.`, "success");
+    }
     catch { toast("Failed to clear history", "error"); }
   };
   const removeAccount = async () => {
@@ -422,12 +459,22 @@ function ProfileFeature({ toast, session, onChanged }) {
       <div className="space-y-2 text-sm mb-5">
         <div className="flex justify-between"><span className="text-gray-400">Phone number</span><span className="text-gray-800 font-semibold">{session.phoneNumber || "Not connected yet"}</span></div>
         <div className="flex justify-between"><span className="text-gray-400">Status</span><span className="text-gray-800 font-semibold capitalize">{session.status.replace("_", " ")}</span></div>
+        <div className="flex justify-between"><span className="text-gray-400">Instance ID</span><span className="text-gray-800 font-mono text-xs">{session.sessionId}</span></div>
       </div>
       <div className="flex flex-wrap gap-2">
-        <Btn size="sm" variant="secondary" onClick={reconnect} disabled={busy}>Reconnect</Btn>
+        <Btn size="sm" variant="secondary" onClick={reconnect} disabled={busy}>{busy ? "Starting…" : "Reconnect"}</Btn>
         <Btn size="sm" variant="secondary" onClick={clearHistory}>Clear History</Btn>
         <Btn size="sm" variant="danger" onClick={removeAccount} disabled={busy}>Remove Account</Btn>
       </div>
+
+      {qrSession && (
+        <AddAccountModal
+          toast={toast}
+          existingSession={qrSession}
+          onAdded={onChanged}
+          onClose={() => { setQrSession(null); onChanged(); }}
+        />
+      )}
     </div>
   );
 }
@@ -494,10 +541,7 @@ function BulkMessagingFeature({ toast, session }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AUTORESPONDER — honest placeholder. This is a real, distinct feature from
-// the AI-powered Chatbot below (a fixed message sent automatically, no AI
-// involved) — it hasn't been built yet, and this says so plainly instead of
-// faking a working panel.
+// AUTORESPONDER — not built yet (honest placeholder)
 // ─────────────────────────────────────────────────────────────────────────────
 function AutoresponderFeature() {
   return (
@@ -648,7 +692,7 @@ function ChatbotFeature({ toast, sessions }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// API — external access key, so another app/service can send through this
+// API — external access key
 // ─────────────────────────────────────────────────────────────────────────────
 function ApiFeature({ toast }) {
   const { API: api } = useAuth();
