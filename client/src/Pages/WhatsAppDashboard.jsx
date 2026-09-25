@@ -8,6 +8,14 @@
 // - Reconnect now opens the QR modal and shows a fresh QR code to scan
 //   (before, it only showed a "Reconnecting…" toast and no QR at all).
 // - The QR modal detects an expired QR and offers "Get a new QR".
+// - FIX — QR code not rendering: the QR image now comes from the server as a
+//   ready-made data: URL (`qrImage`, generated locally with the `qrcode`
+//   package — see whatsapp.js). Previously the browser asked a third-party
+//   service (api.qrserver.com) to draw it; if that domain was blocked or
+//   unreachable, the QR silently never appeared and the account could never
+//   connect. The old method is kept only as an automatic fallback.
+// - The QR modal now shows a "still waiting on the server…" hint if nothing
+//   has come back after 15 seconds, instead of staying silently blank.
 // - Chat list/header: saved contact name if the number is saved, otherwise
 //   the full number (+92…) with the person's own WhatsApp name as a small
 //   "~name" hint, like WhatsApp Web.
@@ -128,6 +136,7 @@ function AddAccountModal({ toast, onClose, onAdded, existingSession }) {
   const [qrImage, setQrImage] = useState("");
   const [expired, setExpired] = useState(false);
   const [retrying, setRetrying] = useState(false);
+  const [waitedLong, setWaitedLong] = useState(false);
 
   const createAccount = async () => {
     if (!label.trim()) { toast("Name this account first", "error"); return; }
@@ -147,6 +156,7 @@ function AddAccountModal({ toast, onClose, onAdded, existingSession }) {
       await api.post(`/admin/whatsapp-server/sessions/${session._id}/reconnect`);
       setExpired(false);
       setQrImage("");
+      setWaitedLong(false);
     } catch (err) { toast(err.response?.data?.message || "Failed to get a new QR", "error"); }
     finally { setRetrying(false); }
   };
@@ -154,11 +164,14 @@ function AddAccountModal({ toast, onClose, onAdded, existingSession }) {
   useEffect(() => {
     if (step !== "qr" || !session) return;
     let stopped = false;
+    setWaitedLong(false);
+    const longWaitTimer = setTimeout(() => { if (!stopped) setWaitedLong(true); }, 15000);
+
     const poll = async () => {
       try {
         const res = await api.get(`/admin/whatsapp-server/sessions/${session._id}/qr`);
         if (stopped) return;
-        const { qr, status } = res.data || {};
+        const { qr, qrImage: qrImageDataUrl, status } = res.data || {};
         if (status === "connected") {
           stopped = true;
           toast(`"${session.label}" connected! Chat history is importing in the background.`, "success");
@@ -166,7 +179,14 @@ function AddAccountModal({ toast, onClose, onAdded, existingSession }) {
           onClose();
           return;
         }
-        if (qr) {
+        if (qrImageDataUrl) {
+          // Preferred path: QR rendered locally by the server — no
+          // dependency on a reachable third-party image service.
+          setExpired(false);
+          setQrImage(qrImageDataUrl);
+        } else if (qr) {
+          // Fallback only (e.g. the `qrcode` package isn't installed yet on
+          // the server): render via an external image service.
           setExpired(false);
           setQrImage(`https://api.qrserver.com/v1/create-qr-code/?size=256x256&data=${encodeURIComponent(qr)}`);
         } else {
@@ -177,7 +197,7 @@ function AddAccountModal({ toast, onClose, onAdded, existingSession }) {
     };
     poll();
     const interval = setInterval(poll, 2500);
-    return () => { stopped = true; clearInterval(interval); };
+    return () => { stopped = true; clearInterval(interval); clearTimeout(longWaitTimer); };
   }, [step, session, api]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -205,7 +225,15 @@ function AddAccountModal({ toast, onClose, onAdded, existingSession }) {
             ) : qrImage ? (
               <img src={qrImage} alt="WhatsApp QR code" className="w-56 h-56 mx-auto rounded-lg border border-gray-100" />
             ) : (
-              <p className="text-sm text-gray-400 py-10">Waiting for the QR code…</p>
+              <div className="py-10">
+                <p className="text-sm text-gray-400">Waiting for the QR code…</p>
+                {waitedLong && (
+                  <p className="text-xs text-amber-600 mt-3 px-2">
+                    This is taking longer than usual. Check your server's logs for a line starting with
+                    "[Self-hosted WhatsApp]" — if it says a package isn't installed, install it and redeploy.
+                  </p>
+                )}
+              </div>
             )}
             <p className="text-xs text-gray-400 mt-4">Checking connection status automatically…</p>
             <Btn variant="secondary" onClick={onClose} className="mt-3">Close</Btn>
