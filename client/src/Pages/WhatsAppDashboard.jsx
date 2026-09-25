@@ -1,4 +1,5 @@
 // WhatsAppDashboard.jsx
+// Version: chats v2 (fast cache, media, voice, polls, events, contacts, tags)
 // ══════════════════════════════════════════════════════════════════════════════
 // Super Admin → WhatsApp — wiring unchanged (import in SuperAdminsDashboard.jsx,
 // route "whatsapp", shared UI from SuperAdminUI.jsx).
