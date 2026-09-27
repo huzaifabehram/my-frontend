@@ -1,4 +1,4 @@
-// src/Pages/EnrolledPage.jsx  (v1.3)
+// src/Pages/EnrolledPage.jsx  (v1.4)
 // ─────────────────────────────────────────────────────────────────────────────
 // ENROLLMENT PAGE — reached from "Enroll Now" on the course landing page
 // (Shopify.jsx). Two steps:
@@ -17,9 +17,23 @@
 //   • If not logged in, "Confirm Enrollment" registers their account right
 //     here (using the email/password from Step 1), enrolls them, and sends
 //     them to /thank-you — no more detour through a separate register page.
+//
+// NEW (v1.4):
+//   • BUNDLES — a ?bundle=<id> query param (set by the "Enroll Now in this
+//     Bundle" button on Shopify.jsx) selects one of course.bundles; the
+//     order summary and the amount actually submitted switch to that
+//     bundle's own price instead of the plain course price.
+//   • SKIP STEP 1 FOR RETURNING PREVIEW VISITORS — if this browser already
+//     has a saved "preview lead" (Name/Email/WhatsApp captured on Shopify.jsx
+//     before a free lecture preview — see getPreviewLead() there), Step 1's
+//     fields are pre-filled from it and the page opens straight on Step 2,
+//     so a visitor who already gave their details once isn't asked again
+//     within 360 days on the same device. Guests still need a password to
+//     create their student portal login, so Step 2 shows that one field at
+//     its top in this case (it's normally only on Step 1).
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useCourses } from '../context/CoursesContext';
 import { enrollCourse } from '../api/courseApi';
@@ -35,6 +49,26 @@ import {
 // the email + password entered here become the visitor's actual student
 // portal login, created inline when they confirm enrollment. This removes
 // the old detour through a separate /auth/register page after payment.
+
+// NEW: reads the SAME 360-day "preview lead" localStorage entry that
+// Shopify.jsx's free-lecture-preview gate writes (see PREVIEW_LEAD_KEY /
+// getPreviewLead() there) — duplicated here rather than imported, matching
+// this codebase's existing convention of small helper functions living
+// locally in each page file (e.g. getYouTubeId is already duplicated the
+// same way between Shopify.jsx and InstructorDashboard.jsx).
+const PREVIEW_LEAD_KEY = 'lerni_preview_lead_v1';
+const PREVIEW_LEAD_MAX_AGE_DAYS = 360;
+function getPreviewLead() {
+  try {
+    const raw = localStorage.getItem(PREVIEW_LEAD_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data?.savedAt || !data?.name || !data?.email || !data?.whatsapp) return null;
+    const ageDays = (Date.now() - data.savedAt) / (1000 * 60 * 60 * 24);
+    if (ageDays > PREVIEW_LEAD_MAX_AGE_DAYS) return null;
+    return data;
+  } catch { return null; }
+}
 
 // NEW: each method lists one or more full accounts (bank/service name +
 // logo, account title, account number) instead of one crammed line of
@@ -126,14 +160,27 @@ function AccountLogo({ acc, logoUrl }) {
 export default function EnrolledPage() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const [searchParams] = useSearchParams();
   const { user, API: api, register } = useAuth();
   const { courses, getCourse, fetchCourseById } = useCourses();
 
   const [fullCourse, setFullCourse] = useState(null);
   const [courseLoading, setCourseLoading] = useState(true);
 
-  const [step, setStep] = useState(1);
-  const [form, setForm] = useState({ name: '', email: '', whatsapp: '', password: '' });
+  // NEW: if a returning visitor's Step-1 details are already on file (see
+  // getPreviewLead() above), start straight on Step 2, pre-filled — set
+  // once, synchronously, from the very first render so Step 1 never
+  // flashes first.
+  const initialPreviewLead = useMemo(() => (user ? null : getPreviewLead()), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const skippedStep1 = Boolean(initialPreviewLead) && !user;
+
+  const [step, setStep] = useState(skippedStep1 ? 2 : 1);
+  const [form, setForm] = useState({
+    name: initialPreviewLead?.name || '',
+    email: initialPreviewLead?.email || '',
+    whatsapp: initialPreviewLead?.whatsapp || '',
+    password: '',
+  });
   const [errors, setErrors] = useState({});
   const [paymentMethod, setPaymentMethod] = useState('bank');
   const [screenshotFile, setScreenshotFile] = useState(null);
@@ -179,6 +226,7 @@ export default function EnrolledPage() {
   }, [api]);
 
   // Prefill from the logged-in account, if any — same fields still editable.
+  // (Doesn't touch whatsapp/password — those aren't part of the account.)
   useEffect(() => {
     if (user) setForm((f) => ({ ...f, name: f.name || user.name || '', email: f.email || user.email || '' }));
   }, [user]);
@@ -216,12 +264,25 @@ export default function EnrolledPage() {
     return fullCourse || getCourse(id);
   }, [id, fullCourse, courses, getCourse]);
 
+  // NEW: a specific Bundle, if "Enroll Now in this Bundle" was clicked on
+  // the course landing page (?bundle=<bundles[]._id>). Falls back to the
+  // plain course/price everywhere below when there's no match (e.g. the
+  // bundle was removed after the link was shared).
+  const bundleId = searchParams.get('bundle') || '';
+  const selectedBundle = useMemo(() => {
+    if (!bundleId || !course?.bundles) return null;
+    return course.bundles.find((b) => String(b._id) === String(bundleId)) || null;
+  }, [bundleId, course]);
+
   // NEW: course.price is already stored in PKR — the old "* 280" here was
   // treating it as a USD figure and converting it, which is what made the
   // price on this page's order summary come out wrong (same root cause that
-  // was already fixed on the course landing page and homepage).
-  const priceLabel = course ? `PKR ${Number(course.price || 0).toLocaleString()}` : '';
-  const discountPct = course && course.originalPrice > course.price
+  // was already fixed on the course landing page and homepage). When a
+  // Bundle is selected, its own price is what's actually charged.
+  const priceLabel = selectedBundle
+    ? `PKR ${Number(selectedBundle.price || 0).toLocaleString()}`
+    : course ? `PKR ${Number(course.price || 0).toLocaleString()}` : '';
+  const discountPct = !selectedBundle && course && course.originalPrice > course.price
     ? Math.round((1 - course.price / course.originalPrice) * 100)
     : null;
 
@@ -245,6 +306,18 @@ export default function EnrolledPage() {
       else if (form.password.length < 6) e.password = 'Password must be at least 6 characters.';
     }
     setErrors(e);
+    return Object.keys(e).length === 0;
+  }
+
+  // NEW: used when Step 1 was skipped (name/email/whatsapp already known
+  // from a remembered preview lead) — only the password still needs
+  // validating, shown at the top of Step 2 in that case.
+  function validateGuestPassword() {
+    if (user) return true;
+    const e = {};
+    if (!form.password) e.password = 'Password is required.';
+    else if (form.password.length < 6) e.password = 'Password must be at least 6 characters.';
+    setErrors((prev) => ({ ...prev, ...e }));
     return Object.keys(e).length === 0;
   }
 
@@ -281,6 +354,9 @@ export default function EnrolledPage() {
 
   async function handleFinalSubmit() {
     if (!course) return;
+    // NEW: Step 1 was skipped for a remembered preview lead — the password
+    // still needs to be valid before we can create the guest's account.
+    if (skippedStep1 && !validateGuestPassword()) return;
     if (!screenshotFile) { setScreenshotError('Please attach your payment screenshot to continue.'); return; }
 
     setSubmitting(true);
@@ -305,6 +381,9 @@ export default function EnrolledPage() {
         whatsapp: form.whatsapp.trim(),
         paymentMethod,
         paymentScreenshotUrl,
+        // NEW: charges this specific Bundle's price instead of the plain
+        // course price when one was selected on the landing page.
+        ...(selectedBundle ? { bundleId: String(selectedBundle._id) } : {}),
       };
 
       if (user) {
@@ -381,7 +460,7 @@ export default function EnrolledPage() {
           <div className="border border-[#ece6dd] rounded-2xl bg-white p-5 sm:p-7 md:p-9 w-full">
             {/* Marketing headline — sits above everything else on the page */}
             <h2 className="text-lg md:text-xl font-bold text-[#e8540a] mb-5 md:mb-6 leading-snug" style={{ fontFamily: "'Playfair Display', serif" }}>
-              Enroll Now in Our Updated 2026 Shopify &amp; Digital Marketing Course
+              {selectedBundle ? `Enroll Now in ${selectedBundle.name}` : 'Enroll Now in Our Updated 2026 Shopify & Digital Marketing Course'}
             </h2>
 
             {/* Step indicator */}
@@ -500,6 +579,29 @@ export default function EnrolledPage() {
                   to our portal for this course.
                 </p>
 
+                {/* NEW: Step 1 was skipped (a remembered preview lead already
+                    supplied name/email/whatsapp) — a guest still needs to set
+                    a password to get their student portal login, so that one
+                    field shows here instead. Logged-in visitors never see
+                    this (skippedStep1 is only ever true when !user). */}
+                {skippedStep1 && (
+                  <div className="bg-[#f8f4ed] border border-[#ece6dd] rounded-xl p-4 space-y-3">
+                    <p className="text-xs text-[#9e9789]">
+                      Welcome back, <span className="font-semibold text-[#1a1208]">{form.name}</span> — we already have your
+                      details from your free preview. Just set a password to finish creating your student portal login.
+                    </p>
+                    <div>
+                      <label htmlFor="enroll-password-2" className="flex items-center gap-1.5 text-sm font-bold text-[#3d3020] mb-1.5"><Lock size={15} className="text-[#e8540a]" /> Create a Password</label>
+                      <input
+                        id="enroll-password-2" name="password" type="password" value={form.password} onChange={handleChange}
+                        placeholder="Minimum 6 characters" autoComplete="new-password"
+                        className={`w-full border rounded-xl px-4 py-3 text-base text-[#1a1208] outline-none transition ${errors.password ? 'border-red-400' : 'border-[#ece6dd] focus:border-[#e8540a]'}`}
+                      />
+                      {errors.password && <p className="text-red-500 text-xs mt-1">{errors.password}</p>}
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-3">
                   {PAYMENT_METHOD_DATA.map((m) => {
                     const MIcon = m.icon;
@@ -611,12 +713,14 @@ export default function EnrolledPage() {
                 )}
 
                 <div className="flex gap-3 pt-1">
-                  <button
-                    onClick={() => setStep(1)}
-                    className="flex-1 bg-white hover:bg-[#f8f4ed] text-[#3d3020] font-bold py-3.5 rounded-xl transition text-base border-2 border-[#ece6dd] cursor-pointer"
-                  >
-                    Back
-                  </button>
+                  {!skippedStep1 && (
+                    <button
+                      onClick={() => setStep(1)}
+                      className="flex-1 bg-white hover:bg-[#f8f4ed] text-[#3d3020] font-bold py-3.5 rounded-xl transition text-base border-2 border-[#ece6dd] cursor-pointer"
+                    >
+                      Back
+                    </button>
+                  )}
                   <button
                     onClick={handleFinalSubmit}
                     disabled={submitting || !screenshotFile}
@@ -640,7 +744,10 @@ export default function EnrolledPage() {
                   <span className="text-2xl">{course.emoji || '📚'}</span>
                 )}
               </div>
-              <p className="text-sm md:text-base font-bold text-[#1a1208] leading-snug break-words">{course.title}</p>
+              <div className="min-w-0">
+                <p className="text-sm md:text-base font-bold text-[#1a1208] leading-snug break-words">{course.title}</p>
+                {selectedBundle && <p className="text-xs md:text-sm text-[#e8540a] font-semibold mt-0.5">{selectedBundle.name}</p>}
+              </div>
             </div>
             <div className="border-t border-[#ece6dd] pt-4 space-y-2">
               <div className="flex justify-between text-sm md:text-base">

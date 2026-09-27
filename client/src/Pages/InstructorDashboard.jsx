@@ -833,6 +833,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
   const [tags,           setTags]           = useState(existing?.tags?.join(", ")          || "");
   const [whatYouLearn,   setWhatYouLearn]   = useState(existing?.whatYouLearn?.join("\n")  || "");
   const [requirements,   setRequirements]   = useState(existing?.requirements?.join("\n")  || "");
+  const [breadcrumbText, setBreadcrumbText] = useState(existing?.breadcrumbText || "");
   const [sections,       setSections]       = useState(
     existing?.sections?.length ? existing.sections : [{ id: uid(), title: "Section 1: Introduction", lectures: [] }]
   );
@@ -867,6 +868,11 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
   const [uploadingBlockImage, setUploadingBlockImage]  = useState({});   // keyed by block id
   const [draggedBlockId,      setDraggedBlockId]       = useState(null);
   const blockImageRefs = useRef({});
+
+  // ── Bundles — named packages with their own price, an optional %-off
+  // badge, and an FAQ-style "what's included" dropdown list. Each bundle: 
+  // { id, name, price, discountPercentage, items: [{ id, title, content }] }
+  const [bundles, setBundles] = useState(existing?.bundles || []);
 
   const [alsoBoughtIds, setAlsoBoughtIds] = useState(existing?.alsoBoughtCourseIds || []);
   const [coursePicker,   setCoursePicker]  = useState('');
@@ -1078,6 +1084,33 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
   };
   const handleBlockDragEnd = () => setDraggedBlockId(null);
 
+  // ── Bundle handlers ──────────────────────────────────────────────────────
+  const addBundle = () => {
+    setBundles(p => [...p, { id: uid(), name: '', price: '', discountPercentage: '', items: [] }]);
+  };
+  const updateBundle = (bundleId, field, val) => {
+    setBundles(p => p.map(b => (b.id || b._id) === bundleId ? { ...b, [field]: val } : b));
+  };
+  const deleteBundle = (bundleId) => {
+    setBundles(p => p.filter(b => (b.id || b._id) !== bundleId));
+    toast("Bundle removed", "success");
+  };
+  const addBundleItem = (bundleId) => {
+    setBundles(p => p.map(b => (b.id || b._id) === bundleId ? { ...b, items: [...(b.items || []), { id: uid(), title: '', content: '' }] } : b));
+  };
+  const updateBundleItem = (bundleId, itemId, field, val) => {
+    setBundles(p => p.map(b => (b.id || b._id) !== bundleId ? b : {
+      ...b,
+      items: (b.items || []).map(it => (it.id || it._id) === itemId ? { ...it, [field]: val } : it),
+    }));
+  };
+  const deleteBundleItem = (bundleId, itemId) => {
+    setBundles(p => p.map(b => (b.id || b._id) !== bundleId ? b : {
+      ...b,
+      items: (b.items || []).filter(it => (it.id || it._id) !== itemId),
+    }));
+  };
+
   const addAlsoBought = () => {
     if (!coursePicker) return;
     if (alsoBoughtIds.includes(coursePicker)) { toast("Already added", "info"); return; }
@@ -1141,10 +1174,16 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
       tags:            tags.split(",").map(t => t.trim()).filter(Boolean),
       whatYouLearn:    whatYouLearn.split("\n").map(t => t.trim()).filter(Boolean),
       requirements:    requirements.split("\n").map(t => t.trim()).filter(Boolean),
+      breadcrumbText:  breadcrumbText.trim(),
       imageTestimonials,
       videoTestimonials,
       projectGallery,
       customBlocks: customBlocks.map(({ imagePreview, ...rest }) => rest),
+      bundles: bundles.map(b => ({
+        ...b,
+        price: parseFloat(b.price) || 0,
+        discountPercentage: parseFloat(b.discountPercentage) || 0,
+      })),
       alsoBoughtCourseIds: alsoBoughtIds,
     };
     try {
@@ -1242,7 +1281,12 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
             })()}
           </div>
           <Select label="Status" value={status} onChange={setStatus} options={[{value:"draft",label:"Draft"},{value:"published",label:"Published"},{value:"review",label:"Under Review"}]}/>
+          <Input label="Breadcrumb (optional)" value={breadcrumbText} onChange={setBreadcrumbText} placeholder="e.g. Marketing / My Custom Title" className="sm:col-span-2"/>
         </div>
+        <p className="text-xs text-gray-400 -mt-3">
+          Controls the small trail shown under the header on the course page (e.g. "Marketing / My Custom Title").
+          Separate each part with a "/". Leave blank to show "{category} / {title || 'Course Title'}" automatically.
+        </p>
         <Textarea label="Course Description" value={description} onChange={setDescription} placeholder="What will students learn? Who is this for?" rows={4}/>
         <Textarea label="What You'll Learn (one per line)" value={whatYouLearn} onChange={setWhatYouLearn} placeholder={"Build full-stack apps\nDeploy to cloud\nJWT Authentication"} rows={4}/>
         <Textarea label="Requirements (one per line)" value={requirements} onChange={setRequirements} placeholder={"Basic HTML & CSS\nJavaScript fundamentals"} rows={3}/>
@@ -1587,6 +1631,73 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                           placeholder="Or paste image URL"
                           className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
                       </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* ─────────────────────────────────────────────────────────────────
+          BUNDLES — named packages, each with its own price, an optional
+          %-off badge, and an FAQ-style "what's included" dropdown list.
+          Renders on the course landing page with its own "Enroll Now in
+          this Bundle" button, which charges bundle.price instead of the
+          plain course price.
+      ───────────────────────────────────────────────────────────────── */}
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
+        <SectionHeader title="🎁 Bundles" action={<Btn size="sm" onClick={addBundle}>+ Add Bundle</Btn>}/>
+        <p className="text-sm text-gray-500 mb-4">
+          A named package with its own price and a dropdown list of what's included — shown on the course page
+          with its own "Enroll Now in this Bundle" button.
+        </p>
+        {bundles.length === 0 ? (
+          <EmptyState
+            icon="🎁"
+            title="No bundles yet"
+            body="Add a bundle to offer a package price with its own perks list."
+            action={<Btn size="sm" onClick={addBundle}>+ Add Bundle</Btn>}
+          />
+        ) : (
+          <div className="space-y-4">
+            {bundles.map((bundle) => {
+              const bId = bundle.id || bundle._id;
+              return (
+                <div key={bId} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex-1">Bundle</span>
+                    <button onClick={() => deleteBundle(bId)} className="text-red-400 hover:text-red-600 transition text-xs px-2 py-1 rounded hover:bg-red-50">✕ Remove</button>
+                  </div>
+                  <div className="grid sm:grid-cols-3 gap-3 mb-3">
+                    <Input label="Bundle Name" value={bundle.name || ""} onChange={v => updateBundle(bId, "name", v)} placeholder="e.g. Complete Growth Bundle"/>
+                    <Input label="Bundle Price (PKR)" value={bundle.price ?? ""} onChange={v => updateBundle(bId, "price", v)} placeholder="14999" type="number"/>
+                    <Input label="Discount % (optional badge)" value={bundle.discountPercentage ?? ""} onChange={v => updateBundle(bId, "discountPercentage", v)} placeholder="e.g. 20" type="number"/>
+                  </div>
+                  <div className="mt-2">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs sm:text-sm font-medium text-gray-700">What's included (FAQ-style dropdown)</label>
+                      <button onClick={() => addBundleItem(bId)} className="text-xs font-semibold text-[#e8540a] hover:text-[#c94708] transition bg-transparent border-none cursor-pointer">+ Add Item</button>
+                    </div>
+                    <div className="space-y-2">
+                      {(bundle.items || []).map((item) => {
+                        const iId = item.id || item._id;
+                        return (
+                          <div key={iId} className="bg-white border border-gray-200 rounded-lg p-3">
+                            <div className="flex items-center gap-2 mb-2">
+                              <input value={item.title || ""} onChange={e => updateBundleItem(bId, iId, "title", e.target.value)}
+                                placeholder="e.g. 20+ hours of video content"
+                                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
+                              <button onClick={() => deleteBundleItem(bId, iId)} className="text-red-400 hover:text-red-600 transition text-xs px-2 py-1 rounded hover:bg-red-50 flex-shrink-0">✕</button>
+                            </div>
+                            <textarea value={item.content || ""} onChange={e => updateBundleItem(bId, iId, "content", e.target.value)}
+                              placeholder="Optional detail shown when this dropdown is expanded" rows={2}
+                              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
+                          </div>
+                        );
+                      })}
+                      {(bundle.items || []).length === 0 && <p className="text-xs text-gray-400 italic">No items yet — add what's included in this bundle.</p>}
                     </div>
                   </div>
                 </div>

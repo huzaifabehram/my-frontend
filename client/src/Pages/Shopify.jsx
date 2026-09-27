@@ -511,6 +511,139 @@ function unlockBodyScroll() {
   window.scrollTo(0, scrollY);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// NEW: FREE LECTURE PREVIEW GATE — a visitor's first click on any free
+// preview (the hero thumbnail, a "Free Lecture" row, etc.) asks for
+// Name/Email/WhatsApp once (posted to /api/preview-leads, which upserts a
+// Contact and fires the "form_submitted" automation trigger scoped to
+// "form-1-step-1"), then remembers it in this browser for 360 days via
+// localStorage — the same persistence pattern already used sitewide for the
+// cached logo URLs, just with an expiry attached. Once remembered, every
+// future preview on this device opens immediately with no form, and
+// EnrolledPage.jsx (the real enrollment page) reads the SAME stored lead to
+// skip straight to Step 2, pre-filled.
+// ─────────────────────────────────────────────────────────────────────────────
+const PREVIEW_LEAD_KEY = 'lerni_preview_lead_v1';
+const PREVIEW_LEAD_MAX_AGE_DAYS = 360;
+
+function getPreviewLead() {
+  try {
+    const raw = localStorage.getItem(PREVIEW_LEAD_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (!data?.savedAt || !data?.name || !data?.email || !data?.whatsapp) return null;
+    const ageDays = (Date.now() - data.savedAt) / (1000 * 60 * 60 * 24);
+    if (ageDays > PREVIEW_LEAD_MAX_AGE_DAYS) return null;
+    return data;
+  } catch { return null; }
+}
+function savePreviewLead({ name, email, whatsapp }) {
+  try { localStorage.setItem(PREVIEW_LEAD_KEY, JSON.stringify({ name, email, whatsapp, savedAt: Date.now() })); } catch { /* storage unavailable — the gate will just ask again next time */ }
+}
+
+// Small gate modal — Name/Email/WhatsApp only (no password; that's only
+// ever needed at real enrollment, in EnrolledPage.jsx's own Step 1/2).
+function PreviewLeadGateModal({ isOpen, onClose, onSuccess, courseId, courseTitle, api }) {
+  const [form, setForm] = useState({ name: '', email: '', whatsapp: '' });
+  const [errors, setErrors] = useState({});
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) lockBodyScroll(); else unlockBodyScroll();
+    return () => unlockBodyScroll();
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  function validate() {
+    const e = {};
+    if (!form.name.trim()) e.name = 'Full name is required.';
+    if (!form.email.trim()) e.email = 'Email is required.';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim())) e.email = 'Enter a valid email address.';
+    if (!form.whatsapp.trim()) e.whatsapp = 'WhatsApp number is required.';
+    else if (!/^[+\d][\d\s-]{7,14}$/.test(form.whatsapp.trim())) e.whatsapp = 'Enter a valid WhatsApp number, e.g. 03XX-XXXXXXX.';
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  }
+
+  async function handleSubmit() {
+    if (!validate()) return;
+    setSubmitting(true);
+    try {
+      await api.post('/preview-leads', {
+        name: form.name.trim(), email: form.email.trim(), whatsapp: form.whatsapp.trim(),
+        courseId: courseId || '', courseTitle: courseTitle || '',
+      });
+      savePreviewLead({ name: form.name.trim(), email: form.email.trim(), whatsapp: form.whatsapp.trim() });
+      onSuccess();
+    } catch (err) {
+      setErrors({ submit: err?.response?.data?.message || 'Something went wrong. Please try again.' });
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[9999] flex items-center justify-center p-4" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+      <div className="bg-white rounded-2xl w-full max-w-md p-5 sm:p-6 md:p-7 relative">
+        <button onClick={onClose} aria-label="Close" className="absolute top-4 right-4 text-[#9e9789] hover:text-[#1a1208] bg-transparent border-none cursor-pointer">
+          <X size={20} />
+        </button>
+        <h3 className="text-lg md:text-xl font-bold text-[#1a1208] mb-1 pr-6" style={{ fontFamily: "'Playfair Display', serif" }}>
+          Quick details before your free preview
+        </h3>
+        <p className="text-sm text-[#9e9789] mb-5">Just this once — we'll remember you on this device. No payment needed for a preview.</p>
+        <div className="space-y-3">
+          <div>
+            <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Full Name"
+              className={`w-full border rounded-xl px-4 py-2.5 text-base text-[#1a1208] outline-none transition ${errors.name ? 'border-red-400' : 'border-[#ece6dd] focus:border-[#e8540a]'}`} />
+            {errors.name && <p className="text-red-500 text-xs mt-1">{errors.name}</p>}
+          </div>
+          <div>
+            <input value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} placeholder="Email Address" type="email"
+              className={`w-full border rounded-xl px-4 py-2.5 text-base text-[#1a1208] outline-none transition ${errors.email ? 'border-red-400' : 'border-[#ece6dd] focus:border-[#e8540a]'}`} />
+            {errors.email && <p className="text-red-500 text-xs mt-1">{errors.email}</p>}
+          </div>
+          <div>
+            <input value={form.whatsapp} onChange={(e) => setForm((f) => ({ ...f, whatsapp: e.target.value }))} placeholder="WhatsApp Number (03XX-XXXXXXX)"
+              className={`w-full border rounded-xl px-4 py-2.5 text-base text-[#1a1208] outline-none transition ${errors.whatsapp ? 'border-red-400' : 'border-[#ece6dd] focus:border-[#e8540a]'}`} />
+            {errors.whatsapp && <p className="text-red-500 text-xs mt-1">{errors.whatsapp}</p>}
+          </div>
+          {errors.submit && <p className="text-red-500 text-xs">{errors.submit}</p>}
+          <button onClick={handleSubmit} disabled={submitting}
+            className="w-full bg-[#e8540a] hover:bg-[#c94708] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl transition text-base border-none cursor-pointer mt-2">
+            {submitting ? 'Please wait…' : 'Watch Free Preview'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// NEW: BUNDLE FAQ ITEM — one collapsible "what's included" row inside a
+// Bundle card (see the Bundles section below).
+// ─────────────────────────────────────────────────────────────────────────────
+function BundleFaqItem({ item }) {
+  const [open, setOpen] = useState(false);
+  const hasContent = Boolean(item.content && item.content.trim());
+  return (
+    <div className="border border-[#ece6dd] rounded-lg bg-white overflow-hidden">
+      <button
+        type="button"
+        onClick={() => hasContent && setOpen((o) => !o)}
+        className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left bg-transparent border-none ${hasContent ? 'cursor-pointer' : 'cursor-default'}`}
+      >
+        <span className="text-sm font-semibold text-[#1a1208] flex items-center gap-2">
+          <Check size={14} className="text-[#e8540a] flex-shrink-0" />
+          {item.title}
+        </span>
+        {hasContent && <ChevronDown size={15} className={`text-[#9e9789] flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />}
+      </button>
+      {open && hasContent && <p className="px-3 pb-3 text-xs md:text-sm text-[#6b5e4e] leading-relaxed">{item.content}</p>}
+    </div>
+  );
+}
+
 function getYouTubeId(url) {
   if (!url) return null;
   const m = url.match(/(?:youtu\.be\/|youtube\.com(?:\/embed\/|\/watch\?v=|\/shorts\/))([^&?/\s]{11})/);
@@ -1217,6 +1350,13 @@ export default function CourseLandingPage() {
   const [imageSliderOpen,       setImageSliderOpen]       = useState(false);
   const [imageSliderStartIndex, setImageSliderStartIndex] = useState(0);
 
+  // NEW: Free Lecture Preview gate — see PreviewLeadGateModal above. Opened
+  // the first time (on this device) a visitor clicks any free preview;
+  // pendingPreviewActionRef holds exactly what to actually open once the
+  // gate is passed (or skipped, when a valid lead is already remembered).
+  const [previewGateOpen, setPreviewGateOpen] = useState(false);
+  const pendingPreviewActionRef = useRef(null);
+
   // Instructor profile media gallery (Photos & Videos, set from the
   // Instructor Dashboard → Profile → Description) — its own lightbox/video
   // modal state, separate from the Student Testimonials / Video Reviews ones
@@ -1341,15 +1481,17 @@ export default function CourseLandingPage() {
 
   const sections = courseData?.sections || [];
 
+  // NEW: no longer falls back to 4 random other published courses when the
+  // instructor hasn't picked any — an empty selection now genuinely means
+  // "don't show this section" (see the render below, which is already
+  // gated on studentsBoughtCourses.length > 0).
   const studentsBoughtCourses = useMemo(() => {
     if (!courseData?._id) return [];
     const picked = courseData.alsoBoughtCourseIds;
-    if (Array.isArray(picked) && picked.length > 0) {
-      const byId = new Map(courses.map((c) => [String(c._id), c]));
-      return picked.map((cid) => byId.get(String(cid))).filter(Boolean)
-        .filter((c) => c.status === "published" && String(c._id) !== String(courseData._id));
-    }
-    return courses.filter((c) => c._id !== courseData._id && c.status === "published").slice(0, 4);
+    if (!Array.isArray(picked) || picked.length === 0) return [];
+    const byId = new Map(courses.map((c) => [String(c._id), c]));
+    return picked.map((cid) => byId.get(String(cid))).filter(Boolean)
+      .filter((c) => c.status === "published" && String(c._id) !== String(courseData._id));
   }, [courses, courseData?._id, courseData?.alsoBoughtCourseIds]);
 
   const previewLectures = useMemo(() => {
@@ -1382,7 +1524,11 @@ export default function CourseLandingPage() {
     const courseId = courseData._id || courseData.id;
     // Goes to the new two-step Enrollment page (name/email/WhatsApp, then
     // payment method) instead of straight to sign-up. That page itself sends
-    // guests on to /auth/register once both steps are filled in.
+    // guests on to /auth/register once both steps are filled in. If this
+    // visitor already passed the free-lecture-preview gate (see
+    // getPreviewLead()), EnrolledPage.jsx reads that same stored lead
+    // itself and skips straight to Step 2, pre-filled — nothing to pass
+    // through the URL for that.
     navigate(`/course/${courseId}/enroll`);
     setMobileMenuOpen(false);
   }, [courseData, navigate]);
@@ -1400,7 +1546,14 @@ export default function CourseLandingPage() {
   // place, instead of pushing ANOTHER history entry per lecture — which was
   // the bug where clicking through 3 lectures meant pressing Back 3 times to
   // get back to the course page instead of once.
-  const handlePreviewClick  = () => {
+  //
+  // NEW: openPreviewNow()/openLectureNow() are the ACTUAL open logic (what
+  // handlePreviewClick/handleLectureClick used to do directly). The two
+  // exported handlers now go through the Free Lecture Preview gate first —
+  // see PreviewLeadGateModal above — and only call these once a valid lead
+  // is already remembered on this device (getPreviewLead()) or was just
+  // captured.
+  const openPreviewNow = () => {
     setCurrentVideo(courseData?.previewVideoUrl || '');
     setActivePreviewLecture({
       id:    'main-preview',
@@ -1412,6 +1565,30 @@ export default function CourseLandingPage() {
       navigate(location.pathname + location.search, { state: { ...(location.state || {}), coursePreviewOpen: true } });
     }
   };
+  const openLectureNow = (lecture) => {
+    setCurrentVideo(lecture.videoUrl);
+    setActivePreviewLecture(lecture);
+    setIsPreviewOpen(true);
+    if (!location.state?.coursePreviewOpen) {
+      navigate(location.pathname + location.search, { state: { ...(location.state || {}), coursePreviewOpen: true } });
+    }
+  };
+  const handlePreviewClick = () => {
+    if (getPreviewLead()) { openPreviewNow(); return; }
+    pendingPreviewActionRef.current = openPreviewNow;
+    setPreviewGateOpen(true);
+  };
+  const handleLectureClick = (lecture) => {
+    if (getPreviewLead()) { openLectureNow(lecture); return; }
+    pendingPreviewActionRef.current = () => openLectureNow(lecture);
+    setPreviewGateOpen(true);
+  };
+  const handlePreviewGateSuccess = () => {
+    setPreviewGateOpen(false);
+    const action = pendingPreviewActionRef.current;
+    pendingPreviewActionRef.current = null;
+    if (action) action();
+  };
   const handleClosePreview  = () => {
     setIsPreviewOpen(false);
     setCurrentVideo('');
@@ -1420,14 +1597,6 @@ export default function CourseLandingPage() {
     // it — keeps Back/Forward in sync with an explicit close (via the X
     // button or Escape), not just a browser Back press.
     if (location.state?.coursePreviewOpen) navigate(-1);
-  };
-  const handleLectureClick  = (lecture) => {
-    setCurrentVideo(lecture.videoUrl);
-    setActivePreviewLecture(lecture);
-    setIsPreviewOpen(true);
-    if (!location.state?.coursePreviewOpen) {
-      navigate(location.pathname + location.search, { state: { ...(location.state || {}), coursePreviewOpen: true } });
-    }
   };
 
   // Detect a browser Back/Forward press that leaves the "preview open"
@@ -1667,6 +1836,12 @@ export default function CourseLandingPage() {
   // price/originalPrice, so the % off was already correct either way.
   const priceLabel = `PKR ${courseData.price.toLocaleString()}`;
 
+  // NEW: breadcrumb — split on "/" so an instructor can write any custom
+  // trail from the Course Editor (e.g. "Marketing / My Custom Title").
+  // Falls back to "<category> / <title>" for a course that's never set one.
+  const breadcrumbSegments = (courseData.breadcrumbText?.trim() || `${courseData.category || 'Courses'} / ${courseData.title}`)
+    .split('/').map((s) => s.trim()).filter(Boolean);
+
   const hasRealReviews = textReviews.length > 0;
   const displayReviews = hasRealReviews ? textReviews : FALLBACK_REVIEWS;
   const displayRating = courseData.rating
@@ -1690,6 +1865,17 @@ export default function CourseLandingPage() {
 
   return (
     <div className="min-h-screen bg-[#FDFAF6] overflow-x-hidden w-full" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+
+      {/* FREE LECTURE PREVIEW GATE — Name/Email/WhatsApp, once per device
+          (remembered 360 days). See PreviewLeadGateModal above. */}
+      <PreviewLeadGateModal
+        isOpen={previewGateOpen}
+        onClose={() => { setPreviewGateOpen(false); pendingPreviewActionRef.current = null; }}
+        onSuccess={handlePreviewGateSuccess}
+        courseId={courseData._id}
+        courseTitle={courseData.title}
+        api={api}
+      />
 
       {/* FULL-SCREEN COURSE PREVIEW POPUP */}
       {isPreviewOpen && (
@@ -2016,14 +2202,18 @@ export default function CourseLandingPage() {
         )}
       </header>
 
-      {/* BREADCRUMB — wraps naturally instead of truncating on narrow screens */}
+      {/* BREADCRUMB — customizable from the Instructor Dashboard's Course
+          Editor (courseData.breadcrumbText, split on "/"); falls back to
+          "<category> / <title>" when left blank. Plain text (not fixed nav
+          links) since the instructor can put anything here now. */}
       <div className="bg-white border-b border-[#ece6dd]">
         <div className="max-w-7xl mx-auto px-4 lg:px-6 py-2 md:py-3 text-sm md:text-base text-[#9e9789] w-full flex flex-wrap items-center gap-x-2 gap-y-1">
-          <button onClick={() => handleNavigate('/')} className="hover:text-[#e8540a] bg-transparent border-none cursor-pointer text-[#9e9789] p-0 transition">Development</button>
-          <ChevronDown size={16} className="rotate-[-90deg] text-[#ccc5b8] flex-shrink-0" />
-          <button onClick={() => handleNavigate('/courses')} className="hover:text-[#e8540a] bg-transparent border-none cursor-pointer text-[#9e9789] p-0 transition">{courseData.category || 'Courses'}</button>
-          <ChevronDown size={16} className="rotate-[-90deg] text-[#ccc5b8] flex-shrink-0" />
-          <span className="text-[#1a1208] font-semibold break-words">{courseData.title}</span>
+          {breadcrumbSegments.map((seg, i) => (
+            <React.Fragment key={i}>
+              {i > 0 && <ChevronDown size={16} className="rotate-[-90deg] text-[#ccc5b8] flex-shrink-0" />}
+              <span className={i === breadcrumbSegments.length - 1 ? "text-[#1a1208] font-semibold break-words" : "text-[#9e9789]"}>{seg}</span>
+            </React.Fragment>
+          ))}
         </div>
       </div>
 
@@ -2528,6 +2718,45 @@ export default function CourseLandingPage() {
                           <figcaption className="px-3 py-2.5 text-sm md:text-base text-[#3d3020] border-t border-[#f0ebe3]">{item.caption}</figcaption>
                         )}
                       </figure>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ─────────────────────────────────────────────────────────────
+                  BUNDLES — named packages, each with its own price, an
+                  optional %-off badge, and an FAQ-style dropdown list of
+                  what's included. Each gets its own "Enroll Now in this
+                  Bundle" button, which charges the bundle's own price
+                  instead of the plain course price (see EnrolledPage.jsx).
+              ───────────────────────────────────────────────────────────── */}
+              {courseData.bundles?.length > 0 && (
+                <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
+                  <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#1a1208] mb-6 md:mb-8" style={{ fontFamily: "'Playfair Display', serif" }}>Bundles</h2>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+                    {courseData.bundles.map((bundle) => (
+                      <div key={bundle._id} className="border border-[#ece6dd] rounded-2xl p-5 md:p-6 bg-[#f8f4ed] flex flex-col">
+                        <div className="flex items-start justify-between gap-2 mb-2">
+                          <h3 className="text-lg md:text-xl font-bold text-[#1a1208]" style={{ fontFamily: "'Playfair Display', serif" }}>{bundle.name}</h3>
+                          {bundle.discountPercentage > 0 && (
+                            <span className="flex-shrink-0 bg-[#e8540a] text-white text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap">{bundle.discountPercentage}% OFF</span>
+                          )}
+                        </div>
+                        <p className="text-xl md:text-2xl font-bold text-[#1a1208] mb-4" style={{ fontFamily: "'Playfair Display', serif" }}>
+                          PKR {Number(bundle.price || 0).toLocaleString()}
+                        </p>
+                        {bundle.items?.length > 0 && (
+                          <div className="space-y-2 mb-5 flex-1">
+                            {bundle.items.map((item, i) => <BundleFaqItem key={i} item={item} />)}
+                          </div>
+                        )}
+                        <button
+                          onClick={() => navigate(`/course/${courseData._id}/enroll?bundle=${bundle._id}`)}
+                          className="w-full bg-[#1a1208] hover:bg-[#2d2416] text-white font-bold py-3 rounded-xl transition text-base border-none cursor-pointer mt-auto"
+                        >
+                          Enroll Now in this Bundle
+                        </button>
+                      </div>
                     ))}
                   </div>
                 </div>
