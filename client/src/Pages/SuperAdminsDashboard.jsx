@@ -731,8 +731,9 @@ function ReviewImporterPage({ toast, courses }) {
 // ─────────────────────────────────────────────────────────────────────────────
 // FORMS — Super Admin panel
 // ─────────────────────────────────────────────────────────────────────────────
-// A catalog of the real forms already live on the site — "Form 1" (course
-// enrollment) and "Form 2" (package inquiry) are seeded automatically and
+// A catalog of the real forms already live on the site — the four built-in
+// ones (Course Basic & Payment Form, Course Basic Form, Course Payment Form,
+// Service Basic Form) are seeded automatically and
 // can't be deleted since real pages already send their slug. Their slug is
 // what the Automation Workflow's "Form Submitted" trigger can scope to, so
 // a workflow can react to just one specific form instead of every form.
@@ -847,49 +848,85 @@ function FormsPage({ toast, courses }) {
   );
 }
 
-// ── Submitted Forms — real Form 1 (enrollment, per course) and Form 2
-// (package inquiry) submissions, with full detail, a payment-screenshot
-// lightbox, multi-select delete, and CSV export.
+// ── Submitted Forms ─────────────────────────────────────────────────────────
+// Four built-in forms, each with its own list:
+//   • Course Basic & Payment Form — a complete enrollment: BOTH steps filled
+//   • Course Basic Form           — basic details only (name, email, WhatsApp),
+//                                   collected before a free lecture or at
+//                                   Step 1 of the enrollment page
+//   • Course Payment Form         — the payment step (method, amount, screenshot).
+//                                   Never exists without a Course Basic Form —
+//                                   that's a hard rule in the backend.
+//   • Service Basic Form          — package inquiries from the Services page
+// The three course forms are kept PER COURSE: pick a course to see only that
+// course's submissions (or "All courses"). Payment screenshots open in a
+// lightbox; rows can be selected, deleted, or downloaded as CSV.
+const SUBMITTED_FORM_TABS = [
+  { key: "basic_payment", label: "Course Basic & Payment Form", course: true },
+  { key: "basic",         label: "Course Basic Form",           course: true },
+  { key: "payment",       label: "Course Payment Form",         course: true },
+  { key: "service",       label: "Service Basic Form",          course: false },
+];
+
 function SubmittedFormsTab({ toast, courses }) {
   const { API: api } = useAuth();
-  const [scope, setScope] = useState("services"); // "services" | a course _id
+  const [formKey, setFormKey] = useState("basic_payment");
+  const [courseFilter, setCourseFilter] = useState("all");
   const [enrollments, setEnrollments] = useState([]);
+  const [leads, setLeads] = useState([]);
   const [inquiries, setInquiries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState([]);
   const [lightboxUrl, setLightboxUrl] = useState("");
+  const [showPaidLeads, setShowPaidLeads] = useState(false);
 
   useEffect(() => {
     setLoading(true);
-    Promise.all([api.get("/admin/enrollments"), api.get("/admin/package-inquiries")])
-      .then(([eRes, iRes]) => { setEnrollments(eRes.data || []); setInquiries(iRes.data || []); })
+    Promise.all([
+      api.get("/admin/enrollments"),
+      api.get("/admin/package-inquiries"),
+      api.get("/admin/course-basic-leads").catch(() => ({ data: [] })),
+    ])
+      .then(([eRes, iRes, lRes]) => { setEnrollments(eRes.data || []); setInquiries(iRes.data || []); setLeads(lRes.data || []); })
       .catch(() => toast("Failed to load submitted forms", "error"))
       .finally(() => setLoading(false));
   }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const isServices = scope === "services";
-  const list = isServices ? inquiries : enrollments.filter((e) => String(e.course?._id) === String(scope));
+  const tab = SUBMITTED_FORM_TABS.find((t) => t.key === formKey);
+  const inCourse = (courseId) => courseFilter === "all" || String(courseId) === String(courseFilter);
 
-  useEffect(() => { setSelected([]); }, [scope]);
+  const enrollmentList = enrollments.filter((e) => inCourse(e.course?._id));
+  const basicLeadList = leads.filter((l) => inCourse(l.course?._id) && (showPaidLeads || !l.paid));
+  const list = formKey === "service" ? inquiries : formKey === "basic" ? basicLeadList : enrollmentList;
+
+  useEffect(() => { setSelected([]); }, [formKey, courseFilter, showPaidLeads]);
+
+  // counts shown on the course pills, for whichever form is selected
+  const countFor = (courseId) => {
+    if (formKey === "basic") return leads.filter((l) => String(l.course?._id) === String(courseId) && (showPaidLeads || !l.paid)).length;
+    return enrollments.filter((e) => String(e.course?._id) === String(courseId)).length;
+  };
 
   const toggleOne = (id) => setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   const toggleAll = () => setSelected((prev) => (prev.length === list.length ? [] : list.map((x) => x._id)));
+
+  const endpoint = formKey === "service" ? "package-inquiries" : formKey === "basic" ? "course-basic-leads" : "enrollments";
 
   const deleteSelected = async () => {
     if (selected.length === 0) return;
     if (!window.confirm(`Delete ${selected.length} submission${selected.length === 1 ? "" : "s"}? This can't be undone.`)) return;
     try {
-      const endpoint = isServices ? "package-inquiries" : "enrollments";
       await Promise.all(selected.map((id) => api.delete(`/admin/${endpoint}/${id}`)));
-      if (isServices) setInquiries((prev) => prev.filter((x) => !selected.includes(x._id)));
-      else setEnrollments((prev) => prev.filter((x) => !selected.includes(x._id)));
+      const gone = (x) => !selected.includes(x._id);
+      if (formKey === "service") setInquiries((prev) => prev.filter(gone));
+      else if (formKey === "basic") setLeads((prev) => prev.filter(gone));
+      else setEnrollments((prev) => prev.filter(gone));
       setSelected([]);
       toast("Deleted", "success");
     } catch { toast("Failed to delete some submissions", "error"); }
   };
 
   const downloadSelected = () => {
-    const endpoint = isServices ? "package-inquiries" : "enrollments";
     const ids = selected.length > 0 ? selected : list.map((x) => x._id);
     if (ids.length === 0) { toast("Nothing to download", "error"); return; }
     const url = `${api.defaults.baseURL}/admin/${endpoint}/export.csv?ids=${ids.join(",")}`;
@@ -905,26 +942,42 @@ function SubmittedFormsTab({ toast, courses }) {
       .catch(() => toast("Download failed", "error"));
   };
 
+  const pill = (active) => `px-3 py-1.5 rounded-lg text-xs font-bold border cursor-pointer transition ${active ? "bg-[#e8540a] text-white border-[#e8540a]" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`;
+  const formCount = (key) => key === "service" ? inquiries.length : key === "basic" ? leads.filter((l) => !l.paid).length : enrollments.length;
+
   return (
     <div>
-      <div className="flex flex-wrap gap-2 mb-5">
-        <button onClick={() => setScope("services")} className={`px-3 py-1.5 rounded-lg text-xs font-bold border cursor-pointer transition ${isServices ? "bg-[#e8540a] text-white border-[#e8540a]" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
-          Services ({inquiries.length})
-        </button>
-        {courses?.map((c) => {
-          const count = enrollments.filter((e) => String(e.course?._id) === String(c._id)).length;
-          return (
-            <button key={c._id} onClick={() => setScope(c._id)} className={`px-3 py-1.5 rounded-lg text-xs font-bold border cursor-pointer transition ${scope === c._id ? "bg-[#e8540a] text-white border-[#e8540a]" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}>
-              {c.title} ({count})
-            </button>
-          );
-        })}
+      {/* 1) which form */}
+      <div className="flex flex-wrap gap-2 mb-3">
+        {SUBMITTED_FORM_TABS.map((t) => (
+          <button key={t.key} onClick={() => setFormKey(t.key)} className={pill(formKey === t.key)}>{t.label} ({formCount(t.key)})</button>
+        ))}
       </div>
+
+      {/* 2) which course (course forms only) */}
+      {tab.course && (
+        <div className="flex flex-wrap gap-2 mb-5">
+          <button onClick={() => setCourseFilter("all")} className={pill(courseFilter === "all")}>All courses</button>
+          {courses?.map((c) => (
+            <button key={c._id} onClick={() => setCourseFilter(c._id)} className={pill(String(courseFilter) === String(c._id))}>{c.title} ({countFor(c._id)})</button>
+          ))}
+        </div>
+      )}
+
+      {formKey === "basic" && (
+        <label className="flex items-center gap-2 text-xs text-gray-500 mb-4 cursor-pointer">
+          <input type="checkbox" checked={showPaidLeads} onChange={(e) => setShowPaidLeads(e.target.checked)} className="w-4 h-4 accent-rose-600" />
+          Also show people who went on to submit the Payment Form (by default only those who filled just the basic form)
+        </label>
+      )}
+      {formKey === "payment" && (
+        <p className="text-xs text-gray-400 mb-4">A Payment Form can only be submitted after the Course Basic Form — that's enforced, so every row here has a matching basic-details record.</p>
+      )}
 
       {loading ? (
         <p className="text-sm text-gray-400">Loading…</p>
       ) : list.length === 0 ? (
-        <EmptyState icon="📄" title="No submissions yet" body={isServices ? "Package inquiry submissions from the Services page will show up here." : "Enrollment submissions for this course will show up here."} />
+        <EmptyState icon="📄" title="No submissions yet" body="Submissions for this form will show up here." />
       ) : (
         <>
           <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
@@ -939,50 +992,70 @@ function SubmittedFormsTab({ toast, courses }) {
           </div>
 
           <div className="space-y-3">
-            {list.map((item) => (
-              <div key={item._id} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm flex flex-col sm:flex-row gap-4">
-                <input type="checkbox" checked={selected.includes(item._id)} onChange={() => toggleOne(item._id)} className="w-4 h-4 accent-rose-600 mt-1 flex-shrink-0" />
+            {list.map((item) => {
+              const isEnrollment = formKey === "basic_payment" || formKey === "payment";
+              const showScreenshot = isEnrollment;
+              return (
+                <div key={item._id} className="bg-white rounded-xl border border-gray-100 p-4 shadow-sm flex flex-col sm:flex-row gap-4">
+                  <input type="checkbox" checked={selected.includes(item._id)} onChange={() => toggleOne(item._id)} className="w-4 h-4 accent-rose-600 mt-1 flex-shrink-0" />
 
-                {!isServices && (
-                  <div className="w-full sm:w-32 h-24 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 cursor-pointer" onClick={() => item.paymentScreenshotUrl && setLightboxUrl(item.paymentScreenshotUrl)}>
-                    {item.paymentScreenshotUrl ? (
-                      <img src={item.paymentScreenshotUrl} alt="Payment screenshot" className="w-full h-full object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-300 text-2xl">🧾</div>
-                    )}
-                  </div>
-                )}
+                  {showScreenshot && (
+                    <div className="w-full sm:w-32 h-24 flex-shrink-0 rounded-lg overflow-hidden bg-gray-100 cursor-pointer" onClick={() => item.paymentScreenshotUrl && setLightboxUrl(item.paymentScreenshotUrl)}>
+                      {item.paymentScreenshotUrl ? (
+                        <img src={item.paymentScreenshotUrl} alt="Payment screenshot" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-gray-300 text-2xl">🧾</div>
+                      )}
+                    </div>
+                  )}
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2 flex-wrap">
-                    {isServices ? (
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2 flex-wrap">
                       <div>
-                        <p className="font-bold text-gray-900">{item.name}</p>
-                        <p className="text-xs text-gray-500">{item.email} • {item.whatsapp}</p>
+                        {isEnrollment ? (
+                          <>
+                            <p className="font-bold text-gray-900">{item.student?.name || "Student"}</p>
+                            {/* the Payment Form view is payment-focused; the combined form also shows the basic details */}
+                            <p className="text-xs text-gray-500">{formKey === "basic_payment" ? `${item.student?.email || ""} • ${item.whatsapp || ""}` : (item.course?.title || "")}</p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="font-bold text-gray-900">{item.name}</p>
+                            <p className="text-xs text-gray-500">{item.email} • {item.whatsapp}</p>
+                          </>
+                        )}
                       </div>
-                    ) : (
-                      <div>
-                        <p className="font-bold text-gray-900">{item.student?.name || "Student"}</p>
-                        <p className="text-xs text-gray-500">{item.student?.email} • {item.whatsapp}</p>
-                      </div>
-                    )}
-                    <StatusBadge status={isServices ? (item.status === "contacted" ? "verified" : "pending") : item.status} />
+                      {formKey === "basic" ? (
+                        <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${item.paid ? "bg-emerald-50 text-emerald-600" : "bg-amber-50 text-amber-600"}`}>{item.paid ? "Also paid" : "Basic only"}</span>
+                      ) : (
+                        <StatusBadge status={formKey === "service" ? (item.status === "contacted" ? "verified" : "pending") : item.status} />
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 mt-2 text-xs">
+                      {formKey === "service" && (
+                        <div><span className="text-gray-400">Package: </span><span className="text-gray-700 font-semibold">{item.package === "gold" ? "Gold" : "Premium"}</span></div>
+                      )}
+                      {formKey === "basic" && (
+                        <>
+                          <div><span className="text-gray-400">Course: </span><span className="text-gray-700 font-semibold">{item.course?.title || item.courseTitle || "—"}</span></div>
+                          <div><span className="text-gray-400">Came from: </span><span className="text-gray-700 font-semibold">{item.source === "enrollment" ? "Enrollment page" : "Free lecture"}</span></div>
+                        </>
+                      )}
+                      {isEnrollment && (
+                        <>
+                          {formKey === "basic_payment" && <div><span className="text-gray-400">Course: </span><span className="text-gray-700 font-semibold">{item.course?.title || "—"}</span></div>}
+                          <div><span className="text-gray-400">Method: </span><span className="text-gray-700 font-semibold">{item.paymentMethod || "—"}</span></div>
+                          <div><span className="text-gray-400">Amount: </span><span className="text-gray-700 font-semibold">PKR {item.amount || 0}</span></div>
+                        </>
+                      )}
+                      <div><span className="text-gray-400">Submitted: </span><span className="text-gray-700">{new Date(item.createdAt).toLocaleDateString()}</span></div>
+                    </div>
+                    {isEnrollment && item.rejectionReason && <p className="text-xs text-red-500 italic mt-1">Reason: {item.rejectionReason}</p>}
                   </div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-1 mt-2 text-xs">
-                    {isServices ? (
-                      <div><span className="text-gray-400">Package: </span><span className="text-gray-700 font-semibold">{item.package === "gold" ? "Gold" : "Premium"}</span></div>
-                    ) : (
-                      <>
-                        <div><span className="text-gray-400">Method: </span><span className="text-gray-700 font-semibold">{item.paymentMethod || "—"}</span></div>
-                        <div><span className="text-gray-400">Amount: </span><span className="text-gray-700 font-semibold">PKR {item.amount || 0}</span></div>
-                      </>
-                    )}
-                    <div><span className="text-gray-400">Submitted: </span><span className="text-gray-700">{new Date(item.createdAt).toLocaleDateString()}</span></div>
-                  </div>
-                  {!isServices && item.rejectionReason && <p className="text-xs text-red-500 italic mt-1">Reason: {item.rejectionReason}</p>}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </>
       )}
@@ -997,7 +1070,7 @@ function SubmittedFormsTab({ toast, courses }) {
   );
 }
 
-// ── Create Form — the form catalog itself: "Form 1"/"Form 2" (seeded,
+// ── Create Form — the form catalog itself: the four built-in forms (seeded,
 // wired into live pages, can't be deleted) plus any new ones you add.
 function CreateFormTab({ toast }) {
   const { API: api } = useAuth();
@@ -1061,7 +1134,7 @@ function CreateFormTab({ toast }) {
       <div className="flex justify-end mb-4">
         <Btn onClick={() => openEditor(null)}>+ New Form</Btn>
       </div>
-      <p className="text-sm text-gray-500 mb-5 -mt-2">"Form 1" and "Form 2" are already live on your site and can be selected when scoping an Automation Workflow's "Form Submitted" trigger.</p>
+      <p className="text-sm text-gray-500 mb-5 -mt-2">The four built-in forms — Course Basic &amp; Payment Form, Course Basic Form, Course Payment Form and Service Basic Form — are already live on your site and can be selected when scoping an Automation Workflow's "Form Submitted" trigger.</p>
 
       {loading ? (
         <p className="text-sm text-gray-400">Loading…</p>
@@ -1084,7 +1157,7 @@ function CreateFormTab({ toast }) {
                 </div>
                 <div className="flex items-center gap-2 flex-shrink-0">
                   <Btn variant="secondary" size="sm" onClick={() => openEditor(f)}>Edit</Btn>
-                  {f.slug !== "form-1" && f.slug !== "form-2" && (
+                  {!["form-1", "form-1-step-1", "form-1-step-2", "form-2"].includes(f.slug) && (
                     <Btn variant="danger" size="sm" onClick={() => deleteForm(f)}>Delete</Btn>
                   )}
                 </div>

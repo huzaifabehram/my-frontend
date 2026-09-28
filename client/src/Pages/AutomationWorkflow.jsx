@@ -214,6 +214,11 @@ function SidePanel({ title, subtitle, onClose, children }) {
 // same panel shows those fields right below instead of a separate box
 // under the canvas.
 // ─────────────────────────────────────────────────────────────────────────────
+// The three course forms are filled once PER COURSE, so a workflow scoped to
+// one of them can also be scoped to a single course (the backend already
+// checks scope.courseId against the courseId on each form event).
+const COURSE_FORM_SLUGS = ["form-1", "form-1-step-1", "form-1-step-2"];
+
 function TriggerSidePanel({ meta, trigger, triggerScope, allCourses, forms, triggerLinks, onPick, onSaveScope, onClose }) {
   const [search, setSearch] = useState("");
   const [picked, setPicked] = useState(trigger || "");
@@ -300,11 +305,26 @@ function TriggerSidePanel({ meta, trigger, triggerScope, allCourses, forms, trig
       {picked === "form_submitted" && (
         <div className="space-y-2 mb-5">
           <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide">Scope to one form (optional)</p>
-          <select value={scope.formSlug || ""} onChange={(e) => setScope({ formSlug: e.target.value || undefined })}
+          <select value={scope.formSlug || ""}
+            onChange={(e) => {
+              const slug = e.target.value || undefined;
+              // keep the chosen course only while the form is still a course form
+              setScope((sc) => ({ formSlug: slug, ...(slug && COURSE_FORM_SLUGS.includes(slug) && sc.courseId ? { courseId: sc.courseId } : {}) }));
+            }}
             className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
             <option value="">Any form</option>
             {forms.map((f) => <option key={f._id} value={f.slug}>{f.name}</option>)}
           </select>
+          {COURSE_FORM_SLUGS.includes(scope.formSlug) && (
+            <>
+              <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wide pt-1">Scope to one course (optional)</p>
+              <select value={scope.courseId || ""} onChange={(e) => setScope((sc) => ({ ...sc, courseId: e.target.value || undefined }))}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+                <option value="">Any course</option>
+                {allCourses.map((c) => <option key={c._id} value={c._id}>{c.title}</option>)}
+              </select>
+            </>
+          )}
         </div>
       )}
 

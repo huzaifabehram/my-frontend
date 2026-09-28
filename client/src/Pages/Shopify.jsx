@@ -194,7 +194,7 @@
 //            3-tab FAQ-style accordion (About / Policies / Contact Us, chevron flips open↔closed);
 //            added a newsletter box outside the tabs that posts to the backend.
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import { useNavigate, useParams, useLocation, useNavigationType } from 'react-router-dom';
 import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Volume2, ArrowLeft } from 'lucide-react';
 import { useCourses } from '../context/CoursesContext';
 import { useAuth } from '../context/AuthContext';
@@ -491,7 +491,21 @@ function computeRatingDistribution(reviews) {
 // is the standard fix: pin the body with position:fixed (recording the
 // scroll position first) instead, then restore the exact scroll position
 // on unlock.
+// FIX: this pair used to be NOT balanced. Every modal below called
+// unlockBodyScroll() from an effect cleanup even on runs where it had never
+// locked anything (e.g. the effect run from BEFORE the modal opened) — and
+// with no lock active, the old unlock read scrollLockY as "0" and ran
+// window.scrollTo(0, 0). That is what threw the visitor to the very TOP of
+// the page: when opening the free-lecture form (the "jerk"), when opening
+// Show All Reviews, and when closing the testimonial image / video-review
+// modals ("the ✕ takes me back to the top"). Now it's reference-counted and
+// only restores a position it actually saved, instantly (behavior "instant",
+// so a site-wide `scroll-behavior: smooth` can't turn the restore into a
+// visible scroll-down-from-the-top).
+let bodyScrollLockCount = 0;
 function lockBodyScroll() {
+  bodyScrollLockCount += 1;
+  if (bodyScrollLockCount > 1) return; // already pinned by another overlay
   const scrollY = window.scrollY;
   document.body.dataset.scrollLockY = String(scrollY);
   document.body.style.position = 'fixed';
@@ -501,6 +515,9 @@ function lockBodyScroll() {
   document.body.style.width = '100%';
 }
 function unlockBodyScroll() {
+  if (bodyScrollLockCount === 0) return; // nothing was locked — do NOT touch scroll
+  bodyScrollLockCount -= 1;
+  if (bodyScrollLockCount > 0) return; // another overlay still needs the page pinned
   const scrollY = parseInt(document.body.dataset.scrollLockY || '0', 10);
   document.body.style.position = '';
   document.body.style.top = '';
@@ -508,7 +525,7 @@ function unlockBodyScroll() {
   document.body.style.right = '';
   document.body.style.width = '';
   delete document.body.dataset.scrollLockY;
-  window.scrollTo(0, scrollY);
+  window.scrollTo({ top: scrollY, left: 0, behavior: 'instant' });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -549,7 +566,8 @@ function PreviewLeadGateModal({ isOpen, onClose, onSuccess, courseId, courseTitl
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    if (isOpen) lockBodyScroll(); else unlockBodyScroll();
+    if (!isOpen) return undefined;
+    lockBodyScroll();
     return () => unlockBodyScroll();
   }, [isOpen]);
 
@@ -570,9 +588,9 @@ function PreviewLeadGateModal({ isOpen, onClose, onSuccess, courseId, courseTitl
     if (!validate()) return;
     setSubmitting(true);
     try {
-      await api.post('/preview-leads', {
+      await api.post('/course-basic-leads', {
         name: form.name.trim(), email: form.email.trim(), whatsapp: form.whatsapp.trim(),
-        courseId: courseId || '', courseTitle: courseTitle || '',
+        courseId: courseId || '', courseTitle: courseTitle || '', source: 'free_preview',
       });
       savePreviewLead({ name: form.name.trim(), email: form.email.trim(), whatsapp: form.whatsapp.trim() });
       onSuccess();
@@ -583,15 +601,15 @@ function PreviewLeadGateModal({ isOpen, onClose, onSuccess, courseId, courseTitl
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[9999] flex items-center justify-center p-4" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+    <div className="fixed inset-0 bg-black/70 z-[9999] flex items-center justify-center p-4" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       <div className="bg-white rounded-2xl w-full max-w-md p-5 sm:p-6 md:p-7 relative">
         <button onClick={onClose} aria-label="Close" className="absolute top-4 right-4 text-[#9e9789] hover:text-[#1a1208] bg-transparent border-none cursor-pointer">
           <X size={20} />
         </button>
-        <h3 className="text-lg md:text-xl font-bold text-[#1a1208] mb-1 pr-6" style={{ fontFamily: "'Playfair Display', serif" }}>
-          Quick details before your free preview
+        <h3 className="text-lg md:text-xl font-bold text-[#1a1208] mb-1 pr-6">
+          Quick details to unlock your free lectures
         </h3>
-        <p className="text-sm text-[#9e9789] mb-5">Just this once — we'll remember you on this device. No payment needed for a preview.</p>
+        <p className="text-sm text-[#9e9789] mb-5">Fill the basic form to watch the free lectures.</p>
         <div className="space-y-3">
           <div>
             <input value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} placeholder="Full Name"
@@ -611,7 +629,7 @@ function PreviewLeadGateModal({ isOpen, onClose, onSuccess, courseId, courseTitl
           {errors.submit && <p className="text-red-500 text-xs">{errors.submit}</p>}
           <button onClick={handleSubmit} disabled={submitting}
             className="w-full bg-[#e8540a] hover:bg-[#c94708] disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl transition text-base border-none cursor-pointer mt-2">
-            {submitting ? 'Please wait…' : 'Watch Free Preview'}
+            {submitting ? 'Please wait…' : 'Watch Free Lectures'}
           </button>
         </div>
       </div>
@@ -640,6 +658,25 @@ function BundleFaqItem({ item }) {
         {hasContent && <ChevronDown size={15} className={`text-[#9e9789] flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />}
       </button>
       {open && hasContent && <p className="px-3 pb-3 text-xs md:text-sm text-[#6b5e4e] leading-relaxed">{item.content}</p>}
+    </div>
+  );
+}
+
+// NEW: one collapsible FAQ row — used by the FAQ list an instructor can add
+// to any Custom Content Block (Course Editor → Custom Content Blocks).
+function FaqAccordionItem({ question, answer }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="border border-[#ece6dd] rounded-lg bg-white overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between gap-3 px-3.5 py-3 text-left bg-transparent border-none cursor-pointer"
+      >
+        <span className="text-sm md:text-base font-semibold text-[#1a1208]">{question}</span>
+        <ChevronDown size={16} className={`text-[#9e9789] flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && answer && <p className="px-3.5 pb-3.5 text-sm md:text-base text-[#6b5e4e] leading-relaxed whitespace-pre-line">{answer}</p>}
     </div>
   );
 }
@@ -930,11 +967,12 @@ function VideoReviewsSlider({ videoTestimonials, onCardClick, isPaused }) {
 function DefaultVideoModal({ isOpen, onClose, videos, startIndex = 0 }) {
   const [currentIndex, setCurrentIndex] = useState(startIndex);
 
+  useEffect(() => { if (isOpen) setCurrentIndex(startIndex); }, [isOpen, startIndex]);
   useEffect(() => {
-    if (isOpen) { lockBodyScroll(); setCurrentIndex(startIndex); }
-    else unlockBodyScroll();
-    return () => { unlockBodyScroll(); };
-  }, [isOpen, startIndex]);
+    if (!isOpen) return undefined;
+    lockBodyScroll();
+    return () => unlockBodyScroll();
+  }, [isOpen]);
 
   useEffect(() => {
     const handleKey = (e) => {
@@ -1106,11 +1144,12 @@ function AutoSlideImageTestimonials({ imageTestimonials, onImageClick, isPaused 
 function ImageLightbox({ isOpen, onClose, images, startIndex = 0 }) {
   const [currentIndex, setCurrentIndex] = useState(startIndex);
 
+  useEffect(() => { if (isOpen) setCurrentIndex(startIndex); }, [isOpen, startIndex]);
   useEffect(() => {
-    if (isOpen) { lockBodyScroll(); setCurrentIndex(startIndex); }
-    else unlockBodyScroll();
-    return () => { unlockBodyScroll(); };
-  }, [isOpen, startIndex]);
+    if (!isOpen) return undefined;
+    lockBodyScroll();
+    return () => unlockBodyScroll();
+  }, [isOpen]);
 
   useEffect(() => {
     const handleKey = (e) => {
@@ -1343,6 +1382,15 @@ export default function CourseLandingPage() {
   const [activePreviewLecture,  setActivePreviewLecture]  = useState(null);
   const [fullCourse,            setFullCourse]            = useState(null);
   const [fullCourseLoading,     setFullCourseLoading]     = useState(false);
+  // NEW: the course exactly as the API returns it. CoursesContext reshapes
+  // the course it hands us (it builds instructorId, turns sections' lectures
+  // into a count, etc.) and — judging by breadcrumbs / bundles / custom
+  // blocks all failing to show up — it only passes through the fields it
+  // already knew about, dropping newer ones. Fields added since (custom
+  // breadcrumb, bundles, custom blocks, section order) are therefore read
+  // straight from this raw copy instead of depending on that reshaping.
+  const [rawCourse,             setRawCourse]             = useState(null);
+  const navigationType = useNavigationType();
   const [instructorData,        setInstructorData]        = useState(null);
   const [loadingInstructor,     setLoadingInstructor]     = useState(false);
   const [videoReelsOpen,        setVideoReelsOpen]        = useState(false);
@@ -1435,6 +1483,16 @@ export default function CourseLandingPage() {
     });
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (!id) return undefined;
+    let cancelled = false;
+    setRawCourse(null);
+    api.get(`/courses/${id}`)
+      .then((res) => { if (!cancelled) setRawCourse(res.data || null); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [id, api]);
+
   // Fallback: fetch reviews directly when course detail omits reviews_list
   useEffect(() => {
     if (!id) return;
@@ -1451,6 +1509,63 @@ export default function CourseLandingPage() {
     const publishedCourses = courses.filter(c => c.status === 'published');
     return publishedCourses.length > 0 ? publishedCourses[0] : null;
   }, [id, fullCourse, courses, getCourse]);
+
+  // ── Keep the scroll position when the visitor comes BACK to this page ─────
+  // FIX: after opening a footer link (About, Privacy, Contact…) and pressing
+  // Back, the course page came back at the very TOP instead of at the footer
+  // the visitor left from. This page re-fetches the course on every visit and
+  // shows a short loading skeleton first, so the browser's own scroll
+  // restoration has nothing tall enough to restore into and gives up. So the
+  // position is remembered here (sessionStorage, per course URL) and put back
+  // once the real content is on screen — only when arriving via Back/Forward
+  // (POP), never on a fresh visit, which should start at the top.
+  const scrollStoreKey = `lerni_course_scroll:${location.pathname}`;
+  const scrollPageActiveRef = useRef(true);
+  const restoreRef = useRef({ path: null, target: 0, done: false });
+  if (restoreRef.current.path !== location.pathname) {
+    let saved = 0;
+    if (navigationType === 'POP') { try { saved = Number(sessionStorage.getItem(scrollStoreKey)) || 0; } catch { saved = 0; } }
+    restoreRef.current = { path: location.pathname, target: saved, done: false };
+  }
+  useLayoutEffect(() => {
+    scrollPageActiveRef.current = true;
+    return () => { scrollPageActiveRef.current = false; }; // runs before the DOM is torn down, so a clamped scroll during navigation is never saved
+  }, []);
+  useEffect(() => {
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        ticking = false;
+        if (!scrollPageActiveRef.current) return;
+        if (document.body.dataset.scrollLockY !== undefined) return; // an overlay has the page pinned (scrollY reads 0) — keep the real position
+        try { sessionStorage.setItem(scrollStoreKey, String(Math.round(window.scrollY))); } catch { /* ignore */ }
+      });
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [scrollStoreKey]);
+  useLayoutEffect(() => {
+    const r = restoreRef.current;
+    if (loading || fullCourseLoading || !courseData || r.done || !r.target) return undefined;
+    r.done = true;
+    let tries = 0;
+    let timer = null;
+    let cancelled = false;
+    const stop = () => { cancelled = true; if (timer) clearTimeout(timer); };
+    const attempt = () => {
+      if (cancelled) return;
+      window.scrollTo({ top: r.target, left: 0, behavior: 'instant' });
+      tries += 1;
+      // Content below (images, sections) can still be settling — keep nudging
+      // for a few seconds until the page is tall enough to land on the spot.
+      if (Math.abs(window.scrollY - r.target) > 4 && tries < 25) timer = setTimeout(attempt, 150);
+    };
+    ['wheel', 'touchstart', 'keydown'].forEach((evt) => window.addEventListener(evt, stop, { once: true, passive: true }));
+    attempt();
+    return undefined;
+  }, [loading, fullCourseLoading, courseData]);
 
   // ─── FIX 1: Instructor data fetch ───────────────────────────────────────
   useEffect(() => {
@@ -1506,7 +1621,11 @@ export default function CourseLandingPage() {
     return lectures;
   }, [sections]);
 
-  const handleNavigate = (path) => { setMobileMenuOpen(false); navigate(path); };
+  const handleNavigate = (path) => {
+    setMobileMenuOpen(false);
+    try { sessionStorage.setItem(scrollStoreKey, String(Math.round(window.scrollY))); } catch { /* ignore */ }
+    navigate(path);
+  };
 
   // Meta Pixel: ViewContent when a specific course landing page loads
   useEffect(() => {
@@ -1623,11 +1742,25 @@ export default function CourseLandingPage() {
       setCurrentVideo('');
       setActivePreviewLecture(null);
     }
+    // Same for the reviews overlay: a browser Back that leaves its history
+    // entry closes it and leaves the visitor on this course page.
+    if (reviewsOverlayOpen && !location.state?.reviewsOpen) {
+      setReviewsOverlayOpen(false);
+    }
   }, [location]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Always call the LATEST close handlers from key listeners — a handler
+  // captured when the overlay opened would still see the pre-open history
+  // state and leave an extra history entry behind on Escape.
+  const closePreviewRef = useRef(null);
+  closePreviewRef.current = handleClosePreview;
+  const closeReviewsRef = useRef(null);
+
   useEffect(() => {
-    const handleKeyDown = (e) => { if (e.key === 'Escape' && isPreviewOpen) handleClosePreview(); };
-    if (isPreviewOpen) { window.addEventListener('keydown', handleKeyDown); lockBodyScroll(); }
+    if (!isPreviewOpen) return undefined;
+    const handleKeyDown = (e) => { if (e.key === 'Escape') closePreviewRef.current(); };
+    window.addEventListener('keydown', handleKeyDown);
+    lockBodyScroll();
     return () => { window.removeEventListener('keydown', handleKeyDown); unlockBodyScroll(); };
   }, [isPreviewOpen]);
 
@@ -1648,11 +1781,37 @@ export default function CourseLandingPage() {
   // the same way the free-lecture preview opens inline. Reachable from the
   // hero rating link, the free-preview rating link, "Show All Reviews", and
   // every individual review card.
+  //
+  // FIX: opening this overlay never added a browser-history entry, so
+  // pressing Back skipped straight past this course to whatever page came
+  // before it (another course, in the reported case). It now pushes one
+  // history entry when it opens — same technique the free-lecture preview
+  // already uses — so Back just closes the overlay and stays on this exact
+  // course page. Closing with the arrow / Escape pops that same entry.
   const openReviewsOverlay = useCallback(() => {
     setReviewsVisibleCount(10);
     setReviewsOverlayOpen(true);
-  }, []);
-  const closeReviewsOverlay = useCallback(() => setReviewsOverlayOpen(false), []);
+    if (!location.state?.reviewsOpen) {
+      navigate(location.pathname + location.search, { state: { ...(location.state || {}), reviewsOpen: true } });
+    }
+  }, [location, navigate]);
+  const closeReviewsOverlay = useCallback(() => {
+    setReviewsOverlayOpen(false);
+    if (location.state?.reviewsOpen) navigate(-1);
+  }, [location, navigate]);
+  closeReviewsRef.current = closeReviewsOverlay;
+  // Tapping the rating line inside the free-lecture preview hops from the
+  // preview overlay to the reviews overlay. That must REPLACE the preview's
+  // history entry instead of popping it and pushing a new one (the pop is
+  // asynchronous and would land on top of the push and close the reviews).
+  const switchPreviewToReviews = () => {
+    setIsPreviewOpen(false);
+    setCurrentVideo('');
+    setActivePreviewLecture(null);
+    setReviewsVisibleCount(10);
+    setReviewsOverlayOpen(true);
+    navigate(location.pathname + location.search, { replace: true, state: { ...(location.state || {}), coursePreviewOpen: false, reviewsOpen: true } });
+  };
 
   // While the Ratings & Reviews overlay is open, lock background body scroll
   // (same pattern used for the preview popup / video modal above). Without
@@ -1660,10 +1819,12 @@ export default function CourseLandingPage() {
   // time as the overlay's own internal scroll area, which is what caused the
   // reviews view to feel like it "hangs" partway through scrolling on mobile.
   useEffect(() => {
-    const handleKeyDown = (e) => { if (e.key === 'Escape' && reviewsOverlayOpen) closeReviewsOverlay(); };
-    if (reviewsOverlayOpen) { window.addEventListener('keydown', handleKeyDown); lockBodyScroll(); }
+    if (!reviewsOverlayOpen) return undefined;
+    const handleKeyDown = (e) => { if (e.key === 'Escape') closeReviewsRef.current(); };
+    window.addEventListener('keydown', handleKeyDown);
+    lockBodyScroll();
     return () => { window.removeEventListener('keydown', handleKeyDown); unlockBodyScroll(); };
-  }, [reviewsOverlayOpen, closeReviewsOverlay]);
+  }, [reviewsOverlayOpen]);
 
   // NEW: extended into a fuller skeleton that fills the whole viewport
   // (header bar + hero band + a below-the-fold content/sidebar placeholder),
@@ -1839,7 +2000,20 @@ export default function CourseLandingPage() {
   // NEW: breadcrumb — split on "/" so an instructor can write any custom
   // trail from the Course Editor (e.g. "Marketing / My Custom Title").
   // Falls back to "<category> / <title>" for a course that's never set one.
-  const breadcrumbSegments = (courseData.breadcrumbText?.trim() || `${courseData.category || 'Courses'} / ${courseData.title}`)
+  // Newer course fields (custom breadcrumb, bundles, custom blocks, section
+  // order) come from the raw API copy — see rawCourse above.
+  const rawExtras = rawCourse && String(rawCourse._id) === String(courseData._id) ? rawCourse : null;
+  const pick = (key) => (rawExtras && rawExtras[key] !== undefined ? rawExtras[key] : courseData[key]);
+  const bundles = Array.isArray(pick('bundles')) ? pick('bundles') : [];
+  const customBlocks = Array.isArray(pick('customBlocks')) ? pick('customBlocks') : [];
+  const editorOrder = Array.isArray(pick('editorSectionOrder')) ? pick('editorSectionOrder') : [];
+  const MOVABLE_KEYS = ['imageTestimonials', 'videoTestimonials', 'projectGallery', 'customBlocks', 'bundles'];
+  const movableOrder = [...editorOrder.filter((k) => MOVABLE_KEYS.includes(k)), ...MOVABLE_KEYS.filter((k) => !editorOrder.includes(k))];
+
+  // FIX: this always read courseData.breadcrumbText, which never had the
+  // instructor's custom text (see rawCourse), so the "<category> / <title>"
+  // fallback was all that ever showed.
+  const breadcrumbSegments = (String(pick('breadcrumbText') || '').trim() || `${courseData.category || 'Courses'} / ${courseData.title}`)
     .split('/').map((s) => s.trim()).filter(Boolean);
 
   const hasRealReviews = textReviews.length > 0;
@@ -1862,6 +2036,119 @@ export default function CourseLandingPage() {
   const displayRatingCount  = fallbackReviewCount + realReviewCount;
   const displayStudentCount = fallbackStudentCount + realStudentCount;
   const displayRatingDistribution = hasRealReviews ? computeRatingDistribution(textReviews) : FALLBACK_RATING_DISTRIBUTION;
+
+  const movableSections = {
+    imageTestimonials: imageTestimonials.length > 0 ? (
+      <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
+        <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#1a1208] mb-2 md:mb-3" style={{ fontFamily: "'Playfair Display', serif" }}>Student Testimonials</h2>
+        <p className="text-[#9e9789] text-sm md:text-base mb-4 md:mb-6">See what our students have to say</p>
+        <AutoSlideImageTestimonials
+          imageTestimonials={imageTestimonials}
+          onImageClick={(idx) => { setImageSliderStartIndex(idx); setImageSliderOpen(true); }}
+          isPaused={imageSliderOpen}
+        />
+      </div>
+    ) : null,
+
+    videoTestimonials: videoTestimonials.length > 0 ? (
+      <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
+        <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#1a1208] mb-2 md:mb-3" style={{ fontFamily: "'Playfair Display', serif" }}>Video Reviews</h2>
+        <p className="text-[#9e9789] text-sm md:text-base mb-4 md:mb-6">Watch authentic testimonials from our graduates</p>
+        <VideoReviewsSlider
+          videoTestimonials={videoTestimonials}
+          onCardClick={(idx) => { setVideoReelsStartIndex(idx); setVideoReelsOpen(true); }}
+          isPaused={videoReelsOpen}
+        />
+      </div>
+    ) : null,
+
+    projectGallery: projectGallery.length > 0 ? (
+      <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
+        <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#1a1208] mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>Project gallery</h2>
+        <p className="text-sm md:text-base text-[#9e9789] mb-4 md:mb-6">Student work and course outcomes</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
+          {projectGallery.map((item) => (
+            <figure key={item.id || item._id || item.imageUrl}
+              className="group rounded-2xl overflow-hidden border border-[#ece6dd] bg-white shadow-sm hover:shadow-md transition">
+              <div className="aspect-video bg-[#f0ebe3] overflow-hidden">
+                <img src={item.imageUrl} alt={item.caption || "Project"}
+                  className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" />
+              </div>
+              {item.caption && (
+                <figcaption className="px-3 py-2.5 text-sm md:text-base text-[#3d3020] border-t border-[#f0ebe3]">{item.caption}</figcaption>
+              )}
+            </figure>
+          ))}
+        </div>
+      </div>
+    ) : null,
+
+    // CUSTOM CONTENT BLOCKS — heading, sub heading, a video or image, and an
+    // optional FAQ list, exactly as built in the Course Editor. (These were
+    // never rendered on this page before.)
+    customBlocks: customBlocks.length > 0 ? (
+      <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full space-y-5 md:space-y-6">
+        {customBlocks.map((block, idx) => {
+          const faqs = Array.isArray(block.faqs) ? block.faqs.filter((f) => f && String(f.question || '').trim()) : [];
+          if (!block.heading && !block.subheading && !block.videoUrl && !block.imageUrl && faqs.length === 0) return null;
+          return (
+            <div key={block.id || block._id || idx} className="border border-[#ece6dd] rounded-2xl p-5 md:p-7 bg-[#f8f4ed]">
+              {block.heading && (
+                <h2 className="text-xl md:text-2xl lg:text-3xl font-bold text-[#1a1208] mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>{block.heading}</h2>
+              )}
+              {block.subheading && <p className="text-[#6b5e4e] text-sm md:text-base mb-4 leading-relaxed">{block.subheading}</p>}
+              {block.videoUrl ? (
+                <div className="rounded-xl overflow-hidden mb-4"><VideoPlayer url={block.videoUrl} className="w-full" /></div>
+              ) : block.imageUrl ? (
+                <img src={block.imageUrl} alt={block.heading || 'Course content'} className="w-full rounded-xl mb-4 object-cover max-h-[28rem]" />
+              ) : null}
+              {faqs.length > 0 && (
+                <div className="space-y-2">
+                  {faqs.map((f, i) => <FaqAccordionItem key={f.id || i} question={f.question} answer={f.answer} />)}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    ) : null,
+
+    // BUNDLES — named packages, each with its own price, an optional %-off
+    // badge, and an FAQ-style dropdown list of what's included. Each gets its
+    // own "Enroll Now in this Bundle" button, which charges the bundle's own
+    // price instead of the plain course price (see EnrolledPage.jsx).
+    bundles: bundles.length > 0 ? (
+      <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
+        <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#1a1208] mb-6 md:mb-8" style={{ fontFamily: "'Playfair Display', serif" }}>Bundles</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+          {bundles.map((bundle, bi) => (
+            <div key={bundle._id || bi} className="border border-[#ece6dd] rounded-2xl p-5 md:p-6 bg-[#f8f4ed] flex flex-col">
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <h3 className="text-lg md:text-xl font-bold text-[#1a1208]" style={{ fontFamily: "'Playfair Display', serif" }}>{bundle.name}</h3>
+                {bundle.discountPercentage > 0 && (
+                  <span className="flex-shrink-0 bg-[#e8540a] text-white text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap">{bundle.discountPercentage}% OFF</span>
+                )}
+              </div>
+              <p className="text-xl md:text-2xl font-bold text-[#1a1208] mb-4" style={{ fontFamily: "'Playfair Display', serif" }}>
+                PKR {Number(bundle.price || 0).toLocaleString()}
+              </p>
+              {bundle.items?.length > 0 && (
+                <div className="space-y-2 mb-5 flex-1">
+                  {bundle.items.map((item, i) => <BundleFaqItem key={i} item={item} />)}
+                </div>
+              )}
+              <button
+                onClick={() => navigate(`/course/${courseData._id}/enroll?bundle=${bundle._id}`)}
+                className="w-full bg-[#1a1208] hover:bg-[#2d2416] text-white font-bold py-3 rounded-xl transition text-base border-none cursor-pointer mt-auto"
+              >
+                Enroll Now in this Bundle
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    ) : null,
+  };
 
   return (
     <div className="min-h-screen bg-[#FDFAF6] overflow-x-hidden w-full" style={{ fontFamily: "'DM Sans', sans-serif" }}>
@@ -1904,12 +2191,11 @@ export default function CourseLandingPage() {
                 <div
                   role="button"
                   tabIndex={0}
-                  onClick={() => { handleClosePreview(); openReviewsOverlay(); }}
+                  onClick={switchPreviewToReviews}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
-                      handleClosePreview();
-                      openReviewsOverlay();
+                      switchPreviewToReviews();
                     }
                   }}
                   aria-label="View all course reviews"
@@ -2235,7 +2521,7 @@ export default function CourseLandingPage() {
               <h1 className="text-3xl md:text-4xl lg:text-5xl xl:text-6xl font-bold text-white mb-3 md:mb-4 leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>{courseData.title}</h1>
               <p className="text-lg md:text-xl lg:text-2xl text-[#c8bfaf] mb-4 md:mb-6 leading-relaxed">{courseData.subtitle}</p>
               <div className="-mx-4 lg:-mx-6 mb-4 md:mb-6">
-                <div className="relative w-full bg-black aspect-video cursor-pointer" onClick={handlePreviewClick}>
+                <div className="relative w-full bg-black aspect-video cursor-pointer select-none" style={{ WebkitTapHighlightColor: 'transparent' }} onClick={handlePreviewClick}>
                   <CourseThumbnail course={courseData} />
                 </div>
               </div>
@@ -2288,7 +2574,7 @@ export default function CourseLandingPage() {
             <div className="hidden lg:block">
               <div className="sticky top-24">
                 <div className="bg-white rounded-2xl shadow-2xl overflow-hidden border border-[#ece6dd]">
-                  <div className="relative aspect-video cursor-pointer group" onClick={handlePreviewClick}>
+                  <div className="relative aspect-video cursor-pointer group select-none" style={{ WebkitTapHighlightColor: 'transparent' }} onClick={handlePreviewClick}>
                     <CourseThumbnail course={courseData} />
                   </div>
                   <div className="p-6">
@@ -2389,6 +2675,7 @@ export default function CourseLandingPage() {
                                     role={isClickable ? 'button' : undefined}
                                     tabIndex={isClickable ? 0 : undefined}
                                     aria-label={isClickable ? `Play free lecture: ${lecture.title}` : undefined}
+                                    style={{ WebkitTapHighlightColor: 'transparent' }}
                                     className={`px-4 md:px-6 py-3 md:py-3.5 border-b border-[#f0ebe3] last:border-b-0 flex items-start justify-between gap-3 transition ${isClickable ? 'cursor-pointer hover:bg-[#fbf8f3] focus:outline-none focus:bg-[#fbf8f3]' : ''}`}
                                   >
                                     <div className="flex items-start gap-2 md:gap-3 flex-1 min-w-0">
@@ -2675,92 +2962,12 @@ export default function CourseLandingPage() {
                 </button>
               </div>
 
-              {/* IMAGE TESTIMONIALS */}
-              {imageTestimonials.length > 0 && (
-                <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
-                  <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#1a1208] mb-2 md:mb-3" style={{ fontFamily: "'Playfair Display', serif" }}>Student Testimonials</h2>
-                  <p className="text-[#9e9789] text-sm md:text-base mb-4 md:mb-6">See what our students have to say</p>
-                  <AutoSlideImageTestimonials
-                    imageTestimonials={imageTestimonials}
-                    onImageClick={(idx) => { setImageSliderStartIndex(idx); setImageSliderOpen(true); }}
-                    isPaused={imageSliderOpen}
-                  />
-                </div>
-              )}
-
-              {/* VIDEO TESTIMONIALS */}
-              {videoTestimonials.length > 0 && (
-                <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
-                  <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#1a1208] mb-2 md:mb-3" style={{ fontFamily: "'Playfair Display', serif" }}>Video Reviews</h2>
-                  <p className="text-[#9e9789] text-sm md:text-base mb-4 md:mb-6">Watch authentic testimonials from our graduates</p>
-                  <VideoReviewsSlider
-                    videoTestimonials={videoTestimonials}
-                    onCardClick={(idx) => { setVideoReelsStartIndex(idx); setVideoReelsOpen(true); }}
-                    isPaused={videoReelsOpen}
-                  />
-                </div>
-              )}
-
-              {/* PROJECT GALLERY */}
-              {projectGallery.length > 0 && (
-                <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
-                  <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#1a1208] mb-2" style={{ fontFamily: "'Playfair Display', serif" }}>Project gallery</h2>
-                  <p className="text-sm md:text-base text-[#9e9789] mb-4 md:mb-6">Student work and course outcomes</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
-                    {projectGallery.map((item) => (
-                      <figure key={item.id || item._id || item.imageUrl}
-                        className="group rounded-2xl overflow-hidden border border-[#ece6dd] bg-white shadow-sm hover:shadow-md transition">
-                        <div className="aspect-video bg-[#f0ebe3] overflow-hidden">
-                          <img src={item.imageUrl} alt={item.caption || "Project"}
-                            className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" />
-                        </div>
-                        {item.caption && (
-                          <figcaption className="px-3 py-2.5 text-sm md:text-base text-[#3d3020] border-t border-[#f0ebe3]">{item.caption}</figcaption>
-                        )}
-                      </figure>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* ─────────────────────────────────────────────────────────────
-                  BUNDLES — named packages, each with its own price, an
-                  optional %-off badge, and an FAQ-style dropdown list of
-                  what's included. Each gets its own "Enroll Now in this
-                  Bundle" button, which charges the bundle's own price
-                  instead of the plain course price (see EnrolledPage.jsx).
-              ───────────────────────────────────────────────────────────── */}
-              {courseData.bundles?.length > 0 && (
-                <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
-                  <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#1a1208] mb-6 md:mb-8" style={{ fontFamily: "'Playfair Display', serif" }}>Bundles</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-                    {courseData.bundles.map((bundle) => (
-                      <div key={bundle._id} className="border border-[#ece6dd] rounded-2xl p-5 md:p-6 bg-[#f8f4ed] flex flex-col">
-                        <div className="flex items-start justify-between gap-2 mb-2">
-                          <h3 className="text-lg md:text-xl font-bold text-[#1a1208]" style={{ fontFamily: "'Playfair Display', serif" }}>{bundle.name}</h3>
-                          {bundle.discountPercentage > 0 && (
-                            <span className="flex-shrink-0 bg-[#e8540a] text-white text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap">{bundle.discountPercentage}% OFF</span>
-                          )}
-                        </div>
-                        <p className="text-xl md:text-2xl font-bold text-[#1a1208] mb-4" style={{ fontFamily: "'Playfair Display', serif" }}>
-                          PKR {Number(bundle.price || 0).toLocaleString()}
-                        </p>
-                        {bundle.items?.length > 0 && (
-                          <div className="space-y-2 mb-5 flex-1">
-                            {bundle.items.map((item, i) => <BundleFaqItem key={i} item={item} />)}
-                          </div>
-                        )}
-                        <button
-                          onClick={() => navigate(`/course/${courseData._id}/enroll?bundle=${bundle._id}`)}
-                          className="w-full bg-[#1a1208] hover:bg-[#2d2416] text-white font-bold py-3 rounded-xl transition text-base border-none cursor-pointer mt-auto"
-                        >
-                          Enroll Now in this Bundle
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+              {/* Everything from here down follows the order the instructor set in
+                  the Course Editor (drag ☰ / ▲▼): student testimonials, video
+                  reviews, project gallery, custom blocks, bundles. */}
+              {movableOrder.map((key) => (
+                <React.Fragment key={key}>{movableSections[key]}</React.Fragment>
+              ))}
             </div>
 
             {/* Sidebar (Desktop) */}

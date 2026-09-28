@@ -70,6 +70,10 @@ function getPreviewLead() {
   } catch { return null; }
 }
 
+function savePreviewLead({ name, email, whatsapp }) {
+  try { localStorage.setItem(PREVIEW_LEAD_KEY, JSON.stringify({ name, email, whatsapp, savedAt: Date.now() })); } catch { /* the details just won't be remembered on this device */ }
+}
+
 // NEW: each method lists one or more full accounts (bank/service name +
 // logo, account title, account number) instead of one crammed line of
 // "Bank Name • Account Title • Account #" — laid out on separate lines so
@@ -324,6 +328,13 @@ export default function EnrolledPage() {
   const handleContinue = useCallback(() => {
     if (!validateStep1()) return;
     if (course) trackInitiateCheckout(course);
+    // Step 1 IS the Course Basic Form — save it now (not only when payment is
+    // submitted), so it's on record even if this visitor stops at the payment
+    // step, and remember it on this device (360 days) so they aren't asked
+    // for it again. Fire-and-forget: a hiccup here must never block payment.
+    const basic = { name: form.name.trim(), email: form.email.trim(), whatsapp: form.whatsapp.trim() };
+    api.post('/course-basic-leads', { ...basic, courseId: course ? (course._id || course.id) : id, source: 'enrollment' }).catch(() => {});
+    savePreviewLead(basic);
     setStep(2);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }, [form, course]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -586,10 +597,13 @@ export default function EnrolledPage() {
                     this (skippedStep1 is only ever true when !user). */}
                 {skippedStep1 && (
                   <div className="bg-[#f8f4ed] border border-[#ece6dd] rounded-xl p-4 space-y-3">
-                    <p className="text-xs text-[#9e9789]">
-                      Welcome back, <span className="font-semibold text-[#1a1208]">{form.name}</span> — we already have your
-                      details from your free preview. Just set a password to finish creating your student portal login.
-                    </p>
+                    <div className="flex items-start gap-2 bg-[#fdf2ea] border border-[#f5ddc4] rounded-lg px-3 py-2.5">
+                      <ShieldCheck size={15} className="text-[#e8540a] flex-shrink-0 mt-0.5" />
+                      <p className="text-xs md:text-sm text-[#7a4a00] leading-relaxed">
+                        We will use this email — <strong className="break-all">{form.email}</strong> — and the password you are
+                        creating now for your course login portal. Please save these credentials.
+                      </p>
+                    </div>
                     <div>
                       <label htmlFor="enroll-password-2" className="flex items-center gap-1.5 text-sm font-bold text-[#3d3020] mb-1.5"><Lock size={15} className="text-[#e8540a]" /> Create a Password</label>
                       <input

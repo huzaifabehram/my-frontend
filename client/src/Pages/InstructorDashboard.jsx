@@ -798,6 +798,57 @@ function CoursesPage({ courses, loading, deleteCourse, togglePublish, toast }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// COURSE EDITOR — DRAGGABLE SECTIONS
+// Every section of the Course Editor can be moved up or down: drag its ⠿
+// handle, or use the ▲ ▼ buttons (those also work on a phone, where
+// drag-and-drop doesn't). The order is saved with the course
+// (editorSectionOrder). On the course landing page, the sections that live
+// below the hero — testimonials, video reviews, project gallery, custom
+// blocks, bundles — appear in the order chosen here. The thumbnail, preview
+// video, course information and course content each have one fixed place on
+// the page, so moving those only rearranges this editor.
+// ─────────────────────────────────────────────────────────────────────────────
+const EDITOR_SECTION_LABELS = {
+  thumbnail:         'Course Thumbnail',
+  previewVideo:      'Course Preview Video',
+  info:              'Course Information',
+  content:           'Course Content',
+  imageTestimonials: 'Image Testimonials',
+  videoTestimonials: 'Video Testimonials',
+  projectGallery:    'Project Gallery',
+  customBlocks:      'Custom Content Blocks',
+  bundles:           'Bundles',
+  alsoBought:        'Students Also Bought',
+};
+const EDITOR_SECTION_KEYS = Object.keys(EDITOR_SECTION_LABELS);
+function normalizeEditorOrder(saved) {
+  const valid = Array.isArray(saved) ? saved.filter((k) => EDITOR_SECTION_KEYS.includes(k)) : [];
+  return [...new Set([...valid, ...EDITOR_SECTION_KEYS])];
+}
+
+function EditorSectionShell({ label, index, total, isDragging, onHandleDragStart, onHandleDragEnd, onDragOverSection, onMoveUp, onMoveDown, children }) {
+  return (
+    <div onDragOver={onDragOverSection} className={`transition-opacity ${isDragging ? 'opacity-40' : ''}`}>
+      <div className="flex items-center gap-1.5 mb-1.5 px-1">
+        <span
+          draggable
+          onDragStart={onHandleDragStart}
+          onDragEnd={onHandleDragEnd}
+          className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-700 text-lg leading-none select-none px-1"
+          title="Drag to move this section up or down"
+        >⠿</span>
+        <span className="text-[11px] font-semibold text-gray-400 uppercase tracking-wide flex-1 truncate">{label}</span>
+        <button type="button" onClick={onMoveUp} disabled={index === 0} title="Move up"
+          className="w-6 h-6 rounded text-[10px] text-gray-500 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed border-none bg-transparent cursor-pointer">▲</button>
+        <button type="button" onClick={onMoveDown} disabled={index === total - 1} title="Move down"
+          className="w-6 h-6 rounded text-[10px] text-gray-500 hover:bg-gray-200 disabled:opacity-30 disabled:cursor-not-allowed border-none bg-transparent cursor-pointer">▼</button>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PAGE: COURSE EDITOR
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -873,6 +924,12 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
   // badge, and an FAQ-style "what's included" dropdown list. Each bundle: 
   // { id, name, price, discountPercentage, items: [{ id, title, content }] }
   const [bundles, setBundles] = useState(existing?.bundles || []);
+
+  // Order of the editor's own sections (see EditorSectionShell above) and how
+  // many copies "Duplicate" makes for each custom block.
+  const [editorOrder,     setEditorOrder]     = useState(() => normalizeEditorOrder(existing?.editorSectionOrder));
+  const [draggedSection,  setDraggedSection]  = useState(null);
+  const [duplicateCounts, setDuplicateCounts] = useState({});
 
   const [alsoBoughtIds, setAlsoBoughtIds] = useState(existing?.alsoBoughtCourseIds || []);
   const [coursePicker,   setCoursePicker]  = useState('');
@@ -1017,22 +1074,77 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
 
   // ── Custom Content Block handlers ────────────────────────────────────────
   const addCustomBlock = () => {
-    const block = { id: uid(), heading: '', subheading: '', videoUrl: '', imageUrl: '', imagePreview: '' };
+    const block = { id: uid(), heading: '', subheading: '', videoUrl: '', imageUrl: '', imagePreview: '', faqs: [] };
     setCustomBlocks(p => [...p, block]);
   };
 
-  const duplicateCustomBlock = (blockId) => {
+  // Makes `count` copies (1–10) right after the original — each with its own
+  // fresh ids, including its FAQs — so a layout you built once can be reused
+  // as many times as needed.
+  const duplicateCustomBlock = (blockId, count = 1) => {
+    const copies = Math.max(1, Math.min(10, parseInt(count, 10) || 1));
     setCustomBlocks(p => {
       const idx = p.findIndex(b => (b.id || b._id) === blockId);
       if (idx === -1) return p;
       const source = p[idx];
-      const copy = { ...source, id: uid() };
-      delete copy._id;
+      const made = Array.from({ length: copies }, () => {
+        const copy = { ...source, id: uid(), faqs: (source.faqs || []).map(f => ({ ...f, id: uid() })) };
+        delete copy._id;
+        return copy;
+      });
       const next = [...p];
-      next.splice(idx + 1, 0, copy);
+      next.splice(idx + 1, 0, ...made);
       return next;
     });
-    toast("Block duplicated — reorder or edit it below.", "success");
+    toast(`${copies} cop${copies === 1 ? 'y' : 'ies'} created — reorder or edit ${copies === 1 ? 'it' : 'them'} below.`, "success");
+  };
+
+  // ── FAQ list inside a custom block ───────────────────────────────────────
+  const addBlockFaq = (blockId) => {
+    setCustomBlocks(p => p.map(b => (b.id || b._id) === blockId ? { ...b, faqs: [...(b.faqs || []), { id: uid(), question: '', answer: '' }] } : b));
+  };
+  const updateBlockFaq = (blockId, faqId, field, val) => {
+    setCustomBlocks(p => p.map(b => (b.id || b._id) !== blockId ? b : {
+      ...b, faqs: (b.faqs || []).map(f => (f.id || f._id) === faqId ? { ...f, [field]: val } : f),
+    }));
+  };
+  const deleteBlockFaq = (blockId, faqId) => {
+    setCustomBlocks(p => p.map(b => (b.id || b._id) !== blockId ? b : {
+      ...b, faqs: (b.faqs || []).filter(f => (f.id || f._id) !== faqId),
+    }));
+  };
+
+  // ── Editor section order ─────────────────────────────────────────────────
+  const moveEditorSection = (key, dir) => {
+    setEditorOrder(prev => {
+      const from = prev.indexOf(key);
+      const to = from + dir;
+      if (from === -1 || to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      [next[from], next[to]] = [next[to], next[from]];
+      return next;
+    });
+  };
+  // Live reorder while dragging. Direction-aware: a section only swaps once
+  // the pointer is past the MIDDLE of the one it's hovering, otherwise a tall
+  // section under the pointer would swap back and forth every frame.
+  const handleSectionDragOver = (e, overKey) => {
+    if (!draggedSection || draggedSection === overKey) return;
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY;
+    const mid = rect.top + rect.height / 2;
+    setEditorOrder(prev => {
+      const from = prev.indexOf(draggedSection);
+      const to = prev.indexOf(overKey);
+      if (from === -1 || to === -1) return prev;
+      if (from < to && y < mid) return prev;
+      if (from > to && y > mid) return prev;
+      const next = [...prev];
+      next.splice(from, 1);
+      next.splice(to, 0, draggedSection);
+      return next;
+    });
   };
 
   const updateCustomBlock = (blockId, field, val) => {
@@ -1179,6 +1291,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
       videoTestimonials,
       projectGallery,
       customBlocks: customBlocks.map(({ imagePreview, ...rest }) => rest),
+      editorSectionOrder: editorOrder,
       bundles: bundles.map(b => ({
         ...b,
         price: parseFloat(b.price) || 0,
@@ -1200,7 +1313,582 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
   const isBunny        = isBunnyUrl(previewVideoUrl);
   const videoPreviewUrl = newVideoTestimonial.videoPreview || newVideoTestimonial.videoUrl;
 
-  return (
+    // Each Course Editor section, keyed so the order can be changed (see
+  // EditorSectionShell) — rendered below in `editorOrder`.
+  const sectionRenderers = {
+    thumbnail: () => (
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
+              <h3 className="font-bold text-gray-800 text-base mb-4">Course Thumbnail</h3>
+              <div className="flex flex-col sm:flex-row gap-6 items-start">
+                <div className="w-full sm:w-64 flex-shrink-0">
+                  <div className="aspect-video bg-gray-100 rounded-xl overflow-hidden border-2 border-dashed border-gray-300 hover:border-[#e8540a]/60 transition-colors relative group cursor-pointer"
+                    onClick={() => thumbnailRef.current?.click()}>
+                    {thumbnailPreview
+                      ? <img src={thumbnailPreview} alt="Thumbnail" className="w-full h-full object-cover"/>
+                      : <div className="absolute inset-0 flex flex-col items-center justify-center"><span className="text-3xl mb-2">🖼️</span><p className="text-xs text-gray-400 text-center px-2">Click to upload<br/>(16:9 recommended)</p></div>}
+                    <UploadOverlay uploading={uploadingThumb}/>
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                      <span className="text-white font-bold text-sm bg-black/50 px-3 py-1 rounded-lg">Change Image</span>
+                    </div>
+                  </div>
+                  <input ref={thumbnailRef} type="file" accept="image/*" className="hidden" onChange={handleThumbnailFile}/>
+                  <p className="text-xs text-gray-400 mt-1 text-center">JPG, PNG, WebP • Max 10MB</p>
+                </div>
+                <div className="flex-1 space-y-3">
+                  <p className="text-sm text-gray-600 font-medium">Or paste an image URL:</p>
+                  <input value={thumbnail} onChange={e => { setThumbnail(e.target.value); setThumbnailPreview(e.target.value); }}
+                    placeholder="https://example.com/image.jpg"
+                    className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
+                  <p className="text-xs text-gray-400">Recommended: 1280×720px, under 10MB.</p>
+                </div>
+              </div>
+            </div>
+    ),
+    previewVideo: () => (
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
+              <h3 className="font-bold text-gray-800 text-base mb-1">Course Preview Video</h3>
+              <p className="text-xs sm:text-sm text-gray-500 mb-4">YouTube, Bunny.net Stream URL, or direct MP4. Free preview shown to non-enrolled visitors.</p>
+              <div className="flex flex-col sm:flex-row gap-4 items-start">
+                <div className="flex-1 w-full">
+                  <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Video URL</label>
+                  <input value={previewVideoUrl} onChange={e => setPreviewVideoUrl(e.target.value)}
+                    placeholder="https://www.youtube.com/watch?v=... or iframe.mediadelivery.net/embed/..."
+                    className="w-full mt-1.5 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
+                  <p className="text-xs text-gray-400 mt-1">YouTube • Bunny Stream • Cloudinary • MP4</p>
+                </div>
+                {previewVideoUrl && (
+                  <div className="flex flex-col items-end gap-1 flex-shrink-0 sm:ml-auto">
+                    <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Preview</span>
+                    <CompactVideoPreview url={previewVideoUrl} width={168} height={94}/>
+                  </div>
+                )}
+              </div>
+            </div>
+    ),
+    info: () => (
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm space-y-5">
+              <h3 className="font-bold text-gray-800 text-base">Course Information</h3>
+              <div className="grid sm:grid-cols-2 gap-4">
+                <Input label="Course Title *" value={title} onChange={setTitle} placeholder="e.g. Complete React Bootcamp 2024" className="sm:col-span-2"/>
+                <Select label="Category" value={category} onChange={setCategory} options={CATEGORIES}/>
+                <Input label="Tags (comma-separated)" value={tags} onChange={setTags} placeholder="React, Node.js, MongoDB"/>
+                <Input label="Course Price (PKR)" value={coursePrice} onChange={setCoursePrice} placeholder="8999" type="number"/>
+                <div>
+                  <Input label="Sale Price (PKR) — optional" value={salePrice} onChange={setSalePrice} placeholder="e.g. 4999 — leave blank if not on sale" type="number"/>
+                  {(() => {
+                    const cp = parseFloat(coursePrice) || 0;
+                    const sp = parseFloat(salePrice) || 0;
+                    if (!salePrice.trim() || !sp || !cp || sp >= cp) return null;
+                    const pct = Math.round((1 - sp / cp) * 100);
+                    return <p className="text-xs text-emerald-600 font-semibold mt-1">{pct}% off Course Price — this is what students will actually pay.</p>;
+                  })()}
+                </div>
+                <Select label="Status" value={status} onChange={setStatus} options={[{value:"draft",label:"Draft"},{value:"published",label:"Published"},{value:"review",label:"Under Review"}]}/>
+                <Input label="Breadcrumb (optional)" value={breadcrumbText} onChange={setBreadcrumbText} placeholder="e.g. Marketing / My Custom Title" className="sm:col-span-2"/>
+              </div>
+              <p className="text-xs text-gray-400 -mt-3">
+                Controls the small trail shown under the header on the course page (e.g. "Marketing / My Custom Title").
+                Separate each part with a "/". Leave blank to show "{category} / {title || 'Course Title'}" automatically.
+              </p>
+              <Textarea label="Course Description" value={description} onChange={setDescription} placeholder="What will students learn? Who is this for?" rows={4}/>
+              <Textarea label="What You'll Learn (one per line)" value={whatYouLearn} onChange={setWhatYouLearn} placeholder={"Build full-stack apps\nDeploy to cloud\nJWT Authentication"} rows={4}/>
+              <Textarea label="Requirements (one per line)" value={requirements} onChange={setRequirements} placeholder={"Basic HTML & CSS\nJavaScript fundamentals"} rows={3}/>
+            </div>
+    ),
+    content: () => (
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
+              <SectionHeader title="Course Content" action={<Btn size="sm" onClick={addSection}>+ Add Section</Btn>}/>
+              <div className="space-y-3">
+                {sections.map((sec) => {
+                  const secId = sec._id || sec.id;
+                  return (
+                    <div key={secId} className="border border-gray-200 rounded-xl overflow-hidden">
+                      <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition" onClick={() => setExpandedSection(expandedSection === secId ? null : secId)}>
+                        <span className="text-gray-400 text-xs sm:text-sm select-none">☰</span>
+                        <input value={sec.title} onChange={e => { e.stopPropagation(); updateSectionTitle(secId, e.target.value); }} onClick={e => e.stopPropagation()}
+                          className="flex-1 bg-transparent text-xs sm:text-sm font-semibold text-gray-800 focus:outline-none" placeholder="Section title"/>
+                        <span className="text-xs text-gray-400 whitespace-nowrap ml-auto">{sec.lectures.length} lectures</span>
+                        <button onClick={e => { e.stopPropagation(); deleteSection(secId); }} className="text-red-400 hover:text-red-600 transition text-xs ml-1">✕</button>
+                        <span className="text-gray-400 text-xs">{expandedSection === secId ? "▲" : "▼"}</span>
+                      </div>
+                      {expandedSection === secId && (
+                        <div className="divide-y divide-gray-50">
+                          {sec.lectures.map((lec) => {
+                            const lecId      = lec._id || lec.id;
+                            const ytLecId    = getYouTubeId(lec.videoUrl);
+                            const isBunnyLec = isBunnyUrl(lec.videoUrl);
+                            const isDirLec   = isDirectVideo(lec.videoUrl) || (lec.videoUrl && lec.videoUrl.includes('cloudinary.com'));
+                            const hasVideo   = lec.videoUrl && (ytLecId || isBunnyLec || isDirLec || lec.videoUrl.startsWith('http'));
+                            return (
+                              <div key={lecId} className="px-3 sm:px-4 py-3 sm:py-4 space-y-3">
+                                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
+                                  <span className="text-gray-300 text-xs select-none">⋮⋮</span>
+                                  <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2 w-full">
+                                    <input value={lec.title} onChange={e => updateLecture(secId, lecId, "title", e.target.value)}
+                                      className="border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#e8540a]/60 sm:col-span-2" placeholder="Lecture title"/>
+                                    <select value={lec.type} onChange={e => updateLecture(secId, lecId, "type", e.target.value)}
+                                      className="border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#e8540a]/60 bg-white">
+                                      {LECTURE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                                    </select>
+                                  </div>
+                                  <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
+                                    <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
+                                      <input type="checkbox" checked={lec.free} onChange={e => updateLecture(secId, lecId, "free", e.target.checked)} className="accent-[#e8540a]"/>
+                                      Free
+                                    </label>
+                                    <input value={lec.duration||""} onChange={e => updateLecture(secId, lecId, "duration", e.target.value)}
+                                      placeholder="10:30" className="w-12 sm:w-14 border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#e8540a]/60"/>
+                                    <button onClick={() => deleteLecture(secId, lecId)} className="text-red-300 hover:text-red-500 transition text-xs">✕</button>
+                                  </div>
+                                </div>
+                                {lec.type === "video" && (
+                                  <div className="pl-4 sm:pl-6 space-y-2">
+                                    <div className="flex items-center gap-2">
+                                      <svg className="w-4 h-4 text-red-500 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
+                                      <input value={lec.videoUrl||""} onChange={e => updateLectureVideo(secId, lecId, e.target.value)}
+                                        placeholder="YouTube, Bunny, Cloudinary, or MP4 URL"
+                                        className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#e8540a]/60"/>
+                                    </div>
+                                    {hasVideo && (
+                                      <div className="flex justify-end">
+                                        <CompactVideoPreview url={lec.videoUrl} width={140} height={80}/>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                          <div className="px-3 sm:px-4 py-3">
+                            <button onClick={() => addLecture(secId)} className="text-xs sm:text-sm text-[#e8540a] hover:text-[#c94708] font-medium flex items-center gap-1.5 transition">
+                              <span className="text-lg leading-none">＋</span> Add Lecture
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+    ),
+    imageTestimonials: () => (
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
+              <SectionHeader title="📸 Image Testimonials"/>
+              <p className="text-sm text-gray-500 mb-4">Student testimonials with photos — shown as a slider on the course page.</p>
+              {imageTestimonials.length > 0 && (
+                <div className="mb-6 grid sm:grid-cols-2 gap-3">
+                  {imageTestimonials.map(t => (
+                    <div key={t.id || t._id} className="border border-gray-200 rounded-lg p-3 flex gap-3">
+                      <img src={t.imageUrl} alt={t.author} className="w-20 h-20 object-cover rounded-lg flex-shrink-0"/>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-semibold text-gray-900 text-sm">{t.author}</p>
+                        <p className="text-xs text-gray-600 mt-1 line-clamp-3">{t.text}</p>
+                      </div>
+                      <button onClick={() => deleteImageTestimonial(t.id || t._id)} className="text-red-400 hover:text-red-600 text-sm self-start">✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+                <h4 className="font-semibold text-gray-800 text-sm">Add New Image Testimonial</h4>
+                <div className="flex gap-4 items-start">
+                  <div className="w-28 h-28 flex-shrink-0 relative">
+                    <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-[#e8540a]/60 transition cursor-pointer group"
+                      onClick={() => imageTestimonialRef.current?.click()}>
+                      {newImageTestimonial.imagePreview
+                        ? <img src={newImageTestimonial.imagePreview} alt="Preview" className="w-full h-full object-cover"/>
+                        : <div className="w-full h-full flex flex-col items-center justify-center"><span className="text-2xl mb-1">📷</span><p className="text-xs text-gray-400 text-center px-1">Upload</p></div>}
+                      <UploadOverlay uploading={uploadingImageTestimonial}/>
+                    </div>
+                    <input ref={imageTestimonialRef} type="file" accept="image/*" className="hidden" onChange={handleImageTestimonialFile}/>
+                  </div>
+                  <div className="flex-1 space-y-3">
+                    <Input label="Student Name" value={newImageTestimonial.author} onChange={v => setNewImageTestimonial(p => ({ ...p, author: v }))} placeholder="John Doe"/>
+                    <Textarea label="Testimonial" value={newImageTestimonial.text} onChange={v => setNewImageTestimonial(p => ({ ...p, text: v }))} placeholder="This course changed my life..." rows={2}/>
+                    <Btn onClick={addImageTestimonial} size="sm" disabled={uploadingImageTestimonial}>+ Add Image Testimonial</Btn>
+                  </div>
+                </div>
+              </div>
+            </div>
+    ),
+    videoTestimonials: () => (
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
+              <SectionHeader title="🎬 Video Testimonials"/>
+              <p className="text-sm text-gray-500 mb-4">Student video reviews — upload a file to Cloudinary or paste a Bunny.net / YouTube URL.</p>
+              {videoTestimonials.length > 0 && (
+                <div className="mb-6 space-y-3">
+                  {videoTestimonials.map(t => (
+                    <div key={t.id || t._id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-gray-900 text-sm">{t.author}</p>
+                          <p className="text-xs text-gray-500 mt-0.5">{t.text}</p>
+                        </div>
+                        <button onClick={() => deleteVideoTestimonial(t.id || t._id)} className="text-red-400 hover:text-red-600 text-sm ml-2 flex-shrink-0">✕</button>
+                      </div>
+                      <div className="flex justify-end">
+                        <CompactVideoPreview url={t.videoUrl} width={140} height={80}/>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+                <h4 className="font-semibold text-gray-800 text-sm">Add New Video Testimonial</h4>
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <Input label="Student Name" value={newVideoTestimonial.author} onChange={v => setNewVideoTestimonial(p => ({ ...p, author: v }))} placeholder="Jane Smith"/>
+                  <div/>
+                  <Textarea label="Description" value={newVideoTestimonial.text} onChange={v => setNewVideoTestimonial(p => ({ ...p, text: v }))} placeholder="Brief description..." rows={2} className="sm:col-span-2"/>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Video source:</span>
+                  <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+                    <button onClick={() => setVideoInputMode('url')}
+                      className={`px-3 py-1.5 text-xs font-semibold transition ${videoInputMode === 'url' ? 'bg-[#e8540a] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                      🔗 Paste URL
+                    </button>
+                    <button onClick={() => setVideoInputMode('upload')}
+                      className={`px-3 py-1.5 text-xs font-semibold transition ${videoInputMode === 'upload' ? 'bg-[#e8540a] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
+                      ☁️ Upload to Cloudinary
+                    </button>
+                  </div>
+                </div>
+                {videoInputMode === 'url' ? (
+                  <div>
+                    <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">Video URL</label>
+                    <input value={newVideoTestimonial.videoUrl} onChange={e => setNewVideoTestimonial(p => ({ ...p, videoUrl: e.target.value, videoPreview: e.target.value }))}
+                      placeholder="https://iframe.mediadelivery.net/embed/... or youtube.com/watch?v=..."
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
+                    <p className="text-xs text-gray-400 mt-1">YouTube · Bunny.net · Cloudinary · MP4</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="text-xs sm:text-sm font-medium text-gray-700 block">Upload Video File</label>
+                    <div className="relative">
+                      <div className="aspect-video bg-gray-100 rounded-xl overflow-hidden border-2 border-dashed border-gray-300 hover:border-[#e8540a]/60 transition cursor-pointer flex items-center justify-center"
+                        onClick={() => !uploadingVideoTestimonial && videoTestimonialRef.current?.click()}>
+                        {videoPreviewUrl ? (
+                          <VideoPlayer url={videoPreviewUrl} className="rounded-none"/>
+                        ) : (
+                          <div className="flex flex-col items-center gap-2">
+                            <span className="text-4xl">🎥</span>
+                            <p className="text-sm font-semibold text-gray-600">Click to upload video</p>
+                            <p className="text-xs text-gray-400">MP4, WebM, MOV — max 500 MB</p>
+                          </div>
+                        )}
+                        <UploadOverlay uploading={uploadingVideoTestimonial}/>
+                      </div>
+                      <input ref={videoTestimonialRef} type="file" accept="video/mp4,video/webm,video/ogg,video/quicktime,video/x-msvideo" className="hidden" onChange={handleVideoTestimonialFile}/>
+                    </div>
+                    {uploadingVideoTestimonial && (
+                      <div className="flex items-center gap-2 text-sm text-[#e8540a]">
+                        <div className="w-4 h-4 border-2 border-[#e8540a] border-t-transparent rounded-full animate-spin"/>
+                        <span>Uploading to Cloudinary… large files may take a moment.</span>
+                      </div>
+                    )}
+                    {newVideoTestimonial.videoUrl && !uploadingVideoTestimonial && (
+                      <p className="text-xs text-emerald-600 font-semibold">✓ Uploaded: {newVideoTestimonial.videoUrl.slice(0, 60)}...</p>
+                    )}
+                  </div>
+                )}
+                {videoInputMode === 'url' && videoPreviewUrl && (
+                  <div className="flex justify-end">
+                    <CompactVideoPreview url={videoPreviewUrl} width={168} height={94}/>
+                  </div>
+                )}
+                <Btn onClick={addVideoTestimonial} size="sm" disabled={uploadingVideoTestimonial}>
+                  + Add Video Testimonial
+                </Btn>
+              </div>
+            </div>
+    ),
+    projectGallery: () => (
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
+              <SectionHeader title="🖼️ Project Gallery"/>
+              <p className="text-sm text-gray-500 mb-4">Showcase student projects or course deliverables.</p>
+              {projectGallery.length > 0 && (
+                <div className="mb-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {projectGallery.map(g => (
+                    <div key={g.id || g._id} className="group relative rounded-lg overflow-hidden border border-gray-200 aspect-video bg-gray-100">
+                      <img src={g.imageUrl} alt={g.caption || "Gallery"} className="w-full h-full object-cover"/>
+                      {g.caption && (
+                        <div className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1">
+                          <p className="text-white text-xs truncate">{g.caption}</p>
+                        </div>
+                      )}
+                      <button onClick={() => deleteGalleryItem(g.id || g._id)}
+                        className="absolute top-1.5 right-1.5 w-6 h-6 bg-red-600 hover:bg-red-700 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-lg">
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+                <h4 className="font-semibold text-gray-800 text-sm">Add Gallery Image</h4>
+                <div className="flex gap-4 items-start">
+                  <div className="w-40 h-28 flex-shrink-0 relative">
+                    <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-[#e8540a]/60 transition cursor-pointer group"
+                      onClick={() => galleryRef.current?.click()}>
+                      {newGalleryItem.imagePreview
+                        ? <img src={newGalleryItem.imagePreview} alt="Preview" className="w-full h-full object-cover"/>
+                        : (
+                          <div className="w-full h-full flex flex-col items-center justify-center gap-1">
+                            <span className="text-2xl">🖼️</span>
+                            <p className="text-xs text-gray-400 text-center px-2">Click to upload<br/>JPG / PNG / WebP</p>
+                          </div>
+                        )}
+                      <UploadOverlay uploading={uploadingGalleryItem}/>
+                    </div>
+                    <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={handleGalleryFile}/>
+                  </div>
+                  <div className="flex-1 space-y-3">
+                    <Input label="Caption (optional)" value={newGalleryItem.caption} onChange={v => setNewGalleryItem(p => ({ ...p, caption: v }))} placeholder="Student project — week 4"/>
+                    {newGalleryItem.imageUrl && <p className="text-xs text-emerald-600 font-semibold">✓ Ready to add</p>}
+                    <Btn onClick={addGalleryItem} size="sm" disabled={uploadingGalleryItem || !newGalleryItem.imageUrl}>
+                      {uploadingGalleryItem ? "Uploading…" : "+ Add to Gallery"}
+                    </Btn>
+                    <p className="text-xs text-gray-400">Max 10MB per image. Up to 20 images.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+    ),
+    customBlocks: () => (
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
+              <SectionHeader title="🧩 Custom Content Blocks" action={<Btn size="sm" onClick={addCustomBlock}>+ Add Block</Btn>}/>
+              <p className="text-sm text-gray-500 mb-4">
+                Flexible sections — heading, sub heading, and a video or image. Drag the ☰ handle to reorder,
+                duplicate a block to reuse it again elsewhere. These render directly on the course landing page.
+              </p>
+              {customBlocks.length === 0 ? (
+                <EmptyState
+                  icon="🧩"
+                  title="No custom blocks yet"
+                  body="Add a block to feature extra media, announcements, or bonus content on the course page."
+                  action={<Btn size="sm" onClick={addCustomBlock}>+ Add Block</Btn>}
+                />
+              ) : (
+                <div className="space-y-3">
+                  {customBlocks.map((block) => {
+                    const bId = block.id || block._id;
+                    const uploading = uploadingBlockImage[bId];
+                    const imgPreview = block.imagePreview || block.imageUrl;
+                    const isDragging = draggedBlockId === bId;
+                    return (
+                      <div
+                        key={bId}
+                        draggable
+                        onDragStart={() => handleBlockDragStart(bId)}
+                        onDragOver={(e) => handleBlockDragOver(e, bId)}
+                        onDrop={(e) => e.preventDefault()}
+                        onDragEnd={handleBlockDragEnd}
+                        className={`border rounded-xl p-4 transition ${isDragging ? "border-[#e8540a]/60 bg-[#fdf2ea]/80 opacity-60" : "border-gray-200 bg-gray-50"}`}
+                      >
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 text-sm select-none" title="Drag to reorder">☰</span>
+                          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex-1">Content Block</span>
+                          <div className="flex items-center gap-1" title="How many copies to make">
+                            <input
+                              type="number" min="1" max="10"
+                              value={duplicateCounts[bId] ?? 1}
+                              onChange={e => setDuplicateCounts(p => ({ ...p, [bId]: e.target.value }))}
+                              className="w-12 border border-gray-200 rounded px-1.5 py-1 text-xs text-center focus:outline-none focus:ring-1 focus:ring-[#e8540a]"
+                            />
+                            <button onClick={() => duplicateCustomBlock(bId, duplicateCounts[bId] ?? 1)} className="text-xs font-semibold text-[#e8540a] hover:text-[#c94708] transition px-2 py-1 rounded hover:bg-[#fdf2ea]">⧉ Duplicate</button>
+                          </div>
+                          <button onClick={() => deleteCustomBlock(bId)} className="text-red-400 hover:text-red-600 transition text-xs px-2 py-1 rounded hover:bg-red-50">✕ Remove</button>
+                        </div>
+      
+                        <div className="grid sm:grid-cols-2 gap-3 mb-3">
+                          <Input label="Heading" value={block.heading || ""} onChange={v => updateCustomBlock(bId, "heading", v)} placeholder="e.g. Meet Your Mentors"/>
+                          <Input label="Sub Heading" value={block.subheading || ""} onChange={v => updateCustomBlock(bId, "subheading", v)} placeholder="e.g. A quick word before you enroll"/>
+                        </div>
+      
+                        <div className="grid sm:grid-cols-2 gap-4 items-start">
+                          <div>
+                            <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">
+                              Video URL <span className="text-gray-400 font-normal">(optional)</span>
+                            </label>
+                            <input value={block.videoUrl || ""} onChange={e => updateCustomBlock(bId, "videoUrl", e.target.value)}
+                              placeholder="YouTube, Bunny.net, or direct MP4 URL"
+                              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
+                            {block.videoUrl && (
+                              <div className="flex justify-end mt-2">
+                                <CompactVideoPreview url={block.videoUrl} width={150} height={84}/>
+                              </div>
+                            )}
+                          </div>
+                          <div>
+                            <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">
+                              Image <span className="text-gray-400 font-normal">(used if no video)</span>
+                            </label>
+                            <div className="flex items-start gap-3">
+                              <div className="w-20 h-20 flex-shrink-0 relative">
+                                <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-[#e8540a]/60 transition cursor-pointer group"
+                                  onClick={() => blockImageRefs.current[bId]?.click()}>
+                                  {imgPreview
+                                    ? <img src={imgPreview} alt="Preview" className="w-full h-full object-cover"/>
+                                    : <div className="w-full h-full flex items-center justify-center"><span className="text-xl">🖼️</span></div>}
+                                  <UploadOverlay uploading={uploading}/>
+                                </div>
+                                <input ref={el => (blockImageRefs.current[bId] = el)} type="file" accept="image/*" className="hidden" onChange={e => handleCustomBlockImageFile(e, bId)}/>
+                              </div>
+                              <input value={block.imageUrl || ""} onChange={e => updateCustomBlock(bId, "imageUrl", e.target.value)}
+                                placeholder="Or paste image URL"
+                                className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
+                            </div>
+                          </div>
+                        </div>
+      
+                        {/* FAQ — optional dropdown questions shown under this block on the course page */}
+                        <div className="mt-4 pt-4 border-t border-gray-200">
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-xs sm:text-sm font-medium text-gray-700">FAQ <span className="text-gray-400 font-normal">(optional — shown as dropdowns)</span></label>
+                            <button onClick={() => addBlockFaq(bId)} className="text-xs font-semibold text-[#e8540a] hover:text-[#c94708] transition bg-transparent border-none cursor-pointer">+ Add FAQ</button>
+                          </div>
+                          <div className="space-y-2">
+                            {(block.faqs || []).map((faq) => {
+                              const fId = faq.id || faq._id;
+                              return (
+                                <div key={fId} className="bg-white border border-gray-200 rounded-lg p-3">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <input value={faq.question || ""} onChange={e => updateBlockFaq(bId, fId, "question", e.target.value)}
+                                      placeholder="Question — e.g. Who is this course for?"
+                                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
+                                    <button onClick={() => deleteBlockFaq(bId, fId)} className="text-red-400 hover:text-red-600 transition text-xs px-2 py-1 rounded hover:bg-red-50 flex-shrink-0">✕</button>
+                                  </div>
+                                  <textarea value={faq.answer || ""} onChange={e => updateBlockFaq(bId, fId, "answer", e.target.value)}
+                                    placeholder="Answer" rows={2}
+                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
+                                </div>
+                              );
+                            })}
+                            {(block.faqs || []).length === 0 && <p className="text-xs text-gray-400 italic">No FAQs yet — add the questions people usually ask about this block.</p>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+    ),
+    bundles: () => (
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
+              <SectionHeader title="🎁 Bundles" action={<Btn size="sm" onClick={addBundle}>+ Add Bundle</Btn>}/>
+              <p className="text-sm text-gray-500 mb-4">
+                A named package with its own price and a dropdown list of what's included — shown on the course page
+                with its own "Enroll Now in this Bundle" button.
+              </p>
+              {bundles.length === 0 ? (
+                <EmptyState
+                  icon="🎁"
+                  title="No bundles yet"
+                  body="Add a bundle to offer a package price with its own perks list."
+                  action={<Btn size="sm" onClick={addBundle}>+ Add Bundle</Btn>}
+                />
+              ) : (
+                <div className="space-y-4">
+                  {bundles.map((bundle) => {
+                    const bId = bundle.id || bundle._id;
+                    return (
+                      <div key={bId} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
+                        <div className="flex items-center gap-2 mb-3">
+                          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex-1">Bundle</span>
+                          <button onClick={() => deleteBundle(bId)} className="text-red-400 hover:text-red-600 transition text-xs px-2 py-1 rounded hover:bg-red-50">✕ Remove</button>
+                        </div>
+                        <div className="grid sm:grid-cols-3 gap-3 mb-3">
+                          <Input label="Bundle Name" value={bundle.name || ""} onChange={v => updateBundle(bId, "name", v)} placeholder="e.g. Complete Growth Bundle"/>
+                          <Input label="Bundle Price (PKR)" value={bundle.price ?? ""} onChange={v => updateBundle(bId, "price", v)} placeholder="14999" type="number"/>
+                          <Input label="Discount % (optional badge)" value={bundle.discountPercentage ?? ""} onChange={v => updateBundle(bId, "discountPercentage", v)} placeholder="e.g. 20" type="number"/>
+                        </div>
+                        <div className="mt-2">
+                          <div className="flex items-center justify-between mb-2">
+                            <label className="text-xs sm:text-sm font-medium text-gray-700">What's included (FAQ-style dropdown)</label>
+                            <button onClick={() => addBundleItem(bId)} className="text-xs font-semibold text-[#e8540a] hover:text-[#c94708] transition bg-transparent border-none cursor-pointer">+ Add Item</button>
+                          </div>
+                          <div className="space-y-2">
+                            {(bundle.items || []).map((item) => {
+                              const iId = item.id || item._id;
+                              return (
+                                <div key={iId} className="bg-white border border-gray-200 rounded-lg p-3">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <input value={item.title || ""} onChange={e => updateBundleItem(bId, iId, "title", e.target.value)}
+                                      placeholder="e.g. 20+ hours of video content"
+                                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
+                                    <button onClick={() => deleteBundleItem(bId, iId)} className="text-red-400 hover:text-red-600 transition text-xs px-2 py-1 rounded hover:bg-red-50 flex-shrink-0">✕</button>
+                                  </div>
+                                  <textarea value={item.content || ""} onChange={e => updateBundleItem(bId, iId, "content", e.target.value)}
+                                    placeholder="Optional detail shown when this dropdown is expanded" rows={2}
+                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
+                                </div>
+                              );
+                            })}
+                            {(bundle.items || []).length === 0 && <p className="text-xs text-gray-400 italic">No items yet — add what's included in this bundle.</p>}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+    ),
+    alsoBought: () => (
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
+              <SectionHeader title="🛒 Students Also Bought"/>
+              <p className="text-sm text-gray-500 mb-4">Choose up to 6 published courses to show in the "Students also bought" section.</p>
+              {alsoBoughtCourses.length > 0 && (
+                <div className="mb-6 space-y-2">
+                  {alsoBoughtCourses.map((c, idx) => (
+                    <div key={c._id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
+                      <div className="w-8 h-8 rounded-lg overflow-hidden bg-[#fdf2ea] flex-shrink-0">
+                        {c.thumbnail
+                          ? <img src={c.thumbnail} alt={c.title} className="w-full h-full object-cover"/>
+                          : <div className="w-full h-full flex items-center justify-center text-[#e8540a] font-bold text-sm">{c.title?.charAt(0)}</div>}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800 truncate">{c.title}</p>
+                        <p className="text-xs text-gray-500">{c.category} · PKR {c.price}</p>
+                      </div>
+                      <span className="text-xs bg-emerald-100 text-emerald-700 font-semibold px-2 py-0.5 rounded-full flex-shrink-0">Published</span>
+                      <span className="text-xs text-gray-400 flex-shrink-0">#{idx + 1}</span>
+                      <button onClick={() => removeAlsoBought(c._id)} className="text-red-400 hover:text-red-600 text-sm flex-shrink-0 ml-1">✕</button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {alsoBoughtIds.length < 6 ? (
+                <div className="flex gap-2 items-end">
+                  <div className="flex-1">
+                    <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">
+                      Select a course {alsoBoughtIds.length > 0 && <span className="text-gray-400 font-normal">({alsoBoughtIds.length}/6 selected)</span>}
+                    </label>
+                    <select value={coursePicker} onChange={e => setCoursePicker(e.target.value)}
+                      className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#e8540a] bg-white">
+                      <option value="">— Choose a published course —</option>
+                      {publishedCourses.filter(c => !alsoBoughtIds.includes(c._id)).map(c => (
+                        <option key={c._id} value={c._id}>{c.title} (PKR {c.price})</option>
+                      ))}
+                    </select>
+                  </div>
+                  <Btn onClick={addAlsoBought} disabled={!coursePicker} size="md">Add</Btn>
+                </div>
+              ) : (
+                <p className="text-sm text-amber-600 font-semibold bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5">
+                  ✓ Maximum 6 courses selected. Remove one to add another.
+                </p>
+              )}
+              {publishedCourses.length === 0 && (
+                <p className="text-sm text-gray-400 mt-3 italic">No other published courses found.</p>
+              )}
+            </div>
+    ),
+  };
+
+return (
     <div className="space-y-6 max-w-4xl">
       <div className="flex flex-col sm:flex-row items-start sm:items-center sm:justify-between gap-3">
         <div>
@@ -1216,545 +1904,28 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
         </div>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
-        <h3 className="font-bold text-gray-800 text-base mb-4">Course Thumbnail</h3>
-        <div className="flex flex-col sm:flex-row gap-6 items-start">
-          <div className="w-full sm:w-64 flex-shrink-0">
-            <div className="aspect-video bg-gray-100 rounded-xl overflow-hidden border-2 border-dashed border-gray-300 hover:border-[#e8540a]/60 transition-colors relative group cursor-pointer"
-              onClick={() => thumbnailRef.current?.click()}>
-              {thumbnailPreview
-                ? <img src={thumbnailPreview} alt="Thumbnail" className="w-full h-full object-cover"/>
-                : <div className="absolute inset-0 flex flex-col items-center justify-center"><span className="text-3xl mb-2">🖼️</span><p className="text-xs text-gray-400 text-center px-2">Click to upload<br/>(16:9 recommended)</p></div>}
-              <UploadOverlay uploading={uploadingThumb}/>
-              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
-                <span className="text-white font-bold text-sm bg-black/50 px-3 py-1 rounded-lg">Change Image</span>
-              </div>
-            </div>
-            <input ref={thumbnailRef} type="file" accept="image/*" className="hidden" onChange={handleThumbnailFile}/>
-            <p className="text-xs text-gray-400 mt-1 text-center">JPG, PNG, WebP • Max 10MB</p>
-          </div>
-          <div className="flex-1 space-y-3">
-            <p className="text-sm text-gray-600 font-medium">Or paste an image URL:</p>
-            <input value={thumbnail} onChange={e => { setThumbnail(e.target.value); setThumbnailPreview(e.target.value); }}
-              placeholder="https://example.com/image.jpg"
-              className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
-            <p className="text-xs text-gray-400">Recommended: 1280×720px, under 10MB.</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
-        <h3 className="font-bold text-gray-800 text-base mb-1">Course Preview Video</h3>
-        <p className="text-xs sm:text-sm text-gray-500 mb-4">YouTube, Bunny.net Stream URL, or direct MP4. Free preview shown to non-enrolled visitors.</p>
-        <div className="flex flex-col sm:flex-row gap-4 items-start">
-          <div className="flex-1 w-full">
-            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Video URL</label>
-            <input value={previewVideoUrl} onChange={e => setPreviewVideoUrl(e.target.value)}
-              placeholder="https://www.youtube.com/watch?v=... or iframe.mediadelivery.net/embed/..."
-              className="w-full mt-1.5 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
-            <p className="text-xs text-gray-400 mt-1">YouTube • Bunny Stream • Cloudinary • MP4</p>
-          </div>
-          {previewVideoUrl && (
-            <div className="flex flex-col items-end gap-1 flex-shrink-0 sm:ml-auto">
-              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">Preview</span>
-              <CompactVideoPreview url={previewVideoUrl} width={168} height={94}/>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm space-y-5">
-        <h3 className="font-bold text-gray-800 text-base">Course Information</h3>
-        <div className="grid sm:grid-cols-2 gap-4">
-          <Input label="Course Title *" value={title} onChange={setTitle} placeholder="e.g. Complete React Bootcamp 2024" className="sm:col-span-2"/>
-          <Select label="Category" value={category} onChange={setCategory} options={CATEGORIES}/>
-          <Input label="Tags (comma-separated)" value={tags} onChange={setTags} placeholder="React, Node.js, MongoDB"/>
-          <Input label="Course Price (PKR)" value={coursePrice} onChange={setCoursePrice} placeholder="8999" type="number"/>
-          <div>
-            <Input label="Sale Price (PKR) — optional" value={salePrice} onChange={setSalePrice} placeholder="e.g. 4999 — leave blank if not on sale" type="number"/>
-            {(() => {
-              const cp = parseFloat(coursePrice) || 0;
-              const sp = parseFloat(salePrice) || 0;
-              if (!salePrice.trim() || !sp || !cp || sp >= cp) return null;
-              const pct = Math.round((1 - sp / cp) * 100);
-              return <p className="text-xs text-emerald-600 font-semibold mt-1">{pct}% off Course Price — this is what students will actually pay.</p>;
-            })()}
-          </div>
-          <Select label="Status" value={status} onChange={setStatus} options={[{value:"draft",label:"Draft"},{value:"published",label:"Published"},{value:"review",label:"Under Review"}]}/>
-          <Input label="Breadcrumb (optional)" value={breadcrumbText} onChange={setBreadcrumbText} placeholder="e.g. Marketing / My Custom Title" className="sm:col-span-2"/>
-        </div>
-        <p className="text-xs text-gray-400 -mt-3">
-          Controls the small trail shown under the header on the course page (e.g. "Marketing / My Custom Title").
-          Separate each part with a "/". Leave blank to show "{category} / {title || 'Course Title'}" automatically.
-        </p>
-        <Textarea label="Course Description" value={description} onChange={setDescription} placeholder="What will students learn? Who is this for?" rows={4}/>
-        <Textarea label="What You'll Learn (one per line)" value={whatYouLearn} onChange={setWhatYouLearn} placeholder={"Build full-stack apps\nDeploy to cloud\nJWT Authentication"} rows={4}/>
-        <Textarea label="Requirements (one per line)" value={requirements} onChange={setRequirements} placeholder={"Basic HTML & CSS\nJavaScript fundamentals"} rows={3}/>
-      </div>
-
-      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
-        <SectionHeader title="Course Content" action={<Btn size="sm" onClick={addSection}>+ Add Section</Btn>}/>
-        <div className="space-y-3">
-          {sections.map((sec) => {
-            const secId = sec._id || sec.id;
-            return (
-              <div key={secId} className="border border-gray-200 rounded-xl overflow-hidden">
-                <div className="flex items-center gap-2 sm:gap-3 px-3 sm:px-4 py-3 bg-gray-50 cursor-pointer hover:bg-gray-100 transition" onClick={() => setExpandedSection(expandedSection === secId ? null : secId)}>
-                  <span className="text-gray-400 text-xs sm:text-sm select-none">☰</span>
-                  <input value={sec.title} onChange={e => { e.stopPropagation(); updateSectionTitle(secId, e.target.value); }} onClick={e => e.stopPropagation()}
-                    className="flex-1 bg-transparent text-xs sm:text-sm font-semibold text-gray-800 focus:outline-none" placeholder="Section title"/>
-                  <span className="text-xs text-gray-400 whitespace-nowrap ml-auto">{sec.lectures.length} lectures</span>
-                  <button onClick={e => { e.stopPropagation(); deleteSection(secId); }} className="text-red-400 hover:text-red-600 transition text-xs ml-1">✕</button>
-                  <span className="text-gray-400 text-xs">{expandedSection === secId ? "▲" : "▼"}</span>
-                </div>
-                {expandedSection === secId && (
-                  <div className="divide-y divide-gray-50">
-                    {sec.lectures.map((lec) => {
-                      const lecId      = lec._id || lec.id;
-                      const ytLecId    = getYouTubeId(lec.videoUrl);
-                      const isBunnyLec = isBunnyUrl(lec.videoUrl);
-                      const isDirLec   = isDirectVideo(lec.videoUrl) || (lec.videoUrl && lec.videoUrl.includes('cloudinary.com'));
-                      const hasVideo   = lec.videoUrl && (ytLecId || isBunnyLec || isDirLec || lec.videoUrl.startsWith('http'));
-                      return (
-                        <div key={lecId} className="px-3 sm:px-4 py-3 sm:py-4 space-y-3">
-                          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 sm:gap-3">
-                            <span className="text-gray-300 text-xs select-none">⋮⋮</span>
-                            <div className="flex-1 grid grid-cols-1 sm:grid-cols-3 gap-2 w-full">
-                              <input value={lec.title} onChange={e => updateLecture(secId, lecId, "title", e.target.value)}
-                                className="border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-800 focus:outline-none focus:ring-1 focus:ring-[#e8540a]/60 sm:col-span-2" placeholder="Lecture title"/>
-                              <select value={lec.type} onChange={e => updateLecture(secId, lecId, "type", e.target.value)}
-                                className="border border-gray-200 rounded px-2 py-1.5 text-xs text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#e8540a]/60 bg-white">
-                                {LECTURE_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
-                              </select>
-                            </div>
-                            <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap">
-                              <label className="flex items-center gap-1 text-xs text-gray-500 cursor-pointer">
-                                <input type="checkbox" checked={lec.free} onChange={e => updateLecture(secId, lecId, "free", e.target.checked)} className="accent-[#e8540a]"/>
-                                Free
-                              </label>
-                              <input value={lec.duration||""} onChange={e => updateLecture(secId, lecId, "duration", e.target.value)}
-                                placeholder="10:30" className="w-12 sm:w-14 border border-gray-200 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#e8540a]/60"/>
-                              <button onClick={() => deleteLecture(secId, lecId)} className="text-red-300 hover:text-red-500 transition text-xs">✕</button>
-                            </div>
-                          </div>
-                          {lec.type === "video" && (
-                            <div className="pl-4 sm:pl-6 space-y-2">
-                              <div className="flex items-center gap-2">
-                                <svg className="w-4 h-4 text-red-500 flex-shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M23.495 6.205a3.007 3.007 0 0 0-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 0 0 .527 6.205a31.247 31.247 0 0 0-.522 5.805 31.247 31.247 0 0 0 .522 5.783 3.007 3.007 0 0 0 2.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 0 0 2.088-2.088 31.247 31.247 0 0 0 .5-5.783 31.247 31.247 0 0 0-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/></svg>
-                                <input value={lec.videoUrl||""} onChange={e => updateLectureVideo(secId, lecId, e.target.value)}
-                                  placeholder="YouTube, Bunny, Cloudinary, or MP4 URL"
-                                  className="flex-1 border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-[#e8540a]/60"/>
-                              </div>
-                              {hasVideo && (
-                                <div className="flex justify-end">
-                                  <CompactVideoPreview url={lec.videoUrl} width={140} height={80}/>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                    <div className="px-3 sm:px-4 py-3">
-                      <button onClick={() => addLecture(secId)} className="text-xs sm:text-sm text-[#e8540a] hover:text-[#c94708] font-medium flex items-center gap-1.5 transition">
-                        <span className="text-lg leading-none">＋</span> Add Lecture
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
-        <SectionHeader title="📸 Image Testimonials"/>
-        <p className="text-sm text-gray-500 mb-4">Student testimonials with photos — shown as a slider on the course page.</p>
-        {imageTestimonials.length > 0 && (
-          <div className="mb-6 grid sm:grid-cols-2 gap-3">
-            {imageTestimonials.map(t => (
-              <div key={t.id || t._id} className="border border-gray-200 rounded-lg p-3 flex gap-3">
-                <img src={t.imageUrl} alt={t.author} className="w-20 h-20 object-cover rounded-lg flex-shrink-0"/>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-900 text-sm">{t.author}</p>
-                  <p className="text-xs text-gray-600 mt-1 line-clamp-3">{t.text}</p>
-                </div>
-                <button onClick={() => deleteImageTestimonial(t.id || t._id)} className="text-red-400 hover:text-red-600 text-sm self-start">✕</button>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="bg-gray-50 rounded-lg p-4 space-y-4">
-          <h4 className="font-semibold text-gray-800 text-sm">Add New Image Testimonial</h4>
-          <div className="flex gap-4 items-start">
-            <div className="w-28 h-28 flex-shrink-0 relative">
-              <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-[#e8540a]/60 transition cursor-pointer group"
-                onClick={() => imageTestimonialRef.current?.click()}>
-                {newImageTestimonial.imagePreview
-                  ? <img src={newImageTestimonial.imagePreview} alt="Preview" className="w-full h-full object-cover"/>
-                  : <div className="w-full h-full flex flex-col items-center justify-center"><span className="text-2xl mb-1">📷</span><p className="text-xs text-gray-400 text-center px-1">Upload</p></div>}
-                <UploadOverlay uploading={uploadingImageTestimonial}/>
-              </div>
-              <input ref={imageTestimonialRef} type="file" accept="image/*" className="hidden" onChange={handleImageTestimonialFile}/>
-            </div>
-            <div className="flex-1 space-y-3">
-              <Input label="Student Name" value={newImageTestimonial.author} onChange={v => setNewImageTestimonial(p => ({ ...p, author: v }))} placeholder="John Doe"/>
-              <Textarea label="Testimonial" value={newImageTestimonial.text} onChange={v => setNewImageTestimonial(p => ({ ...p, text: v }))} placeholder="This course changed my life..." rows={2}/>
-              <Btn onClick={addImageTestimonial} size="sm" disabled={uploadingImageTestimonial}>+ Add Image Testimonial</Btn>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
-        <SectionHeader title="🎬 Video Testimonials"/>
-        <p className="text-sm text-gray-500 mb-4">Student video reviews — upload a file to Cloudinary or paste a Bunny.net / YouTube URL.</p>
-        {videoTestimonials.length > 0 && (
-          <div className="mb-6 space-y-3">
-            {videoTestimonials.map(t => (
-              <div key={t.id || t._id} className="border border-gray-200 rounded-lg p-4">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="min-w-0">
-                    <p className="font-semibold text-gray-900 text-sm">{t.author}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">{t.text}</p>
-                  </div>
-                  <button onClick={() => deleteVideoTestimonial(t.id || t._id)} className="text-red-400 hover:text-red-600 text-sm ml-2 flex-shrink-0">✕</button>
-                </div>
-                <div className="flex justify-end">
-                  <CompactVideoPreview url={t.videoUrl} width={140} height={80}/>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="bg-gray-50 rounded-lg p-4 space-y-4">
-          <h4 className="font-semibold text-gray-800 text-sm">Add New Video Testimonial</h4>
-          <div className="grid sm:grid-cols-2 gap-3">
-            <Input label="Student Name" value={newVideoTestimonial.author} onChange={v => setNewVideoTestimonial(p => ({ ...p, author: v }))} placeholder="Jane Smith"/>
-            <div/>
-            <Textarea label="Description" value={newVideoTestimonial.text} onChange={v => setNewVideoTestimonial(p => ({ ...p, text: v }))} placeholder="Brief description..." rows={2} className="sm:col-span-2"/>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Video source:</span>
-            <div className="flex rounded-lg border border-gray-200 overflow-hidden">
-              <button onClick={() => setVideoInputMode('url')}
-                className={`px-3 py-1.5 text-xs font-semibold transition ${videoInputMode === 'url' ? 'bg-[#e8540a] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                🔗 Paste URL
-              </button>
-              <button onClick={() => setVideoInputMode('upload')}
-                className={`px-3 py-1.5 text-xs font-semibold transition ${videoInputMode === 'upload' ? 'bg-[#e8540a] text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}>
-                ☁️ Upload to Cloudinary
-              </button>
-            </div>
-          </div>
-          {videoInputMode === 'url' ? (
-            <div>
-              <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">Video URL</label>
-              <input value={newVideoTestimonial.videoUrl} onChange={e => setNewVideoTestimonial(p => ({ ...p, videoUrl: e.target.value, videoPreview: e.target.value }))}
-                placeholder="https://iframe.mediadelivery.net/embed/... or youtube.com/watch?v=..."
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
-              <p className="text-xs text-gray-400 mt-1">YouTube · Bunny.net · Cloudinary · MP4</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <label className="text-xs sm:text-sm font-medium text-gray-700 block">Upload Video File</label>
-              <div className="relative">
-                <div className="aspect-video bg-gray-100 rounded-xl overflow-hidden border-2 border-dashed border-gray-300 hover:border-[#e8540a]/60 transition cursor-pointer flex items-center justify-center"
-                  onClick={() => !uploadingVideoTestimonial && videoTestimonialRef.current?.click()}>
-                  {videoPreviewUrl ? (
-                    <VideoPlayer url={videoPreviewUrl} className="rounded-none"/>
-                  ) : (
-                    <div className="flex flex-col items-center gap-2">
-                      <span className="text-4xl">🎥</span>
-                      <p className="text-sm font-semibold text-gray-600">Click to upload video</p>
-                      <p className="text-xs text-gray-400">MP4, WebM, MOV — max 500 MB</p>
-                    </div>
-                  )}
-                  <UploadOverlay uploading={uploadingVideoTestimonial}/>
-                </div>
-                <input ref={videoTestimonialRef} type="file" accept="video/mp4,video/webm,video/ogg,video/quicktime,video/x-msvideo" className="hidden" onChange={handleVideoTestimonialFile}/>
-              </div>
-              {uploadingVideoTestimonial && (
-                <div className="flex items-center gap-2 text-sm text-[#e8540a]">
-                  <div className="w-4 h-4 border-2 border-[#e8540a] border-t-transparent rounded-full animate-spin"/>
-                  <span>Uploading to Cloudinary… large files may take a moment.</span>
-                </div>
-              )}
-              {newVideoTestimonial.videoUrl && !uploadingVideoTestimonial && (
-                <p className="text-xs text-emerald-600 font-semibold">✓ Uploaded: {newVideoTestimonial.videoUrl.slice(0, 60)}...</p>
-              )}
-            </div>
-          )}
-          {videoInputMode === 'url' && videoPreviewUrl && (
-            <div className="flex justify-end">
-              <CompactVideoPreview url={videoPreviewUrl} width={168} height={94}/>
-            </div>
-          )}
-          <Btn onClick={addVideoTestimonial} size="sm" disabled={uploadingVideoTestimonial}>
-            + Add Video Testimonial
-          </Btn>
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
-        <SectionHeader title="🖼️ Project Gallery"/>
-        <p className="text-sm text-gray-500 mb-4">Showcase student projects or course deliverables.</p>
-        {projectGallery.length > 0 && (
-          <div className="mb-6 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-            {projectGallery.map(g => (
-              <div key={g.id || g._id} className="group relative rounded-lg overflow-hidden border border-gray-200 aspect-video bg-gray-100">
-                <img src={g.imageUrl} alt={g.caption || "Gallery"} className="w-full h-full object-cover"/>
-                {g.caption && (
-                  <div className="absolute inset-x-0 bottom-0 bg-black/60 px-2 py-1">
-                    <p className="text-white text-xs truncate">{g.caption}</p>
-                  </div>
-                )}
-                <button onClick={() => deleteGalleryItem(g.id || g._id)}
-                  className="absolute top-1.5 right-1.5 w-6 h-6 bg-red-600 hover:bg-red-700 text-white rounded-full text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-lg">
-                  ✕
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-        <div className="bg-gray-50 rounded-lg p-4 space-y-4">
-          <h4 className="font-semibold text-gray-800 text-sm">Add Gallery Image</h4>
-          <div className="flex gap-4 items-start">
-            <div className="w-40 h-28 flex-shrink-0 relative">
-              <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-[#e8540a]/60 transition cursor-pointer group"
-                onClick={() => galleryRef.current?.click()}>
-                {newGalleryItem.imagePreview
-                  ? <img src={newGalleryItem.imagePreview} alt="Preview" className="w-full h-full object-cover"/>
-                  : (
-                    <div className="w-full h-full flex flex-col items-center justify-center gap-1">
-                      <span className="text-2xl">🖼️</span>
-                      <p className="text-xs text-gray-400 text-center px-2">Click to upload<br/>JPG / PNG / WebP</p>
-                    </div>
-                  )}
-                <UploadOverlay uploading={uploadingGalleryItem}/>
-              </div>
-              <input ref={galleryRef} type="file" accept="image/*" className="hidden" onChange={handleGalleryFile}/>
-            </div>
-            <div className="flex-1 space-y-3">
-              <Input label="Caption (optional)" value={newGalleryItem.caption} onChange={v => setNewGalleryItem(p => ({ ...p, caption: v }))} placeholder="Student project — week 4"/>
-              {newGalleryItem.imageUrl && <p className="text-xs text-emerald-600 font-semibold">✓ Ready to add</p>}
-              <Btn onClick={addGalleryItem} size="sm" disabled={uploadingGalleryItem || !newGalleryItem.imageUrl}>
-                {uploadingGalleryItem ? "Uploading…" : "+ Add to Gallery"}
-              </Btn>
-              <p className="text-xs text-gray-400">Max 10MB per image. Up to 20 images.</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ─────────────────────────────────────────────────────────────────
-          CUSTOM CONTENT BLOCKS — flexible, reusable, draggable sections.
-          Each block: Heading, Sub Heading, Video URL (YouTube/Bunny/MP4),
-          and an Image (upload or URL, used as a fallback if no video is
-          set). Duplicate a block to reuse the same layout elsewhere on the
-          page; drag the ☰ handle to reorder. These render directly on the
-          course landing page in this exact order.
-      ───────────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
-        <SectionHeader title="🧩 Custom Content Blocks" action={<Btn size="sm" onClick={addCustomBlock}>+ Add Block</Btn>}/>
-        <p className="text-sm text-gray-500 mb-4">
-          Flexible sections — heading, sub heading, and a video or image. Drag the ☰ handle to reorder,
-          duplicate a block to reuse it again elsewhere. These render directly on the course landing page.
-        </p>
-        {customBlocks.length === 0 ? (
-          <EmptyState
-            icon="🧩"
-            title="No custom blocks yet"
-            body="Add a block to feature extra media, announcements, or bonus content on the course page."
-            action={<Btn size="sm" onClick={addCustomBlock}>+ Add Block</Btn>}
-          />
-        ) : (
-          <div className="space-y-3">
-            {customBlocks.map((block) => {
-              const bId = block.id || block._id;
-              const uploading = uploadingBlockImage[bId];
-              const imgPreview = block.imagePreview || block.imageUrl;
-              const isDragging = draggedBlockId === bId;
-              return (
-                <div
-                  key={bId}
-                  draggable
-                  onDragStart={() => handleBlockDragStart(bId)}
-                  onDragOver={(e) => handleBlockDragOver(e, bId)}
-                  onDrop={(e) => e.preventDefault()}
-                  onDragEnd={handleBlockDragEnd}
-                  className={`border rounded-xl p-4 transition ${isDragging ? "border-[#e8540a]/60 bg-[#fdf2ea]/80 opacity-60" : "border-gray-200 bg-gray-50"}`}
-                >
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600 text-sm select-none" title="Drag to reorder">☰</span>
-                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex-1">Content Block</span>
-                    <button onClick={() => duplicateCustomBlock(bId)} className="text-xs font-semibold text-[#e8540a] hover:text-[#c94708] transition px-2 py-1 rounded hover:bg-[#fdf2ea]">⧉ Duplicate</button>
-                    <button onClick={() => deleteCustomBlock(bId)} className="text-red-400 hover:text-red-600 transition text-xs px-2 py-1 rounded hover:bg-red-50">✕ Remove</button>
-                  </div>
-
-                  <div className="grid sm:grid-cols-2 gap-3 mb-3">
-                    <Input label="Heading" value={block.heading || ""} onChange={v => updateCustomBlock(bId, "heading", v)} placeholder="e.g. Meet Your Mentors"/>
-                    <Input label="Sub Heading" value={block.subheading || ""} onChange={v => updateCustomBlock(bId, "subheading", v)} placeholder="e.g. A quick word before you enroll"/>
-                  </div>
-
-                  <div className="grid sm:grid-cols-2 gap-4 items-start">
-                    <div>
-                      <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">
-                        Video URL <span className="text-gray-400 font-normal">(optional)</span>
-                      </label>
-                      <input value={block.videoUrl || ""} onChange={e => updateCustomBlock(bId, "videoUrl", e.target.value)}
-                        placeholder="YouTube, Bunny.net, or direct MP4 URL"
-                        className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
-                      {block.videoUrl && (
-                        <div className="flex justify-end mt-2">
-                          <CompactVideoPreview url={block.videoUrl} width={150} height={84}/>
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">
-                        Image <span className="text-gray-400 font-normal">(used if no video)</span>
-                      </label>
-                      <div className="flex items-start gap-3">
-                        <div className="w-20 h-20 flex-shrink-0 relative">
-                          <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-[#e8540a]/60 transition cursor-pointer group"
-                            onClick={() => blockImageRefs.current[bId]?.click()}>
-                            {imgPreview
-                              ? <img src={imgPreview} alt="Preview" className="w-full h-full object-cover"/>
-                              : <div className="w-full h-full flex items-center justify-center"><span className="text-xl">🖼️</span></div>}
-                            <UploadOverlay uploading={uploading}/>
-                          </div>
-                          <input ref={el => (blockImageRefs.current[bId] = el)} type="file" accept="image/*" className="hidden" onChange={e => handleCustomBlockImageFile(e, bId)}/>
-                        </div>
-                        <input value={block.imageUrl || ""} onChange={e => updateCustomBlock(bId, "imageUrl", e.target.value)}
-                          placeholder="Or paste image URL"
-                          className="flex-1 border border-gray-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* ─────────────────────────────────────────────────────────────────
-          BUNDLES — named packages, each with its own price, an optional
-          %-off badge, and an FAQ-style "what's included" dropdown list.
-          Renders on the course landing page with its own "Enroll Now in
-          this Bundle" button, which charges bundle.price instead of the
-          plain course price.
-      ───────────────────────────────────────────────────────────────── */}
-      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
-        <SectionHeader title="🎁 Bundles" action={<Btn size="sm" onClick={addBundle}>+ Add Bundle</Btn>}/>
-        <p className="text-sm text-gray-500 mb-4">
-          A named package with its own price and a dropdown list of what's included — shown on the course page
-          with its own "Enroll Now in this Bundle" button.
-        </p>
-        {bundles.length === 0 ? (
-          <EmptyState
-            icon="🎁"
-            title="No bundles yet"
-            body="Add a bundle to offer a package price with its own perks list."
-            action={<Btn size="sm" onClick={addBundle}>+ Add Bundle</Btn>}
-          />
-        ) : (
-          <div className="space-y-4">
-            {bundles.map((bundle) => {
-              const bId = bundle.id || bundle._id;
-              return (
-                <div key={bId} className="border border-gray-200 rounded-xl p-4 bg-gray-50">
-                  <div className="flex items-center gap-2 mb-3">
-                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex-1">Bundle</span>
-                    <button onClick={() => deleteBundle(bId)} className="text-red-400 hover:text-red-600 transition text-xs px-2 py-1 rounded hover:bg-red-50">✕ Remove</button>
-                  </div>
-                  <div className="grid sm:grid-cols-3 gap-3 mb-3">
-                    <Input label="Bundle Name" value={bundle.name || ""} onChange={v => updateBundle(bId, "name", v)} placeholder="e.g. Complete Growth Bundle"/>
-                    <Input label="Bundle Price (PKR)" value={bundle.price ?? ""} onChange={v => updateBundle(bId, "price", v)} placeholder="14999" type="number"/>
-                    <Input label="Discount % (optional badge)" value={bundle.discountPercentage ?? ""} onChange={v => updateBundle(bId, "discountPercentage", v)} placeholder="e.g. 20" type="number"/>
-                  </div>
-                  <div className="mt-2">
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs sm:text-sm font-medium text-gray-700">What's included (FAQ-style dropdown)</label>
-                      <button onClick={() => addBundleItem(bId)} className="text-xs font-semibold text-[#e8540a] hover:text-[#c94708] transition bg-transparent border-none cursor-pointer">+ Add Item</button>
-                    </div>
-                    <div className="space-y-2">
-                      {(bundle.items || []).map((item) => {
-                        const iId = item.id || item._id;
-                        return (
-                          <div key={iId} className="bg-white border border-gray-200 rounded-lg p-3">
-                            <div className="flex items-center gap-2 mb-2">
-                              <input value={item.title || ""} onChange={e => updateBundleItem(bId, iId, "title", e.target.value)}
-                                placeholder="e.g. 20+ hours of video content"
-                                className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
-                              <button onClick={() => deleteBundleItem(bId, iId)} className="text-red-400 hover:text-red-600 transition text-xs px-2 py-1 rounded hover:bg-red-50 flex-shrink-0">✕</button>
-                            </div>
-                            <textarea value={item.content || ""} onChange={e => updateBundleItem(bId, iId, "content", e.target.value)}
-                              placeholder="Optional detail shown when this dropdown is expanded" rows={2}
-                              className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
-                          </div>
-                        );
-                      })}
-                      {(bundle.items || []).length === 0 && <p className="text-xs text-gray-400 italic">No items yet — add what's included in this bundle.</p>}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
-        <SectionHeader title="🛒 Students Also Bought"/>
-        <p className="text-sm text-gray-500 mb-4">Choose up to 6 published courses to show in the "Students also bought" section.</p>
-        {alsoBoughtCourses.length > 0 && (
-          <div className="mb-6 space-y-2">
-            {alsoBoughtCourses.map((c, idx) => (
-              <div key={c._id} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-100">
-                <div className="w-8 h-8 rounded-lg overflow-hidden bg-[#fdf2ea] flex-shrink-0">
-                  {c.thumbnail
-                    ? <img src={c.thumbnail} alt={c.title} className="w-full h-full object-cover"/>
-                    : <div className="w-full h-full flex items-center justify-center text-[#e8540a] font-bold text-sm">{c.title?.charAt(0)}</div>}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 truncate">{c.title}</p>
-                  <p className="text-xs text-gray-500">{c.category} · PKR {c.price}</p>
-                </div>
-                <span className="text-xs bg-emerald-100 text-emerald-700 font-semibold px-2 py-0.5 rounded-full flex-shrink-0">Published</span>
-                <span className="text-xs text-gray-400 flex-shrink-0">#{idx + 1}</span>
-                <button onClick={() => removeAlsoBought(c._id)} className="text-red-400 hover:text-red-600 text-sm flex-shrink-0 ml-1">✕</button>
-              </div>
-            ))}
-          </div>
-        )}
-        {alsoBoughtIds.length < 6 ? (
-          <div className="flex gap-2 items-end">
-            <div className="flex-1">
-              <label className="text-xs sm:text-sm font-medium text-gray-700 mb-1 block">
-                Select a course {alsoBoughtIds.length > 0 && <span className="text-gray-400 font-normal">({alsoBoughtIds.length}/6 selected)</span>}
-              </label>
-              <select value={coursePicker} onChange={e => setCoursePicker(e.target.value)}
-                className="w-full border border-gray-200 rounded-lg px-3 py-2.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#e8540a] bg-white">
-                <option value="">— Choose a published course —</option>
-                {publishedCourses.filter(c => !alsoBoughtIds.includes(c._id)).map(c => (
-                  <option key={c._id} value={c._id}>{c.title} (PKR {c.price})</option>
-                ))}
-              </select>
-            </div>
-            <Btn onClick={addAlsoBought} disabled={!coursePicker} size="md">Add</Btn>
-          </div>
-        ) : (
-          <p className="text-sm text-amber-600 font-semibold bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5">
-            ✓ Maximum 6 courses selected. Remove one to add another.
-          </p>
-        )}
-        {publishedCourses.length === 0 && (
-          <p className="text-sm text-gray-400 mt-3 italic">No other published courses found.</p>
-        )}
-      </div>
+      {editorOrder.map((key, index) => (
+        <EditorSectionShell
+          key={key}
+          label={EDITOR_SECTION_LABELS[key]}
+          index={index}
+          total={editorOrder.length}
+          isDragging={draggedSection === key}
+          onHandleDragStart={(e) => {
+            e.dataTransfer.effectAllowed = "move";
+            try { e.dataTransfer.setData("text/plain", key); } catch { /* some browsers need this to start a drag */ }
+            const row = e.currentTarget.parentElement;
+            if (row) { try { e.dataTransfer.setDragImage(row, 16, 16); } catch { /* ignore */ } }
+            setDraggedSection(key);
+          }}
+          onHandleDragEnd={() => setDraggedSection(null)}
+          onDragOverSection={(e) => handleSectionDragOver(e, key)}
+          onMoveUp={() => moveEditorSection(key, -1)}
+          onMoveDown={() => moveEditorSection(key, 1)}
+        >
+          {sectionRenderers[key] ? sectionRenderers[key]() : null}
+        </EditorSectionShell>
+      ))}
     </div>
   );
 }
