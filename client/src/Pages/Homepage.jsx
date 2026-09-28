@@ -9,11 +9,24 @@
 // adding to Shopify.jsx's header so it's reachable from the course page too
 // — see SHOPIFY_NAV_PATCH.md for the exact snippet (that file is huge, so
 // I didn't regenerate the whole thing for a one-line nav addition).
+//
+// SPEED (this update):
+//   • Course thumbnails are requested at card size in a modern format
+//     (Cloudinary f_auto/q_auto/w_600) and lazy-loaded, instead of downloading
+//     each full-size upload — the biggest cost on this page.
+//   • Touching/hovering a course card starts loading that course straight away,
+//     so by the time the tap lands on the course page its data is already on
+//     the way (and the page joins that same request instead of starting its own).
+//   • While the course list is still loading you now see placeholder cards, not
+//     the "Courses are on their way — check back soon" message — that text used
+//     to flash on every visit until the list arrived, as if there were no courses.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Star, ArrowRight, Megaphone, ShoppingBag, Target, TrendingUp } from 'lucide-react';
 import { useCourses, getDisplayStats } from '../context/CoursesContext';
+import { loadCourseOnce } from '../utils/courseCache';
+import { optimizeImage } from '../utils/imageOptimize';
 import SiteHeader from '../components/SiteHeader';
 import SiteFooter from '../components/SiteFooter';
 
@@ -51,16 +64,28 @@ const SERVICES = [
   },
 ];
 
-function CourseCard({ course, onClick }) {
+function CourseCard({ course, onClick, onPrefetch }) {
   // NEW: pulled from the shared getDisplayStats() (CoursesContext.jsx) so
   // this matches the course's own landing page instead of the small raw
   // real counts.
   const { rating: displayRating, reviewCount: displayReviewCount } = useMemo(() => getDisplayStats(course), [course]);
   return (
-    <div onClick={onClick} className="bg-white border border-[#ece6dd] rounded-2xl overflow-hidden hover:shadow-lg transition cursor-pointer group">
+    <div
+      onClick={onClick}
+      onMouseEnter={onPrefetch}
+      onTouchStart={onPrefetch}
+      className="bg-white border border-[#ece6dd] rounded-2xl overflow-hidden hover:shadow-lg transition cursor-pointer group"
+      style={{ WebkitTapHighlightColor: 'transparent' }}
+    >
       <div className="h-36 md:h-44 bg-[#f0ebe3] flex items-center justify-center relative overflow-hidden">
         {course.thumbnail ? (
-          <img src={course.thumbnail} alt={course.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+          <img
+            src={optimizeImage(course.thumbnail, 600)}
+            alt={course.title}
+            loading="lazy"
+            decoding="async"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
         ) : (
           <span className="text-5xl md:text-6xl">{course.emoji || '📚'}</span>
         )}
@@ -81,6 +106,21 @@ function CourseCard({ course, onClick }) {
           <span className="text-xs text-[#9e9789]">({formatNumber(displayReviewCount)})</span>
         </div>
         <p className="text-base md:text-lg font-bold text-[#1a1208]" style={{ fontFamily: "'Playfair Display', serif" }}>PKR {course.price}</p>
+      </div>
+    </div>
+  );
+}
+
+// Placeholder shown in a course card's place while the list is still loading.
+function CourseCardSkeleton() {
+  return (
+    <div className="bg-white border border-[#ece6dd] rounded-2xl overflow-hidden animate-pulse" aria-hidden="true">
+      <div className="h-36 md:h-44 bg-[#f0ebe3]" />
+      <div className="p-4 space-y-2.5">
+        <div className="h-4 w-11/12 bg-[#f0ebe3] rounded" />
+        <div className="h-3 w-1/3 bg-[#f0ebe3] rounded" />
+        <div className="h-3 w-1/2 bg-[#f0ebe3] rounded" />
+        <div className="h-5 w-1/3 bg-[#f0ebe3] rounded" />
       </div>
     </div>
   );
@@ -107,7 +147,7 @@ function ServiceCard({ service, onClick }) {
 
 export default function HomePage() {
   const navigate = useNavigate();
-  const { courses } = useCourses();
+  const { courses, loading, fetchCourseById } = useCourses();
 
   const featuredCourses = useMemo(
     () => courses.filter((c) => c.status === 'published').slice(0, 8),
@@ -158,12 +198,21 @@ export default function HomePage() {
               View all <ArrowRight size={16} />
             </button>
           </div>
-          {featuredCourses.length === 0 ? (
+          {featuredCourses.length === 0 && loading ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+              {[0, 1, 2, 3].map((i) => <CourseCardSkeleton key={i} />)}
+            </div>
+          ) : featuredCourses.length === 0 ? (
             <p className="text-[#9e9789] text-center py-12">Courses are on their way — check back soon.</p>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
               {featuredCourses.map((c) => (
-                <CourseCard key={c._id} course={c} onClick={() => navigate(`/course/${c._id}`)} />
+                <CourseCard
+                  key={c._id}
+                  course={c}
+                  onClick={() => navigate(`/course/${c._id}`)}
+                  onPrefetch={() => loadCourseOnce(c._id, fetchCourseById)}
+                />
               ))}
             </div>
           )}

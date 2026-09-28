@@ -1,15 +1,31 @@
 // src/App.jsx
 //
-// CHANGES FROM YOUR VERSION (only these two):
-//   1. "/" now renders <HomePage /> instead of <Shopify />. Shopify.jsx is
-//      the course landing page — it still owns /course/:id — but "/" was
-//      just falling back to it for lack of a real home page. Now that
-//      HomePage.jsx exists, it takes over "/".
-//   2. Added "/services" → <ServicesPage />, grouped with the other public
-//      routes.
-// Nothing else below is changed — same ErrorBoundary, MetaPixelRouteTracker,
-// ProtectedRoute, and every other route exactly as you had them.
-import React, { useEffect, useState } from "react";
+// CHANGES FROM YOUR VERSION:
+//   1. The three heavy, login-only areas — Student Portal, Instructor
+//      Dashboard, Super Admin Dashboard — are now loaded on demand
+//      (React.lazy) instead of being packed into the one JavaScript file every
+//      visitor downloads. They are by far the biggest parts of the app (charts,
+//      the workflow editor, the WhatsApp screens…), and a visitor reading a
+//      course page never needs them. Public pages (Home, Services, Courses,
+//      the course page, Enrollment, About…) stay in the main bundle on purpose,
+//      so moving between them is instant with nothing to wait for.
+//   2. One global progress line (GlobalProgressBar) replaces RouteProgressBar.
+//      It runs on every page change AND for as long as anything is genuinely
+//      still loading (a lazy page, a course being fetched for the first time)
+//      — see utils/pageProgress.js.
+//   3. The grey/indigo "LoadingScreen" is gone. While a lazy page loads you now
+//      see the site's own header (with the logo) on the cream page background,
+//      not a blank grey screen.
+//   4. The router opts in to React's startTransition (future flag below), so
+//      going to a page that has to load keeps the CURRENT page on screen until
+//      the next one is ready, instead of blanking. (Needs react-router-dom
+//      6.13+; on an older version the flag is simply ignored and the branded
+//      loader above shows for that moment instead.)
+//   5. Once someone is logged in, their dashboard is downloaded quietly in the
+//      background during idle time (RolePrefetch), so opening it is instant.
+// Everything else — ErrorBoundary, MetaPixelRouteTracker, ScrollToTop,
+// ProtectedRoute and every route — is exactly as you had it.
+import React, { lazy, Suspense, useEffect, useState, useSyncExternalStore } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth }  from "./context/AuthContext";
 import { CoursesProvider }        from "./context/CoursesContext";
@@ -25,11 +41,17 @@ import PrivacyPolicyPage          from "./Pages/PrivacyPolicyPage";
 import ReturnPolicyPage           from "./Pages/ReturnPolicyPage";
 import ContactUsPage              from "./Pages/ContactUsPage";
 import PackageInquiryPage         from "./Pages/PackageInquiryPage";
-import Portals                    from "./Pages/Portals";
-import InstructorDashboard        from "./Pages/InstructorDashboard";
-import SuperAdminsDashboard        from "./Pages/SuperAdminsDashboard";
 import MetaPixelRouteTracker      from "./components/MetaPixelRouteTracker";
 import ScrollToTop                from "./components/ScrollToTop";
+import { beginProgress, subscribeProgress, isProgressActive } from "./utils/pageProgress";
+
+// ─── Login-only areas, loaded on demand ───────────────────────────────────────
+const loadPortals             = () => import("./Pages/Portals");
+const loadInstructorDashboard = () => import("./Pages/InstructorDashboard");
+const loadSuperAdminDashboard = () => import("./Pages/SuperAdminsDashboard");
+const Portals              = lazy(loadPortals);
+const InstructorDashboard  = lazy(loadInstructorDashboard);
+const SuperAdminsDashboard = lazy(loadSuperAdminDashboard);
 
 // ─── Error boundary: shows a readable message instead of a blank screen ───────
 class ErrorBoundary extends React.Component {
@@ -56,44 +78,72 @@ class ErrorBoundary extends React.Component {
   }
 }
 
-// ─── Route transition bar ───────────────────────────────────────────────────
-// NEW: a thin, branded-orange progress bar at the very top of the screen
-// that briefly runs on every page navigation. This doesn't touch the
-// browser's own native loading bar (that only shows on a hard refresh/first
-// load — fixing THAT needs public/index.html, which isn't available here
-// yet) — this covers the other half of the complaint: clicking between
-// pages inside the app going straight to blank/skeleton content with no
-// visual transition at all. The `key` on the wrapper forces React to
-// remount it on every route change, which is what makes the CSS animation
-// restart reliably every single time instead of only playing once.
-function RouteProgressBar() {
+// ─── Global progress line ─────────────────────────────────────────────────────
+// A thin orange line across the very top of the screen. It runs briefly on every
+// page change, and stays running for as long as anything else has told
+// utils/pageProgress.js it is still loading. It creeps forward by itself (never
+// quite reaching the end while something is still pending) and then completes —
+// so on a slow connection there's always visible progress instead of a dead,
+// blank screen.
+function GlobalProgressBar() {
   const location = useLocation();
+  const active = useSyncExternalStore(subscribeProgress, isProgressActive);
+  const [width, setWidth] = useState(0);
+  const [visible, setVisible] = useState(false);
+
+  // Every page change gets a short run of the line, even when nothing is slow.
+  useEffect(() => {
+    const done = beginProgress();
+    const t = setTimeout(done, 450);
+    return () => { clearTimeout(t); done(); };
+  }, [location.pathname]);
+
+  useEffect(() => {
+    let tick = null;
+    let hide = null;
+    if (active) {
+      setVisible(true);
+      setWidth((w) => (w > 0 && w < 90 ? w : 8));
+      tick = setInterval(() => setWidth((w) => (w < 90 ? w + (90 - w) * 0.12 : w)), 200);
+    } else {
+      setWidth(100);
+      hide = setTimeout(() => { setVisible(false); setWidth(0); }, 350);
+    }
+    return () => { if (tick) clearInterval(tick); if (hide) clearTimeout(hide); };
+  }, [active]);
+
+  if (!visible) return null;
   return (
-    <div key={location.pathname + location.search} style={{ position: "fixed", top: 0, left: 0, right: 0, height: 3, zIndex: 9999, pointerEvents: "none" }}>
-      <div style={{ height: "100%", background: "#e8540a", width: "0%", animation: "lerni-route-progress 550ms ease-out forwards" }} />
-      <style>{`
-        @keyframes lerni-route-progress {
-          0%   { width: 0%;  opacity: 1; }
-          60%  { width: 80%; opacity: 1; }
-          100% { width: 100%; opacity: 0; }
-        }
-      `}</style>
+    <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 3, zIndex: 10001, pointerEvents: "none" }}>
+      <div style={{ height: "100%", background: "#e8540a", width: `${width}%`, transition: "width .2s ease-out", boxShadow: "0 0 8px rgba(232,84,10,.6)" }} />
     </div>
   );
 }
 
-// ─── Screens ──────────────────────────────────────────────────────────────────
-function LoadingScreen() {
+// ─── Loader shown while a lazy page is being fetched ──────────────────────────
+// The site's header bar (real logo from the cache) on the cream page colour —
+// the same thing index.html paints before the app starts, so the two look like
+// one continuous page rather than white → grey → page.
+function PageLoader() {
+  useEffect(() => beginProgress(), []);
+  let logo = "";
+  try { logo = localStorage.getItem("lerni_header_logo_url") || ""; } catch { /* no cache */ }
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50">
-      <div className="w-10 h-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin" />
+    <div className="min-h-screen w-full bg-[#FDFAF6]">
+      <div className="bg-white border-b border-[#ece6dd] shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 lg:px-6 py-3 md:py-4 flex items-center justify-center lg:justify-start">
+          {logo
+            ? <img src={logo} alt="" className="h-14 md:h-16 lg:h-20 w-auto object-contain" />
+            : <span className="inline-block h-14 md:h-16 lg:h-20 w-24" aria-hidden="true" />}
+        </div>
+      </div>
     </div>
   );
 }
 
 function ProtectedRoute({ children, role }) {
   const { user, loading } = useAuth();
-  if (loading) return <LoadingScreen />;
+  if (loading) return <PageLoader />;
   if (!user)   return <Navigate to="/auth/login" replace />;
   if (role && user.role !== role)
     return <Navigate to={
@@ -102,6 +152,28 @@ function ProtectedRoute({ children, role }) {
       : "/portal"
     } replace />;
   return children;
+}
+
+// Once someone is logged in, quietly download their dashboard while the
+// browser is idle — so when they open it, there is nothing left to fetch.
+function RolePrefetch() {
+  const { user } = useAuth();
+  const role = user?.role;
+  useEffect(() => {
+    if (!role) return undefined;
+    const run = () => {
+      if (role === "instructor") loadInstructorDashboard();
+      else if (role === "admin") loadSuperAdminDashboard();
+      else if (role === "student") loadPortals();
+    };
+    if (typeof window.requestIdleCallback === "function") {
+      const handle = window.requestIdleCallback(run, { timeout: 4000 });
+      return () => window.cancelIdleCallback && window.cancelIdleCallback(handle);
+    }
+    const t = setTimeout(run, 2000);
+    return () => clearTimeout(t);
+  }, [role]);
+  return null;
 }
 
 // ─── Routes ───────────────────────────────────────────────────────────────────
@@ -135,7 +207,7 @@ function AppRoutes() {
       <Route path="/login"         element={<Navigate to="/auth/login"    replace />} />
       <Route path="/register"      element={<Navigate to="/auth/register" replace />} />
 
-      {/* Protected */}
+      {/* Protected — these three are loaded on demand (see the top of this file) */}
       <Route path="/portal/*" element={
         <ProtectedRoute role="student"><Portals /></ProtectedRoute>
       }/>
@@ -155,13 +227,16 @@ function AppRoutes() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <BrowserRouter>
-        <RouteProgressBar />
+      <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <GlobalProgressBar />
         <ScrollToTop />
         <MetaPixelRouteTracker />
         <AuthProvider>
           <CoursesProvider>
-            <AppRoutes />
+            <RolePrefetch />
+            <Suspense fallback={<PageLoader />}>
+              <AppRoutes />
+            </Suspense>
           </CoursesProvider>
         </AuthProvider>
       </BrowserRouter>

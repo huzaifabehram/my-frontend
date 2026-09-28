@@ -1808,7 +1808,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                         <Textarea label="About this bundle (4–6 lines — shown under the heading)" value={bundle.description || ""} onChange={v => updateBundle(bId, "description", v)} placeholder="Explain what this bundle is, who it's for, and why it's worth it…" rows={5} className="mb-3"/>
                         <div className="mt-2">
                           <div className="flex items-center justify-between mb-2">
-                            <label className="text-xs sm:text-sm font-medium text-gray-700">Modules (each is a dropdown on the course page, with its actual price)</label>
+                            <label className="text-xs sm:text-sm font-medium text-gray-700">Modules (each is a dropdown on the course page, with its original price)</label>
                             <button onClick={() => addBundleItem(bId)} className="text-xs font-semibold text-[#e8540a] hover:text-[#c94708] transition bg-transparent border-none cursor-pointer">+ Add Module</button>
                           </div>
                           <div className="space-y-2">
@@ -1822,7 +1822,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                                       className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
                                     <div className="flex items-center gap-2">
                                       <input type="number" value={item.price ?? ""} onChange={e => updateBundleItem(bId, iId, "price", e.target.value)}
-                                        placeholder="Actual price"
+                                        placeholder="Original price"
                                         className="w-full sm:w-32 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
                                       <button onClick={() => deleteBundleItem(bId, iId)} className="text-red-400 hover:text-red-600 transition text-xs px-2 py-1 rounded hover:bg-red-50 flex-shrink-0">✕</button>
                                     </div>
@@ -1842,7 +1842,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                             const pct = offer > 0 && offer < actual ? Math.round((1 - offer / actual) * 100) : 0;
                             return (
                               <p className="text-xs text-emerald-700 font-semibold mt-3 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
-                                Actual Price = PKR {actual.toLocaleString()} (all modules added up)
+                                Original Price = PKR {actual.toLocaleString()} (all modules added up)
                                 {offer > 0 && offer < actual ? ` • offer PKR ${offer.toLocaleString()} → ${pct}% off, calculated automatically` : " • set the Bundle Offer Price lower than this to show a discount"}
                               </p>
                             );

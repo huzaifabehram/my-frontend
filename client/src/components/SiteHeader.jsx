@@ -8,16 +8,21 @@
 // Contact Us pages render <SiteHeader /> with no props, so swapping this
 // file's contents is all that's needed to bring all four pages in line with
 // the rest of the site — no changes needed in those page files.
+//
+// SPEED: the logo now comes from the shared, cached settings request
+// (utils/siteSettings.js) instead of this header making its own /settings call
+// on every page, and is requested at a size that fits the header (Cloudinary
+// f_auto/q_auto) instead of the full-size upload.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Menu, X, Search, ChevronDown } from 'lucide-react';
-import { useAuth } from '../context/AuthContext';
 import { useCourses } from '../context/CoursesContext';
+import { fetchSiteSettings } from '../utils/siteSettings';
+import { optimizeImage } from '../utils/imageOptimize';
 
 export default function SiteHeader({ showLogin = true }) {
   const navigate = useNavigate();
-  const { API: api } = useAuth();
   const { courses } = useCourses();
   // NEW: seed from localStorage (cached the last time ANY page fetched
   // /settings) so the real logo can show immediately here too, instead of
@@ -36,15 +41,13 @@ export default function SiteHeader({ showLogin = true }) {
   const [coursesExpanded, setCoursesExpanded] = useState(false);
 
   useEffect(() => {
-    api.get('/settings')
-      .then((res) => {
-        const url = res.data?.logoUrl || '';
-        setSiteLogoUrl(url);
-        try { localStorage.setItem('lerni_header_logo_url', url); } catch { /* cache is a nice-to-have */ }
-      })
+    let cancelled = false;
+    fetchSiteSettings()
+      .then((data) => { if (!cancelled) setSiteLogoUrl(data?.logoUrl || ''); })
       .catch(() => {}) // logo is optional — falls back to the text wordmark
-      .finally(() => setLogoLoaded(true));
-  }, [api]);
+      .finally(() => { if (!cancelled) setLogoLoaded(true); });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleNavigate = (path) => { setMobileMenuOpen(false); navigate(path); };
 
@@ -65,7 +68,7 @@ export default function SiteHeader({ showLogin = true }) {
             {!logoLoaded ? (
               <span className="inline-block h-14 md:h-16 lg:h-20 w-24" aria-hidden="true" />
             ) : siteLogoUrl ? (
-              <img src={siteLogoUrl} alt="Logo" className="h-14 md:h-16 lg:h-20 w-auto object-contain" />
+              <img src={optimizeImage(siteLogoUrl, 400)} alt="Logo" className="h-14 md:h-16 lg:h-20 w-auto object-contain" decoding="async" />
             ) : (
               <span className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-[#1a1208]">
                 Ler<span className="text-[#e8540a]">ni</span>

@@ -204,6 +204,10 @@ import {
   setPendingCourse,
 } from '../utils/facebookPixel';
 import FreeLectureVideoTracker, { FreeLectureIframeTracker } from '../components/FreeLectureVideoTracker';
+import { readCachedCourse, loadCourseOnce, readExtrasCache, writeExtrasCache } from '../utils/courseCache';
+import { beginProgress } from '../utils/pageProgress';
+import { fetchSiteSettings } from '../utils/siteSettings';
+import { optimizeImage } from '../utils/imageOptimize';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // REVIEW NORMALIZATION — broadened to catch every possible backend shape
@@ -677,8 +681,8 @@ function PreviewLeadGateModal({ isOpen, onClose, onSuccess, courseId, courseTitl
 function StruckPrice({ amount, large = false }) {
   return (
     <span
-      className={`whitespace-nowrap font-semibold text-[#9e9789] ${large ? 'text-base md:text-lg' : 'text-sm md:text-base'}`}
-      style={{ textDecoration: 'line-through', textDecorationColor: '#e8540a', textDecorationThickness: '2px' }}
+      className={`whitespace-nowrap ${large ? 'text-xl md:text-2xl font-extrabold text-[#6b5e4e]' : 'text-sm md:text-base font-semibold text-[#9e9789]'}`}
+      style={{ textDecoration: 'line-through', textDecorationColor: '#e8540a', textDecorationThickness: large ? '3px' : '2px' }}
     >
       PKR {Number(amount || 0).toLocaleString()}
     </span>
@@ -739,15 +743,15 @@ function BundleOfferCard({ bundle, onEnroll }) {
         )}
 
         {hasActual && (
-          <div className="mt-5 pt-4 border-t border-dashed border-[#e6dccb] flex items-center justify-between gap-3">
-            <span className="text-sm md:text-base font-bold text-[#3d3020]">Actual Price =</span>
+          <div className="mt-5 pt-4 border-t border-dashed border-[#e6dccb] flex items-center justify-center gap-3 flex-wrap">
+            <span className="text-base md:text-lg font-bold text-[#3d3020]">Original Price</span>
             <StruckPrice amount={actualTotal} large />
           </div>
         )}
 
         <div className="mt-4 rounded-2xl bg-gradient-to-br from-[#fdf2ea] to-[#fbe4d0] border border-[#f5ddc4] px-4 py-5 md:px-6 text-center">
           <p className="text-[11px] md:text-xs font-extrabold uppercase tracking-[0.18em] text-[#e8540a]">Bundle Offer Price</p>
-          <p className="mt-1 text-3xl md:text-4xl font-extrabold text-[#1a1208]" style={{ fontFamily: "'Playfair Display', serif" }}>
+          <p className="mt-1 text-3xl md:text-4xl font-extrabold text-[#1a1208]">
             PKR {offerPrice.toLocaleString()}
           </p>
           {pct > 0 && (
@@ -760,7 +764,7 @@ function BundleOfferCard({ bundle, onEnroll }) {
 
         <button
           onClick={onEnroll}
-          className="w-full mt-5 bg-[#e8540a] hover:bg-[#c94708] text-white font-bold py-3.5 rounded-xl transition text-base md:text-lg border-none cursor-pointer shadow-lg"
+          className="w-full mt-5 bg-gradient-to-br from-[#1a1208] via-[#2d2416] to-[#3d2b1a] hover:from-[#2d2416] hover:to-[#4a3421] text-white font-bold py-3.5 rounded-xl transition text-base md:text-lg border-none cursor-pointer shadow-lg"
           style={{ WebkitTapHighlightColor: 'transparent' }}
         >
           Enroll Now in Discounted Price{pct > 0 ? ` • ${pct}% OFF` : ''}
@@ -1227,10 +1231,12 @@ function AutoSlideImageTestimonials({ imageTestimonials, onImageClick, isPaused 
           className="w-full h-full rounded-xl overflow-hidden relative shadow-lg cursor-pointer"
         >
           <img
-            src={testimonial.imageUrl}
+            src={optimizeImage(testimonial.imageUrl, 700)}
             alt={testimonial.author || 'Student testimonial'}
             className="w-full h-full object-cover"
             draggable={false}
+            loading="lazy"
+            decoding="async"
           />
           <div className="absolute bottom-0 left-0 right-0 h-14 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
           {testimonial.author && (
@@ -1296,7 +1302,7 @@ function ImageLightbox({ isOpen, onClose, images, startIndex = 0 }) {
       <div className="w-full max-w-3xl flex flex-col items-center">
         <img
           key={current?.imageUrl}
-          src={current?.imageUrl}
+          src={optimizeImage(current?.imageUrl, 1400)}
           alt={current?.author || 'Student testimonial'}
           className="w-full max-h-[80vh] object-contain rounded-lg"
         />
@@ -1330,7 +1336,7 @@ function CourseThumbnail({ course }) {
   );
   if (course.thumbnail && !imgErr) return (
     <div className="relative w-full h-full bg-[#2d2416] flex items-center justify-center group">
-      <img src={course.thumbnail} alt={course.title} className="w-full h-full object-cover" onError={() => setImgErr(true)} />
+      <img src={optimizeImage(course.thumbnail, 1280)} alt={course.title} className="w-full h-full object-cover" onError={() => setImgErr(true)} decoding="async" />
       {thumbnailContent}
     </div>
   );
@@ -1488,8 +1494,10 @@ export default function CourseLandingPage() {
   const [isPreviewOpen,         setIsPreviewOpen]         = useState(false);
   const [currentVideo,          setCurrentVideo]          = useState('');
   const [activePreviewLecture,  setActivePreviewLecture]  = useState(null);
-  const [fullCourse,            setFullCourse]            = useState(null);
-  const [fullCourseLoading,     setFullCourseLoading]     = useState(false);
+  // Start from the cached copy when there is one, and only put the page in its
+  // "loading" state when there is genuinely nothing to show yet.
+  const [fullCourse,            setFullCourse]            = useState(() => readCachedCourse(id));
+  const [fullCourseLoading,     setFullCourseLoading]     = useState(() => Boolean(id) && !readCachedCourse(id));
   // NEW: the course exactly as the API returns it. CoursesContext reshapes
   // the course it hands us (it builds instructorId, turns sections' lectures
   // into a count, etc.) and — judging by breadcrumbs / bundles / custom
@@ -1497,7 +1505,8 @@ export default function CourseLandingPage() {
   // already knew about, dropping newer ones. Fields added since (custom
   // breadcrumb, bundles, custom blocks, section order) are therefore read
   // straight from this raw copy instead of depending on that reshaping.
-  const [rawCourse,             setRawCourse]             = useState(null);
+  const [rawCourse,             setRawCourse]             = useState(() => readExtrasCache(id));
+  const [rawSettled,            setRawSettled]            = useState(() => Boolean(readExtrasCache(id)));
   const navigationType = useNavigationType();
   const [instructorData,        setInstructorData]        = useState(null);
   const [loadingInstructor,     setLoadingInstructor]     = useState(false);
@@ -1578,21 +1587,20 @@ export default function CourseLandingPage() {
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterStatus, setNewsletterStatus] = useState('idle'); // idle | sending | sent | error
 
+  // One shared, cached /settings request for the whole app (see
+  // utils/siteSettings.js) — it also keeps the logo cache in localStorage up to date.
   useEffect(() => {
-    api.get('/settings')
-      .then((res) => {
-        const header = res.data?.logoUrl || '';
-        const footer = res.data?.footerLogoUrl || '';
-        setSiteLogoUrl(header);
-        setFooterLogoUrl(footer);
-        try {
-          localStorage.setItem('lerni_header_logo_url', header);
-          localStorage.setItem('lerni_footer_logo_url', footer);
-        } catch { /* storage unavailable — cache is a nice-to-have, not required */ }
+    let cancelled = false;
+    fetchSiteSettings()
+      .then((data) => {
+        if (cancelled) return;
+        setSiteLogoUrl(data?.logoUrl || '');
+        setFooterLogoUrl(data?.footerLogoUrl || '');
       })
       .catch(() => {}) // logo is optional — falls back to the text wordmark
-      .finally(() => setLogoLoaded(true));
-  }, [api]);
+      .finally(() => { if (!cancelled) setLogoLoaded(true); });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleNewsletterSubmit = (e) => {
     e.preventDefault();
@@ -1620,9 +1628,12 @@ export default function CourseLandingPage() {
 
   useEffect(() => {
     if (!id) return;
-    setFullCourse(null);
-    setFullCourseLoading(true);
-    fetchCourseById(id).then((course) => {
+    const cached = readCachedCourse(id);
+    setFullCourse(cached);                 // instantly show the copy we already have (or nothing)
+    setFullCourseLoading(!cached);         // …and only block the page with a skeleton when there's nothing to show
+    // loadCourseOnce joins a request the home page may already have started
+    // (hover/touch on the course card) and saves the result to the cache.
+    loadCourseOnce(id, fetchCourseById).then((course) => {
       if (course) setFullCourse(course);
       setFullCourseLoading(false);
     });
@@ -1631,10 +1642,18 @@ export default function CourseLandingPage() {
   useEffect(() => {
     if (!id) return undefined;
     let cancelled = false;
-    setRawCourse(null);
+    const cached = readExtrasCache(id);
+    setRawCourse(cached);
+    setRawSettled(Boolean(cached));
     api.get(`/courses/${id}`)
-      .then((res) => { if (!cancelled) setRawCourse(res.data || null); })
-      .catch(() => {});
+      .then((res) => {
+        if (cancelled) return;
+        const c = res.data || null;
+        setRawCourse(c);
+        setRawSettled(true);
+        if (c) writeExtrasCache(id, c);
+      })
+      .catch(() => { if (!cancelled) setRawSettled(true); });
     return () => { cancelled = true; };
   }, [id, api]);
 
@@ -1650,10 +1669,22 @@ export default function CourseLandingPage() {
   }, [id, api]);
 
   const courseData = useMemo(() => {
-    if (id) return fullCourse || getCourse(id);
+    // Only trust the full copy if it's actually THIS course — when the route
+    // changes to another course the previous one's data is still in state for
+    // one render, and it must never flash up under the new URL.
+    if (id) return (fullCourse && String(fullCourse._id || fullCourse.id) === String(id)) ? fullCourse : getCourse(id);
     const publishedCourses = courses.filter(c => c.status === 'published');
     return publishedCourses.length > 0 ? publishedCourses[0] : null;
   }, [id, fullCourse, courses, getCourse]);
+
+  // The skeleton below is only shown when there is nothing cached to paint.
+  // While it is, the app-wide progress line (see App.jsx / utils/pageProgress.js)
+  // runs across the top of the screen.
+  const isSkeleton = (loading && !courseData) || fullCourseLoading;
+  useEffect(() => {
+    if (!isSkeleton) return undefined;
+    return beginProgress(); // returns the "done" function, used as the cleanup
+  }, [isSkeleton]);
 
   // ── Keep the scroll position when the visitor comes BACK to this page ─────
   // FIX: after opening a footer link (About, Privacy, Contact…) and pressing
@@ -1989,37 +2020,44 @@ export default function CourseLandingPage() {
     return () => { window.removeEventListener('keydown', handleKeyDown); unlockBodyScroll(); };
   }, [reviewsOverlayOpen]);
 
-  // NEW: extended into a fuller skeleton that fills the whole viewport
-  // (header bar + hero band + a below-the-fold content/sidebar placeholder),
-  // instead of stopping after just the hero. The shorter version still left
-  // a large blank gap underneath it before the real content arrived, which
-  // looked like the page had half-loaded and stalled — this fills that gap
-  // with more placeholder blocks so it reads as one continuous loading
-  // state, closer to how sites like Udemy show a full-page skeleton.
-  if (loading || fullCourseLoading) {
+  // Loading skeleton — only ever shown when there is NOTHING cached to paint
+  // (a first-ever visit to this course). It uses the site's real header (logo
+  // straight from the cache) and soft cream blocks, with a progress line
+  // across the top. It used to be a plain white bar plus a dark brown band
+  // right under it, which read as "a blank white page with a brown stripe".
+  // A page that has been opened before never gets here at all (see the cache
+  // above), and a cached copy paints while the fresh one loads behind it.
+  if (isSkeleton) {
     return (
       <div className="min-h-screen w-full bg-[#FDFAF6]">
-        <div className="sticky top-0 z-40 bg-white shadow-sm w-full border-b border-[#ece6dd] h-[60px] md:h-[68px]" />
-        <div className="w-full bg-[#1a1208] py-6 md:py-8 lg:py-12">
-          <div className="max-w-7xl mx-auto px-4 lg:px-6 animate-pulse">
-            <div className="h-4 w-40 bg-white/10 rounded mb-4" />
-            <div className="h-8 w-2/3 bg-white/10 rounded mb-3" />
-            <div className="h-8 w-1/2 bg-white/10 rounded mb-6" />
-            <div className="h-4 w-32 bg-white/10 rounded" />
+        <header className="sticky top-0 z-40 bg-white shadow-sm w-full border-b border-[#ece6dd]">
+          <div className="max-w-7xl mx-auto px-4 lg:px-6 py-3 md:py-4 flex items-center justify-between">
+            <span className="lg:hidden w-6 h-6 rounded bg-[#f0ebe3] animate-pulse" aria-hidden="true" />
+            <div className="absolute left-1/2 transform -translate-x-1/2 lg:relative lg:left-auto lg:transform-none">
+              {siteLogoUrl ? (
+                <img src={optimizeImage(siteLogoUrl, 400)} alt="Logo" className="h-14 md:h-16 lg:h-20 w-auto object-contain" decoding="async" />
+              ) : (
+                <span className="inline-block h-14 md:h-16 lg:h-20 w-24" aria-hidden="true" />
+              )}
+            </div>
+            <div className="hidden lg:flex items-center gap-8 flex-1 ml-12" aria-hidden="true">
+              {[0, 1, 2, 3, 4].map((i) => <span key={i} className="h-4 w-16 rounded bg-[#f0ebe3] animate-pulse" />)}
+            </div>
+            <span className="h-9 w-20 md:h-10 md:w-24 rounded-lg bg-[#f0ebe3] animate-pulse" aria-hidden="true" />
           </div>
-        </div>
+        </header>
         <div className="max-w-7xl mx-auto px-4 lg:px-6 py-8 md:py-12">
           <div className="grid lg:grid-cols-3 gap-6 md:gap-8 animate-pulse">
             <div className="lg:col-span-2 space-y-4">
-              <div className="h-6 w-1/3 bg-[#ece6dd] rounded" />
-              <div className="h-4 w-full bg-[#ece6dd] rounded" />
-              <div className="h-4 w-5/6 bg-[#ece6dd] rounded" />
-              <div className="h-4 w-4/6 bg-[#ece6dd] rounded" />
-              <div className="h-40 w-full bg-[#ece6dd] rounded-xl mt-6" />
-              <div className="h-4 w-full bg-[#ece6dd] rounded" />
-              <div className="h-4 w-3/4 bg-[#ece6dd] rounded" />
+              <div className="h-4 w-48 bg-[#f0ebe3] rounded" />
+              <div className="h-9 w-4/5 bg-[#f0ebe3] rounded" />
+              <div className="h-9 w-3/5 bg-[#f0ebe3] rounded mb-2" />
+              <div className="aspect-video w-full bg-[#f0ebe3] rounded-xl" />
+              <div className="h-4 w-full bg-[#f0ebe3] rounded mt-4" />
+              <div className="h-4 w-5/6 bg-[#f0ebe3] rounded" />
+              <div className="h-4 w-4/6 bg-[#f0ebe3] rounded" />
             </div>
-            <div className="h-72 w-full bg-[#ece6dd] rounded-2xl" />
+            <div className="hidden lg:block h-80 w-full bg-[#f0ebe3] rounded-2xl" />
           </div>
         </div>
       </div>
@@ -2176,6 +2214,7 @@ export default function CourseLandingPage() {
   // FIX: this always read courseData.breadcrumbText, which never had the
   // instructor's custom text (see rawCourse), so the "<category> / <title>"
   // fallback was all that ever showed.
+  const breadcrumbReady = rawSettled || Boolean(rawExtras);
   const breadcrumbSegments = (String(pick('breadcrumbText') || '').trim() || `${courseData.category || 'Courses'} / ${courseData.title}`)
     .split('/').map((s) => s.trim()).filter(Boolean);
 
@@ -2234,8 +2273,8 @@ export default function CourseLandingPage() {
             <figure key={item.id || item._id || item.imageUrl}
               className="group rounded-2xl overflow-hidden border border-[#ece6dd] bg-white shadow-sm hover:shadow-md transition">
               <div className="aspect-video bg-[#f0ebe3] overflow-hidden">
-                <img src={item.imageUrl} alt={item.caption || "Project"}
-                  className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" />
+                <img src={optimizeImage(item.imageUrl, 800)} alt={item.caption || "Project"}
+                  className="w-full h-full object-cover group-hover:scale-[1.02] transition-transform duration-300" loading="lazy" decoding="async" />
               </div>
               {item.caption && (
                 <figcaption className="px-3 py-2.5 text-sm md:text-base text-[#3d3020] border-t border-[#f0ebe3]">{item.caption}</figcaption>
@@ -2263,7 +2302,7 @@ export default function CourseLandingPage() {
               {block.videoUrl ? (
                 <div className="rounded-xl overflow-hidden mb-4"><VideoPlayer url={block.videoUrl} className="w-full" /></div>
               ) : block.imageUrl ? (
-                <img src={block.imageUrl} alt={block.heading || 'Course content'} className="w-full rounded-xl mb-4 object-cover max-h-[28rem]" />
+                <img src={optimizeImage(block.imageUrl, 1200)} alt={block.heading || 'Course content'} className="w-full rounded-xl mb-4 object-cover max-h-[28rem]" loading="lazy" decoding="async" />
               ) : null}
               {faqs.length > 0 && (
                 <div className="space-y-2">
@@ -2306,9 +2345,21 @@ export default function CourseLandingPage() {
 
       {/* FULL-SCREEN COURSE PREVIEW POPUP */}
       {isPreviewOpen && (
+        // FIX: the blur used to be applied to this fixed, full-screen box
+        // itself. A CSS blur also blurs the box's own EDGES — they fade to
+        // transparent — so a strip all the way around the screen let the page
+        // behind show through (the announcement bar at the top, the course
+        // page down the right side, a gap at the bottom). Now this outer box
+        // stays completely solid and never blurred; only the content inside
+        // it is blurred, and it's scaled up slightly so its blurred edges sit
+        // outside the screen. The blur therefore covers the whole page and
+        // nothing from behind is visible.
+        <div className="fixed inset-0 z-[9999] bg-black overflow-hidden">
         <div
-          className="fixed inset-0 z-[9999] bg-black bg-opacity-95 flex flex-col"
-          style={previewLocked ? { filter: 'blur(10px)', pointerEvents: 'none', userSelect: 'none', transition: 'filter .2s ease' } : { transition: 'filter .2s ease' }}
+          className="absolute inset-0 flex flex-col"
+          style={previewLocked
+            ? { filter: 'blur(10px)', transform: 'scale(1.08)', pointerEvents: 'none', userSelect: 'none', transition: 'filter .25s ease, transform .25s ease' }
+            : { transition: 'filter .25s ease, transform .25s ease' }}
         >
           <div className="absolute top-4 right-4 z-10">
             <button onClick={handleClosePreview}
@@ -2383,6 +2434,7 @@ export default function CourseLandingPage() {
               )}
             </div>
           </div>
+        </div>
         </div>
       )}
 
@@ -2566,7 +2618,7 @@ export default function CourseLandingPage() {
               {!logoLoaded ? (
                 <span className="inline-block h-14 md:h-16 lg:h-20 w-24" aria-hidden="true" />
               ) : siteLogoUrl ? (
-                <img src={siteLogoUrl} alt="Logo" className="h-14 md:h-16 lg:h-20 w-auto object-contain" />
+                <img src={optimizeImage(siteLogoUrl, 400)} alt="Logo" className="h-14 md:h-16 lg:h-20 w-auto object-contain" decoding="async" />
               ) : (
                 <span className="text-2xl md:text-3xl lg:text-4xl font-extrabold text-[#1a1208]">
                   Ler<span className="text-[#e8540a]">ni</span>
@@ -2641,12 +2693,19 @@ export default function CourseLandingPage() {
           links) since the instructor can put anything here now. */}
       <div className="bg-white border-b border-[#ece6dd]">
         <div className="max-w-7xl mx-auto px-4 lg:px-6 py-2 md:py-3 text-sm md:text-base text-[#9e9789] w-full flex flex-wrap items-center gap-x-2 gap-y-1">
-          {breadcrumbSegments.map((seg, i) => (
+          {/* Until the instructor's own breadcrumb has arrived (or is known to
+              be unset), a quiet placeholder holds the space — so the default
+              "category / title" trail never shows first and then swaps to the
+              custom one a second or two later. Once seen, it's cached, so on
+              later visits it's there instantly. */}
+          {breadcrumbReady ? breadcrumbSegments.map((seg, i) => (
             <React.Fragment key={i}>
               {i > 0 && <ChevronDown size={16} className="rotate-[-90deg] text-[#ccc5b8] flex-shrink-0" />}
               <span className={i === breadcrumbSegments.length - 1 ? "text-[#1a1208] font-semibold break-words" : "text-[#9e9789]"}>{seg}</span>
             </React.Fragment>
-          ))}
+          )) : (
+            <span className="inline-block h-5 w-56 max-w-full rounded bg-[#f0ebe3] animate-pulse" aria-hidden="true" />
+          )}
         </div>
       </div>
 
@@ -2853,16 +2912,6 @@ export default function CourseLandingPage() {
                 </>
               )}
 
-              {/* ENROLL NOW BUTTON */}
-              <div className="mb-8 md:mb-12 w-full">
-                <button onClick={handleEnrollClick}
-                  className="w-full bg-[#1a1208] hover:bg-[#2d2416] text-white font-bold py-3 md:py-4 rounded-xl transition text-lg md:text-xl border-none cursor-pointer shadow-lg">
-                  {discountPct ? (
-                    <span>Enroll Now • {priceLabel} • <span className="text-[#f9c97a]">{discountPct}% OFF</span></span>
-                  ) : `Enroll Now in ${priceLabel}`}
-                </button>
-              </div>
-
               {/* REQUIREMENTS */}
               {courseData.requirements?.length > 0 && (
                 <div className="mb-8 md:mb-12 w-full">
@@ -2924,7 +2973,7 @@ export default function CourseLandingPage() {
                       <div className="flex flex-col items-center flex-shrink-0 w-32 sm:w-40 md:w-48">
                         <div className="w-28 h-28 sm:w-36 sm:h-36 md:w-44 md:h-44 rounded-full overflow-hidden bg-[#f0ebe3] border-4 border-white shadow-md flex-shrink-0" style={{ aspectRatio: '1 / 1' }}>
                           {instructor.image && instructor.image.startsWith('http') ? (
-                            <img src={instructor.image} alt={instructor.name} className="w-full h-full object-cover" />
+                            <img src={optimizeImage(instructor.image, 400)} alt={instructor.name} className="w-full h-full object-cover" decoding="async" />
                           ) : (
                             <div className="w-full h-full flex items-center justify-center bg-[#e8540a]">
                               <span className="text-white font-bold text-3xl sm:text-4xl md:text-5xl">{instructor.name?.charAt(0) || 'I'}</span>
@@ -3020,7 +3069,7 @@ export default function CourseLandingPage() {
                                         onClick={onImageClick}
                                         className="block w-full rounded-xl overflow-hidden border border-[#ece6dd] shadow-sm hover:shadow-md transition cursor-pointer bg-white p-0"
                                       >
-                                        <img src={block.imageUrl} alt={block.heading || 'Photo'} className="w-full max-h-80 object-cover" />
+                                        <img src={optimizeImage(block.imageUrl, 1000)} alt={block.heading || 'Photo'} className="w-full max-h-80 object-cover" loading="lazy" decoding="async" />
                                       </button>
                                     )}
                                     {block.description && <p className={`${blockTextClass(block, 'description')} text-[#9e9789] mt-2`}>{block.description}</p>}
@@ -3154,7 +3203,7 @@ export default function CourseLandingPage() {
                     className="bg-white border border-[#ece6dd] rounded-2xl overflow-hidden hover:shadow-lg transition cursor-pointer group">
                     <div className="h-36 md:h-44 bg-[#f0ebe3] flex items-center justify-center relative overflow-hidden">
                       {course.thumbnail
-                        ? <img src={course.thumbnail} alt={course.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                        ? <img src={optimizeImage(course.thumbnail, 500)} alt={course.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" decoding="async" />
                         : <span className="text-5xl md:text-6xl">{course.emoji || '📚'}</span>}
                     </div>
                     <div className="p-3 md:p-4">

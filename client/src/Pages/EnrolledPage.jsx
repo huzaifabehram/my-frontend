@@ -38,6 +38,7 @@ import { useAuth } from '../context/AuthContext';
 import { useCourses } from '../context/CoursesContext';
 import { enrollCourse } from '../api/courseApi';
 import { trackInitiateCheckout, trackCompleteRegistration, trackPurchase, setPendingCourse } from '../utils/facebookPixel';
+import { fetchSiteSettings } from '../utils/siteSettings';
 import SiteHeader from '../components/SiteHeader';
 import SiteFooter from '../components/SiteFooter';
 import {
@@ -244,24 +245,22 @@ export default function EnrolledPage() {
     } catch { return { ubl: '', allied: '', jazzcash: '', easypaisa: '' }; }
   });
   useEffect(() => {
-    api.get('/settings')
-      .then((res) => {
-        const next = {
-          ubl:       res.data?.paymentLogoUbl       || '',
-          allied:    res.data?.paymentLogoAllied    || '',
-          jazzcash:  res.data?.paymentLogoJazzcash  || '',
-          easypaisa: res.data?.paymentLogoEasypaisa || '',
-        };
-        setPaymentLogos(next);
-        try {
-          localStorage.setItem('lerni_payment_logo_ubl', next.ubl);
-          localStorage.setItem('lerni_payment_logo_allied', next.allied);
-          localStorage.setItem('lerni_payment_logo_jazzcash', next.jazzcash);
-          localStorage.setItem('lerni_payment_logo_easypaisa', next.easypaisa);
-        } catch { /* cache is a nice-to-have */ }
+    let cancelled = false;
+    // shared, cached /settings request (utils/siteSettings.js) — it also keeps
+    // the payment-logo cache in localStorage up to date for the next visit.
+    fetchSiteSettings()
+      .then((data) => {
+        if (cancelled) return;
+        setPaymentLogos({
+          ubl:       data?.paymentLogoUbl       || '',
+          allied:    data?.paymentLogoAllied    || '',
+          jazzcash:  data?.paymentLogoJazzcash  || '',
+          easypaisa: data?.paymentLogoEasypaisa || '',
+        });
       })
       .catch(() => {}); // logos are optional — falls back to colored initials
-  }, [api]);
+    return () => { cancelled = true; };
+  }, []);
 
   // Prefill from the logged-in account, if any — same fields still editable.
   // (Doesn't touch whatsapp/password — those aren't part of the account.)
