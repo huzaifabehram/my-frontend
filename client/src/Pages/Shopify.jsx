@@ -743,8 +743,7 @@ function BundleOfferCard({ bundle, footerLogoUrl, onEnroll }) {
   return (
     <div className="rounded-3xl overflow-hidden border border-[#ece6dd] bg-white shadow-lg flex flex-col">
       {/* HEADER */}
-      <div className="relative bg-gradient-to-br from-[#1a1208] via-[#2d2416] to-[#3d2b1a] px-5 md:px-8 pt-6 md:pt-8 pb-6 md:pb-7 overflow-hidden">
-        <div className="absolute -right-10 -top-10 w-56 h-56 rounded-full bg-white/5 pointer-events-none" aria-hidden="true" />
+      <div className="relative bg-gradient-to-br from-[#1a1208] via-[#2d2416] to-[#3d2b1a] px-5 md:px-8 pt-6 md:pt-8 pb-6 md:pb-7">
         <div className="relative flex items-start justify-between gap-3 mb-4">
           <span className="inline-flex items-center gap-1.5 bg-[#f9c97a] text-[#7a4a00] text-[11px] font-extrabold tracking-wider uppercase px-3 py-1.5 rounded-full">
             <Award size={13} /> Bundle Offer
@@ -756,20 +755,20 @@ function BundleOfferCard({ bundle, footerLogoUrl, onEnroll }) {
         <h3 className="relative text-2xl md:text-3xl font-bold text-white leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>{bundle.name}</h3>
         {courseCount > 0 && (
           <p className="relative mt-1.5 text-sm md:text-base text-[#f9c97a] font-semibold">
-            Complete Guide to {courseCount} {courseCount === 1 ? 'Course' : 'Courses'} • One Powerful Bundle
+            Complete Guide • {courseCount} {courseCount === 1 ? 'Course' : 'Courses'} • One Powerful Bundle
           </p>
         )}
         {bundle.description && (
           <p className="relative mt-3 text-[#d9cfbf] text-sm md:text-base leading-relaxed whitespace-pre-line">{bundle.description}</p>
         )}
 
-        {/* Trust badges — two rows, same style */}
-        <div className="relative mt-5 md:mt-6 grid grid-cols-3 gap-3 pt-5 border-t border-white/10">
+        {/* Trust badges — ALL five in one grid (not two grids with a different
+            column count stacked on each other, which left their edges
+            misaligned row to row) so every badge lines up cleanly. */}
+        <div className="relative mt-5 md:mt-6 grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-4 pt-5 border-t border-white/10">
           <BundleBadge Icon={InfinityIcon} label="Lifetime Access" />
           <BundleBadge Icon={Award} label="Certificate of Completion" />
           <BundleBadge Icon={Laptop} label="Learn at Your Own Pace" />
-        </div>
-        <div className="relative mt-3 grid grid-cols-2 gap-3">
           <BundleBadge Icon={Headphones} label="24/7 Support" />
           <BundleBadge Icon={HelpCircle} label="Live Q&A Sessions" />
         </div>
@@ -789,14 +788,20 @@ function BundleOfferCard({ bundle, footerLogoUrl, onEnroll }) {
           </>
         )}
 
-        {/* PRICE PANEL — "Best Value" ribbon + original vs. offer price */}
-        <div className="relative mt-5 rounded-2xl bg-gradient-to-br from-[#fdf2ea] to-[#fbe4d0] border border-[#f5ddc4] overflow-hidden">
+        {/* PRICE PANEL — "Best Value" ribbon + original vs. offer price. The
+            soft blurred colour blobs behind the content are what give this
+            panel visible shading/depth (like the reference image) instead of
+            one flat gradient. */}
+        <div className="relative mt-5 rounded-2xl bg-[#fdf2ea] border border-[#f5ddc4] overflow-hidden">
+          <div className="absolute -left-6 -bottom-8 w-32 h-32 rounded-full bg-[#f9c97a]/40 blur-2xl pointer-events-none" aria-hidden="true" />
+          <div className="absolute -right-8 -top-10 w-40 h-40 rounded-full bg-[#e8540a]/20 blur-2xl pointer-events-none" aria-hidden="true" />
+          <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-[#f5ddc4]/60 pointer-events-none" aria-hidden="true" />
           {pct > 0 && (
-            <span className="absolute top-0 left-0 inline-flex items-center gap-1 bg-[#e8540a] text-white text-[11px] font-extrabold uppercase tracking-wide px-3 py-1.5 rounded-br-xl">
+            <span className="absolute top-0 left-0 inline-flex items-center gap-1 bg-[#e8540a] text-white text-[11px] font-extrabold uppercase tracking-wide px-3 py-1.5 rounded-br-xl z-10">
               <Star size={11} fill="currentColor" /> Best Value
             </span>
           )}
-          <div className={`grid ${hasActual ? 'grid-cols-2' : 'grid-cols-1'} gap-3 px-4 md:px-6 pt-9 pb-5 md:pt-10`}>
+          <div className={`relative grid ${hasActual ? 'grid-cols-2' : 'grid-cols-1'} gap-3 px-4 md:px-6 pt-9 pb-5 md:pt-10`}>
             {hasActual && (
               <div className="text-center border-r border-[#f0dcc2] pr-2">
                 <p className="text-[11px] md:text-xs font-bold uppercase tracking-wide text-[#9e9789] mb-1.5">Original Price</p>
@@ -806,28 +811,38 @@ function BundleOfferCard({ bundle, footerLogoUrl, onEnroll }) {
             <div className="text-center">
               <p className="text-[11px] md:text-xs font-extrabold uppercase tracking-[0.12em] text-[#e8540a] mb-1.5">Bundle Offer Price</p>
               <p className="text-2xl md:text-3xl font-extrabold text-[#1a1208]">PKR {offerPrice.toLocaleString()}</p>
+              {/* Sits right under Bundle Offer Price specifically — this column is
+                  on the right when there's an Original Price to compare against,
+                  matching the reference image (was centered under the whole
+                  panel before, which put it under neither column). */}
+              {pct > 0 && (
+                <span className="inline-flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 bg-[#e8540a] text-white text-xs md:text-sm font-bold px-3.5 py-1.5 rounded-full shadow-sm mt-3">
+                  <Award size={13} /> Save {pct}%{saved > 0 ? ` • You save PKR ${saved.toLocaleString()}` : ''}
+                </span>
+              )}
             </div>
           </div>
-          {pct > 0 && (
-            <div className="px-4 md:px-6 pb-5 flex justify-center">
-              <span className="inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-1 bg-[#e8540a] text-white text-xs md:text-sm font-bold px-4 py-1.5 rounded-full shadow-sm">
-                <Award size={13} /> Save {pct}%{saved > 0 ? ` • You save PKR ${saved.toLocaleString()}` : ''}
-              </span>
-            </div>
-          )}
         </div>
 
-        {/* ENROLL — two-tone: dark action + orange % badge, like the price panel above */}
+        {/* ENROLL — two-tone: dark action + orange % badge. The orange section's
+            LEFT edge is cut on a slant (not a straight vertical line) via
+            clip-path, matching the reference image, instead of the two
+            colours just meeting in a straight line down the middle. */}
         <button
           onClick={onEnroll}
           style={{ WebkitTapHighlightColor: 'transparent' }}
-          className="w-full mt-5 rounded-xl overflow-hidden border-none cursor-pointer shadow-lg flex items-stretch text-white font-bold text-sm md:text-base"
+          className="relative w-full mt-5 rounded-xl overflow-hidden border-none cursor-pointer shadow-lg text-white font-bold text-sm md:text-base bg-gradient-to-br from-[#1a1208] via-[#2d2416] to-[#3d2b1a] hover:from-[#2d2416] hover:to-[#4a3421] transition"
         >
-          <span className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-br from-[#1a1208] via-[#2d2416] to-[#3d2b1a] hover:from-[#2d2416] hover:to-[#4a3421] transition py-3.5 px-4">
+          <span className={`relative z-10 flex items-center justify-center gap-2 py-3.5 pl-4 ${pct > 0 ? 'pr-20 md:pr-24' : 'pr-4'}`}>
             <ArrowRight size={17} /> Enroll Now in Discounted Price
           </span>
           {pct > 0 && (
-            <span className="flex-shrink-0 flex items-center justify-center bg-[#e8540a] px-4 md:px-5">{pct}% OFF</span>
+            <span
+              className="absolute inset-y-0 right-0 z-10 flex items-center justify-center bg-[#e8540a] px-5 md:px-6"
+              style={{ clipPath: 'polygon(22px 0, 100% 0, 100% 100%, 0 100%)' }}
+            >
+              {pct}% OFF
+            </span>
           )}
         </button>
       </div>
