@@ -1198,7 +1198,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
 
   // ── Bundle handlers ──────────────────────────────────────────────────────
   const addBundle = () => {
-    setBundles(p => [...p, { id: uid(), name: '', price: '', discountPercentage: '', items: [] }]);
+    setBundles(p => [...p, { id: uid(), name: '', description: '', price: '', discountPercentage: '', items: [] }]);
   };
   const updateBundle = (bundleId, field, val) => {
     setBundles(p => p.map(b => (b.id || b._id) === bundleId ? { ...b, [field]: val } : b));
@@ -1208,7 +1208,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
     toast("Bundle removed", "success");
   };
   const addBundleItem = (bundleId) => {
-    setBundles(p => p.map(b => (b.id || b._id) === bundleId ? { ...b, items: [...(b.items || []), { id: uid(), title: '', content: '' }] } : b));
+    setBundles(p => p.map(b => (b.id || b._id) === bundleId ? { ...b, items: [...(b.items || []), { id: uid(), title: '', price: '', content: '' }] } : b));
   };
   const updateBundleItem = (bundleId, itemId, field, val) => {
     setBundles(p => p.map(b => (b.id || b._id) !== bundleId ? b : {
@@ -1296,6 +1296,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
         ...b,
         price: parseFloat(b.price) || 0,
         discountPercentage: parseFloat(b.discountPercentage) || 0,
+        items: (b.items || []).map(it => ({ ...it, price: parseFloat(it.price) || 0 })),
       })),
       alsoBoughtCourseIds: alsoBoughtIds,
     };
@@ -1801,33 +1802,51 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                         </div>
                         <div className="grid sm:grid-cols-3 gap-3 mb-3">
                           <Input label="Bundle Name" value={bundle.name || ""} onChange={v => updateBundle(bId, "name", v)} placeholder="e.g. Complete Growth Bundle"/>
-                          <Input label="Bundle Price (PKR)" value={bundle.price ?? ""} onChange={v => updateBundle(bId, "price", v)} placeholder="14999" type="number"/>
-                          <Input label="Discount % (optional badge)" value={bundle.discountPercentage ?? ""} onChange={v => updateBundle(bId, "discountPercentage", v)} placeholder="e.g. 20" type="number"/>
+                          <Input label="Bundle Offer Price (PKR)" value={bundle.price ?? ""} onChange={v => updateBundle(bId, "price", v)} placeholder="5000" type="number"/>
+                          <Input label="Discount % (only if modules have no prices)" value={bundle.discountPercentage ?? ""} onChange={v => updateBundle(bId, "discountPercentage", v)} placeholder="e.g. 20" type="number"/>
                         </div>
+                        <Textarea label="About this bundle (4–6 lines — shown under the heading)" value={bundle.description || ""} onChange={v => updateBundle(bId, "description", v)} placeholder="Explain what this bundle is, who it's for, and why it's worth it…" rows={5} className="mb-3"/>
                         <div className="mt-2">
                           <div className="flex items-center justify-between mb-2">
-                            <label className="text-xs sm:text-sm font-medium text-gray-700">What's included (FAQ-style dropdown)</label>
-                            <button onClick={() => addBundleItem(bId)} className="text-xs font-semibold text-[#e8540a] hover:text-[#c94708] transition bg-transparent border-none cursor-pointer">+ Add Item</button>
+                            <label className="text-xs sm:text-sm font-medium text-gray-700">Modules (each is a dropdown on the course page, with its actual price)</label>
+                            <button onClick={() => addBundleItem(bId)} className="text-xs font-semibold text-[#e8540a] hover:text-[#c94708] transition bg-transparent border-none cursor-pointer">+ Add Module</button>
                           </div>
                           <div className="space-y-2">
                             {(bundle.items || []).map((item) => {
                               const iId = item.id || item._id;
                               return (
                                 <div key={iId} className="bg-white border border-gray-200 rounded-lg p-3">
-                                  <div className="flex items-center gap-2 mb-2">
+                                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
                                     <input value={item.title || ""} onChange={e => updateBundleItem(bId, iId, "title", e.target.value)}
-                                      placeholder="e.g. 20+ hours of video content"
+                                      placeholder="Module name — e.g. Facebook Marketing"
                                       className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
-                                    <button onClick={() => deleteBundleItem(bId, iId)} className="text-red-400 hover:text-red-600 transition text-xs px-2 py-1 rounded hover:bg-red-50 flex-shrink-0">✕</button>
+                                    <div className="flex items-center gap-2">
+                                      <input type="number" value={item.price ?? ""} onChange={e => updateBundleItem(bId, iId, "price", e.target.value)}
+                                        placeholder="Actual price"
+                                        className="w-full sm:w-32 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
+                                      <button onClick={() => deleteBundleItem(bId, iId)} className="text-red-400 hover:text-red-600 transition text-xs px-2 py-1 rounded hover:bg-red-50 flex-shrink-0">✕</button>
+                                    </div>
                                   </div>
                                   <textarea value={item.content || ""} onChange={e => updateBundleItem(bId, iId, "content", e.target.value)}
-                                    placeholder="Optional detail shown when this dropdown is expanded" rows={2}
+                                    placeholder="Optional detail shown when this module's dropdown is opened" rows={2}
                                     className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
                                 </div>
                               );
                             })}
-                            {(bundle.items || []).length === 0 && <p className="text-xs text-gray-400 italic">No items yet — add what's included in this bundle.</p>}
+                            {(bundle.items || []).length === 0 && <p className="text-xs text-gray-400 italic">No modules yet — add what's included in this bundle.</p>}
                           </div>
+                          {(() => {
+                            const actual = (bundle.items || []).reduce((sum, it) => sum + (parseFloat(it.price) || 0), 0);
+                            const offer = parseFloat(bundle.price) || 0;
+                            if (!actual) return null;
+                            const pct = offer > 0 && offer < actual ? Math.round((1 - offer / actual) * 100) : 0;
+                            return (
+                              <p className="text-xs text-emerald-700 font-semibold mt-3 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
+                                Actual Price = PKR {actual.toLocaleString()} (all modules added up)
+                                {offer > 0 && offer < actual ? ` • offer PKR ${offer.toLocaleString()} → ${pct}% off, calculated automatically` : " • set the Bundle Offer Price lower than this to show a discount"}
+                              </p>
+                            );
+                          })()}
                         </div>
                       </div>
                     );

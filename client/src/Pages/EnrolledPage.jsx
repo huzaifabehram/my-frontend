@@ -58,20 +58,41 @@ import {
 // same way between Shopify.jsx and InstructorDashboard.jsx).
 const PREVIEW_LEAD_KEY = 'lerni_preview_lead_v1';
 const PREVIEW_LEAD_MAX_AGE_DAYS = 360;
-function getPreviewLead() {
+// The customer is remembered in TWO places at once — a real first-party
+// cookie (360 days) AND localStorage — and either one is enough to recognise
+// them (see the identical helpers in Shopify.jsx, which write it when the
+// free-lecture form is filled — keep the two in sync).
+function readLeadCookie() {
   try {
-    const raw = localStorage.getItem(PREVIEW_LEAD_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw);
-    if (!data?.savedAt || !data?.name || !data?.email || !data?.whatsapp) return null;
-    const ageDays = (Date.now() - data.savedAt) / (1000 * 60 * 60 * 24);
-    if (ageDays > PREVIEW_LEAD_MAX_AGE_DAYS) return null;
-    return data;
+    const m = document.cookie.match(new RegExp('(?:^|; )' + PREVIEW_LEAD_KEY + '=([^;]*)'));
+    return m ? JSON.parse(decodeURIComponent(m[1])) : null;
   } catch { return null; }
 }
-
+function writeLeadCookie(data) {
+  try {
+    const remainingSeconds = Math.max(60, Math.round(((data.savedAt + PREVIEW_LEAD_MAX_AGE_DAYS * 86400000) - Date.now()) / 1000));
+    document.cookie = `${PREVIEW_LEAD_KEY}=${encodeURIComponent(JSON.stringify(data))}; max-age=${remainingSeconds}; path=/; SameSite=Lax${window.location.protocol === 'https:' ? '; Secure' : ''}`;
+  } catch { /* cookies blocked — localStorage still has it */ }
+}
+function isValidLead(d) {
+  if (!d || !d.savedAt || !d.name || !d.email || !d.whatsapp) return false;
+  return (Date.now() - d.savedAt) / 86400000 <= PREVIEW_LEAD_MAX_AGE_DAYS;
+}
+function getPreviewLead() {
+  let fromStorage = null;
+  try { const raw = localStorage.getItem(PREVIEW_LEAD_KEY); if (raw) fromStorage = JSON.parse(raw); } catch { fromStorage = null; }
+  const fromCookie = readLeadCookie();
+  const found = [fromStorage, fromCookie].filter(isValidLead).sort((a, b) => b.savedAt - a.savedAt)[0] || null;
+  if (found) {
+    if (!isValidLead(fromStorage)) { try { localStorage.setItem(PREVIEW_LEAD_KEY, JSON.stringify(found)); } catch { /* ignore */ } }
+    if (!isValidLead(fromCookie)) writeLeadCookie(found);
+  }
+  return found;
+}
 function savePreviewLead({ name, email, whatsapp }) {
-  try { localStorage.setItem(PREVIEW_LEAD_KEY, JSON.stringify({ name, email, whatsapp, savedAt: Date.now() })); } catch { /* the details just won't be remembered on this device */ }
+  const data = { name, email, whatsapp, savedAt: Date.now() };
+  try { localStorage.setItem(PREVIEW_LEAD_KEY, JSON.stringify(data)); } catch { /* storage unavailable — the cookie below still remembers */ }
+  writeLeadCookie(data);
 }
 
 // NEW: each method lists one or more full accounts (bank/service name +
@@ -170,19 +191,32 @@ export default function EnrolledPage() {
 
   const [fullCourse, setFullCourse] = useState(null);
   const [courseLoading, setCourseLoading] = useState(true);
+  // The course exactly as the API returns it. CoursesContext reshapes the
+  // course it hands out and drops fields it doesn't know — bundles included —
+  // so without this the bundle chosen on the course page was never found here
+  // and the plain course price was shown/charged instead.
+  const [rawCourse, setRawCourse] = useState(null);
 
-  // NEW: if a returning visitor's Step-1 details are already on file (see
-  // getPreviewLead() above), start straight on Step 2, pre-filled — set
-  // once, synchronously, from the very first render so Step 1 never
-  // flashes first.
-  const initialPreviewLead = useMemo(() => (user ? null : getPreviewLead()), []); // eslint-disable-line react-hooks/exhaustive-deps
-  const skippedStep1 = Boolean(initialPreviewLead) && !user;
+  // If this customer's Step-1 details (the Course Basic Form) are already on
+  // file on this device — filled while watching a free lecture, or on an
+  // earlier enrollment, within the last 360 days — Step 1 is filled in for
+  // them and the page opens straight on Step 2 (payment). Decided once, from
+  // the very first render, so Step 1 never flashes first.
+  //
+  // FIX: this used to apply to guests only. Someone who is already LOGGED IN
+  // on the device (e.g. after a previous enrollment or test) still got Step 1
+  // every time — which looked like the memory had stopped working. Logged-in
+  // students skip it too now (their name/email come from the account, the
+  // WhatsApp number from what was saved). "Edit" on the payment step brings
+  // Step 1 back if any of it is wrong.
+  const savedLead = useMemo(() => getPreviewLead(), []);
+  const [skippedStep1, setSkippedStep1] = useState(Boolean(savedLead));
 
-  const [step, setStep] = useState(skippedStep1 ? 2 : 1);
+  const [step, setStep] = useState(savedLead ? 2 : 1);
   const [form, setForm] = useState({
-    name: initialPreviewLead?.name || '',
-    email: initialPreviewLead?.email || '',
-    whatsapp: initialPreviewLead?.whatsapp || '',
+    name: savedLead?.name || '',
+    email: savedLead?.email || '',
+    whatsapp: savedLead?.whatsapp || '',
     password: '',
   });
   const [errors, setErrors] = useState({});
@@ -263,6 +297,13 @@ export default function EnrolledPage() {
     });
   }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (!id) return undefined;
+    let cancelled = false;
+    api.get(`/courses/${id}`).then((res) => { if (!cancelled) setRawCourse(res.data || null); }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [id, api]);
+
   const course = useMemo(() => {
     if (!id) return null;
     return fullCourse || getCourse(id);
@@ -274,9 +315,10 @@ export default function EnrolledPage() {
   // bundle was removed after the link was shared).
   const bundleId = searchParams.get('bundle') || '';
   const selectedBundle = useMemo(() => {
-    if (!bundleId || !course?.bundles) return null;
-    return course.bundles.find((b) => String(b._id) === String(bundleId)) || null;
-  }, [bundleId, course]);
+    const list = (Array.isArray(rawCourse?.bundles) && rawCourse.bundles) || course?.bundles;
+    if (!bundleId || !Array.isArray(list)) return null;
+    return list.find((b) => String(b._id) === String(bundleId)) || null;
+  }, [bundleId, course, rawCourse]);
 
   // NEW: course.price is already stored in PKR — the old "* 280" here was
   // treating it as a USD figure and converting it, which is what made the
@@ -401,6 +443,7 @@ export default function EnrolledPage() {
         // Already signed in — enroll right away.
         await enrollCourse(courseId, intake);
         trackPurchase(course);
+        savePreviewLead({ name: intake.name, email: intake.email, whatsapp: intake.whatsapp });
         navigate('/thank-you', { replace: true, state: { courseTitle: course.title } });
       } else {
         // NEW: guest — create their student account right here using the
@@ -412,6 +455,7 @@ export default function EnrolledPage() {
         trackCompleteRegistration();
         await enrollCourse(courseId, intake);
         trackPurchase(course);
+        savePreviewLead({ name: intake.name, email: intake.email, whatsapp: intake.whatsapp });
         navigate('/thank-you', { replace: true, state: { courseTitle: course.title } });
       }
     } catch (err) {
@@ -590,12 +634,29 @@ export default function EnrolledPage() {
                   to our portal for this course.
                 </p>
 
-                {/* NEW: Step 1 was skipped (a remembered preview lead already
-                    supplied name/email/whatsapp) — a guest still needs to set
-                    a password to get their student portal login, so that one
-                    field shows here instead. Logged-in visitors never see
-                    this (skippedStep1 is only ever true when !user). */}
+                {/* Step 1 was filled in from what's remembered on this device —
+                    show it, with a way to change it. */}
                 {skippedStep1 && (
+                  <div className="flex items-start justify-between gap-3 bg-[#f8f4ed] border border-[#ece6dd] rounded-xl p-3.5">
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-[#9e9789] mb-0.5">Your details</p>
+                      <p className="font-semibold text-sm md:text-base text-[#1a1208] break-words">{user?.name || form.name}</p>
+                      <p className="text-xs md:text-sm text-[#6b5e4e] break-all">{user?.email || form.email}{form.whatsapp ? ` • ${form.whatsapp}` : ''}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => { setSkippedStep1(false); setStep(1); window.scrollTo({ top: 0, behavior: 'smooth' }); }}
+                      className="flex-shrink-0 text-xs font-bold text-[#e8540a] hover:text-[#c94708] bg-transparent border-none cursor-pointer p-0 underline"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                )}
+
+                {/* A guest still needs a password for their student portal
+                    login, so that one field shows here. Logged-in students
+                    already have an account and never see it. */}
+                {skippedStep1 && !user && (
                   <div className="bg-[#f8f4ed] border border-[#ece6dd] rounded-xl p-4 space-y-3">
                     <div className="flex items-start gap-2 bg-[#fdf2ea] border border-[#f5ddc4] rounded-lg px-3 py-2.5">
                       <ShieldCheck size={15} className="text-[#e8540a] flex-shrink-0 mt-0.5" />

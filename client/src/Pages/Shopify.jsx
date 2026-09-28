@@ -543,24 +543,49 @@ function unlockBodyScroll() {
 const PREVIEW_LEAD_KEY = 'lerni_preview_lead_v1';
 const PREVIEW_LEAD_MAX_AGE_DAYS = 360;
 
-function getPreviewLead() {
+// The customer is remembered in TWO places at once — a real first-party
+// cookie (360 days) AND localStorage — and either one is enough to recognise
+// them. A cookie survives some "clear site data" / storage-eviction cases
+// that wipe localStorage (and the other way round), so having both makes the
+// memory much harder to lose. Whichever is found first is copied back into the
+// other, so they heal each other. EnrolledPage.jsx has an identical copy of
+// these helpers — keep the two in sync.
+function readLeadCookie() {
   try {
-    const raw = localStorage.getItem(PREVIEW_LEAD_KEY);
-    if (!raw) return null;
-    const data = JSON.parse(raw);
-    if (!data?.savedAt || !data?.name || !data?.email || !data?.whatsapp) return null;
-    const ageDays = (Date.now() - data.savedAt) / (1000 * 60 * 60 * 24);
-    if (ageDays > PREVIEW_LEAD_MAX_AGE_DAYS) return null;
-    return data;
+    const m = document.cookie.match(new RegExp('(?:^|; )' + PREVIEW_LEAD_KEY + '=([^;]*)'));
+    return m ? JSON.parse(decodeURIComponent(m[1])) : null;
   } catch { return null; }
 }
+function writeLeadCookie(data) {
+  try {
+    const remainingSeconds = Math.max(60, Math.round(((data.savedAt + PREVIEW_LEAD_MAX_AGE_DAYS * 86400000) - Date.now()) / 1000));
+    document.cookie = `${PREVIEW_LEAD_KEY}=${encodeURIComponent(JSON.stringify(data))}; max-age=${remainingSeconds}; path=/; SameSite=Lax${window.location.protocol === 'https:' ? '; Secure' : ''}`;
+  } catch { /* cookies blocked — localStorage still has it */ }
+}
+function isValidLead(d) {
+  if (!d || !d.savedAt || !d.name || !d.email || !d.whatsapp) return false;
+  return (Date.now() - d.savedAt) / 86400000 <= PREVIEW_LEAD_MAX_AGE_DAYS;
+}
+function getPreviewLead() {
+  let fromStorage = null;
+  try { const raw = localStorage.getItem(PREVIEW_LEAD_KEY); if (raw) fromStorage = JSON.parse(raw); } catch { fromStorage = null; }
+  const fromCookie = readLeadCookie();
+  const found = [fromStorage, fromCookie].filter(isValidLead).sort((a, b) => b.savedAt - a.savedAt)[0] || null;
+  if (found) {
+    if (!isValidLead(fromStorage)) { try { localStorage.setItem(PREVIEW_LEAD_KEY, JSON.stringify(found)); } catch { /* ignore */ } }
+    if (!isValidLead(fromCookie)) writeLeadCookie(found);
+  }
+  return found;
+}
 function savePreviewLead({ name, email, whatsapp }) {
-  try { localStorage.setItem(PREVIEW_LEAD_KEY, JSON.stringify({ name, email, whatsapp, savedAt: Date.now() })); } catch { /* storage unavailable — the gate will just ask again next time */ }
+  const data = { name, email, whatsapp, savedAt: Date.now() };
+  try { localStorage.setItem(PREVIEW_LEAD_KEY, JSON.stringify(data)); } catch { /* storage unavailable — the cookie below still remembers */ }
+  writeLeadCookie(data);
 }
 
 // Small gate modal — Name/Email/WhatsApp only (no password; that's only
 // ever needed at real enrollment, in EnrolledPage.jsx's own Step 1/2).
-function PreviewLeadGateModal({ isOpen, onClose, onSuccess, courseId, courseTitle, api }) {
+function PreviewLeadGateModal({ isOpen, onClose, onSuccess, courseId, courseTitle, api, user }) {
   const [form, setForm] = useState({ name: '', email: '', whatsapp: '' });
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -570,6 +595,11 @@ function PreviewLeadGateModal({ isOpen, onClose, onSuccess, courseId, courseTitl
     lockBodyScroll();
     return () => unlockBodyScroll();
   }, [isOpen]);
+
+  // A logged-in student already has a name and email on their account.
+  useEffect(() => {
+    if (isOpen && user) setForm((f) => ({ ...f, name: f.name || user.name || '', email: f.email || user.email || '' }));
+  }, [isOpen, user]);
 
   if (!isOpen) return null;
 
@@ -601,7 +631,7 @@ function PreviewLeadGateModal({ isOpen, onClose, onSuccess, courseId, courseTitl
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 z-[9999] flex items-center justify-center p-4" style={{ fontFamily: "'DM Sans', sans-serif" }}>
+    <div className="fixed inset-0 bg-black/30 z-[10000] flex items-center justify-center p-4" style={{ fontFamily: "'DM Sans', sans-serif" }}>
       <div className="bg-white rounded-2xl w-full max-w-md p-5 sm:p-6 md:p-7 relative">
         <button onClick={onClose} aria-label="Close" className="absolute top-4 right-4 text-[#9e9789] hover:text-[#1a1208] bg-transparent border-none cursor-pointer">
           <X size={20} />
@@ -638,26 +668,104 @@ function PreviewLeadGateModal({ isOpen, onClose, onSuccess, courseId, courseTitl
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NEW: BUNDLE FAQ ITEM — one collapsible "what's included" row inside a
-// Bundle card (see the Bundles section below).
+// BUNDLE OFFER CARD — one beautiful card per bundle (Course Editor → Bundles):
+// heading + a short description, then every module as a dropdown row with its
+// own "actual price" struck through in orange, then the total actual price
+// (also struck through), the discounted bundle price, the % saved, and the
+// enroll button. All the prices are typed in by the instructor.
 // ─────────────────────────────────────────────────────────────────────────────
-function BundleFaqItem({ item }) {
+function StruckPrice({ amount, large = false }) {
+  return (
+    <span
+      className={`whitespace-nowrap font-semibold text-[#9e9789] ${large ? 'text-base md:text-lg' : 'text-sm md:text-base'}`}
+      style={{ textDecoration: 'line-through', textDecorationColor: '#e8540a', textDecorationThickness: '2px' }}
+    >
+      PKR {Number(amount || 0).toLocaleString()}
+    </span>
+  );
+}
+
+function BundleModuleRow({ item }) {
   const [open, setOpen] = useState(false);
   const hasContent = Boolean(item.content && item.content.trim());
+  const price = Number(item.price) || 0;
   return (
-    <div className="border border-[#ece6dd] rounded-lg bg-white overflow-hidden">
+    <div className={`rounded-xl border transition-colors ${open ? 'border-[#e8540a]/40 bg-[#fffaf5]' : 'border-[#ece6dd] bg-[#fbf8f3]'}`}>
       <button
         type="button"
         onClick={() => hasContent && setOpen((o) => !o)}
-        className={`w-full flex items-center justify-between gap-2 px-3 py-2.5 text-left bg-transparent border-none ${hasContent ? 'cursor-pointer' : 'cursor-default'}`}
+        className={`w-full flex items-center gap-3 px-3.5 py-3 text-left bg-transparent border-none ${hasContent ? 'cursor-pointer' : 'cursor-default'}`}
+        style={{ WebkitTapHighlightColor: 'transparent' }}
       >
-        <span className="text-sm font-semibold text-[#1a1208] flex items-center gap-2">
-          <Check size={14} className="text-[#e8540a] flex-shrink-0" />
-          {item.title}
-        </span>
-        {hasContent && <ChevronDown size={15} className={`text-[#9e9789] flex-shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />}
+        <ChevronDown size={18} className={`flex-shrink-0 transition-transform ${hasContent ? 'text-[#e8540a]' : 'text-[#d8cfbf]'} ${open ? 'rotate-180' : ''}`} />
+        <span className="flex-1 min-w-0 text-sm md:text-base font-semibold text-[#1a1208] leading-snug break-words">{item.title}</span>
+        {price > 0 && <StruckPrice amount={price} />}
       </button>
-      {open && hasContent && <p className="px-3 pb-3 text-xs md:text-sm text-[#6b5e4e] leading-relaxed">{item.content}</p>}
+      {open && hasContent && (
+        <p className="px-4 pb-3.5 pl-[2.9rem] text-xs md:text-sm text-[#6b5e4e] leading-relaxed whitespace-pre-line">{item.content}</p>
+      )}
+    </div>
+  );
+}
+
+function BundleOfferCard({ bundle, onEnroll }) {
+  const items = Array.isArray(bundle.items) ? bundle.items.filter((it) => it && String(it.title || '').trim()) : [];
+  const offerPrice = Number(bundle.price) || 0;
+  const actualTotal = items.reduce((sum, it) => sum + (Number(it.price) || 0), 0);
+  const hasActual = actualTotal > 0 && actualTotal > offerPrice;
+  // % off comes from the real numbers whenever the modules have prices;
+  // otherwise falls back to the manual "Discount %" typed in the editor.
+  const pct = hasActual ? Math.round((1 - offerPrice / actualTotal) * 100) : (Number(bundle.discountPercentage) || 0);
+  const saved = hasActual ? actualTotal - offerPrice : 0;
+
+  return (
+    <div className="rounded-3xl overflow-hidden border border-[#ece6dd] bg-white shadow-lg flex flex-col">
+      <div className="bg-gradient-to-br from-[#1a1208] via-[#2d2416] to-[#3d2b1a] px-5 md:px-8 pt-6 md:pt-8 pb-6 md:pb-7">
+        <span className="inline-block bg-[#f9c97a] text-[#7a4a00] text-[11px] font-extrabold tracking-wider uppercase px-3 py-1 rounded-full mb-3">Bundle Offer</span>
+        <h3 className="text-2xl md:text-3xl font-bold text-white leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>{bundle.name}</h3>
+        {bundle.description && (
+          <p className="mt-3 text-[#d9cfbf] text-sm md:text-base leading-relaxed whitespace-pre-line">{bundle.description}</p>
+        )}
+      </div>
+
+      <div className="px-4 md:px-8 py-5 md:py-7 flex-1 flex flex-col">
+        {items.length > 0 && (
+          <>
+            <p className="text-xs font-bold uppercase tracking-wider text-[#9e9789] mb-3">What's included</p>
+            <div className="space-y-2.5">
+              {items.map((item, i) => <BundleModuleRow key={item.id || item._id || i} item={item} />)}
+            </div>
+          </>
+        )}
+
+        {hasActual && (
+          <div className="mt-5 pt-4 border-t border-dashed border-[#e6dccb] flex items-center justify-between gap-3">
+            <span className="text-sm md:text-base font-bold text-[#3d3020]">Actual Price =</span>
+            <StruckPrice amount={actualTotal} large />
+          </div>
+        )}
+
+        <div className="mt-4 rounded-2xl bg-gradient-to-br from-[#fdf2ea] to-[#fbe4d0] border border-[#f5ddc4] px-4 py-5 md:px-6 text-center">
+          <p className="text-[11px] md:text-xs font-extrabold uppercase tracking-[0.18em] text-[#e8540a]">Bundle Offer Price</p>
+          <p className="mt-1 text-3xl md:text-4xl font-extrabold text-[#1a1208]" style={{ fontFamily: "'Playfair Display', serif" }}>
+            PKR {offerPrice.toLocaleString()}
+          </p>
+          {pct > 0 && (
+            <div className="mt-3 inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-1 bg-[#e8540a] text-white text-sm font-bold px-4 py-1.5 rounded-full shadow-sm">
+              <span>Save {pct}%</span>
+              {saved > 0 && <span className="opacity-90 font-semibold">• You save PKR {saved.toLocaleString()}</span>}
+            </div>
+          )}
+        </div>
+
+        <button
+          onClick={onEnroll}
+          className="w-full mt-5 bg-[#e8540a] hover:bg-[#c94708] text-white font-bold py-3.5 rounded-xl transition text-base md:text-lg border-none cursor-pointer shadow-lg"
+          style={{ WebkitTapHighlightColor: 'transparent' }}
+        >
+          Enroll Now in Discounted Price{pct > 0 ? ` • ${pct}% OFF` : ''}
+        </button>
+      </div>
     </div>
   );
 }
@@ -1399,11 +1507,48 @@ export default function CourseLandingPage() {
   const [imageSliderStartIndex, setImageSliderStartIndex] = useState(0);
 
   // NEW: Free Lecture Preview gate — see PreviewLeadGateModal above. Opened
-  // the first time (on this device) a visitor clicks any free preview;
-  // pendingPreviewActionRef holds exactly what to actually open once the
-  // gate is passed (or skipped, when a valid lead is already remembered).
+  // the first time (on this device) a visitor clicks any free preview.
+  // While previewLocked, the preview section is already open but blurred, its
+  // video isn't even loaded, and the form sits on top of it — the video only
+  // appears once the form is submitted.
   const [previewGateOpen, setPreviewGateOpen] = useState(false);
-  const pendingPreviewActionRef = useRef(null);
+  const [previewLocked, setPreviewLocked] = useState(false);
+
+  // The Bundle Offer card carries its own enroll button, so while it's on
+  // screen the fixed bottom "Enroll Now" bar (mobile) steps aside — otherwise
+  // it sits right under the bundle card as a second, separate offer card.
+  const [bundlesEl, setBundlesEl] = useState(null);
+  const [bundlesInView, setBundlesInView] = useState(false);
+  useEffect(() => {
+    if (!bundlesEl || typeof IntersectionObserver === 'undefined') { setBundlesInView(false); return undefined; }
+    const observer = new IntersectionObserver(([entry]) => setBundlesInView(entry.isIntersecting), { threshold: 0.05 });
+    observer.observe(bundlesEl);
+    return () => observer.disconnect();
+  }, [bundlesEl]);
+
+  // iPhone "white chalk" at the bottom of the page: rubber-banding past the
+  // end of the page shows whatever colour the <html> element has behind the
+  // dark footer — plain white here. Android doesn't rubber-band, so it never
+  // showed there. The <html> background follows where the visitor is: dark
+  // (footer colour) near the bottom, and the top colour near the top, and is
+  // put back when leaving this page.
+  useEffect(() => {
+    const root = document.documentElement;
+    const previous = root.style.backgroundColor;
+    const update = () => {
+      const nearBottom = window.scrollY + window.innerHeight >= root.scrollHeight - 400;
+      const topColor = document.querySelector('.announcement-track') ? '#1a1208' : '#ffffff';
+      root.style.backgroundColor = nearBottom ? '#1a1208' : topColor;
+    };
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    return () => {
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+      root.style.backgroundColor = previous;
+    };
+  }, []);
 
   // Instructor profile media gallery (Photos & Videos, set from the
   // Instructor Dashboard → Profile → Description) — its own lightbox/video
@@ -1636,6 +1781,20 @@ export default function CourseLandingPage() {
     trackViewContent(courseData);
   }, [id, courseData?._id, courseData?.title]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The Bundle Offer's button goes to the SAME enrollment page as every other
+  // "Enroll Now" on this page (same route, same tracking) — the bundle id just
+  // rides along so that page charges the bundle's price. Because it's the same
+  // page, it recognises a returning customer the same way: if they already
+  // filled the Course Basic Form, it opens straight on the payment step.
+  const handleBundleEnrollClick = (bundle) => {
+    if (!courseData?._id) return;
+    trackAddToCart(courseData);
+    setPendingCourse(courseData);
+    const courseId = courseData._id || courseData.id;
+    navigate(`/course/${courseId}/enroll${bundle?._id ? `?bundle=${bundle._id}` : ''}`);
+    setMobileMenuOpen(false);
+  };
+
   const handleEnrollClick = useCallback(() => {
     if (!courseData?._id) return;
     trackAddToCart(courseData);
@@ -1692,26 +1851,28 @@ export default function CourseLandingPage() {
       navigate(location.pathname + location.search, { state: { ...(location.state || {}), coursePreviewOpen: true } });
     }
   };
+  // Clicking a free preview opens the Course Preview section straight away;
+  // if this visitor hasn't filled the Course Basic Form yet (on this device,
+  // within the last 360 days), that section opens BLURRED with the form on top
+  // of it and the video held back until the form is submitted.
   const handlePreviewClick = () => {
-    if (getPreviewLead()) { openPreviewNow(); return; }
-    pendingPreviewActionRef.current = openPreviewNow;
-    setPreviewGateOpen(true);
+    openPreviewNow();
+    if (!getPreviewLead()) { setPreviewLocked(true); setPreviewGateOpen(true); }
   };
   const handleLectureClick = (lecture) => {
-    if (getPreviewLead()) { openLectureNow(lecture); return; }
-    pendingPreviewActionRef.current = () => openLectureNow(lecture);
-    setPreviewGateOpen(true);
+    openLectureNow(lecture);
+    if (!getPreviewLead()) { setPreviewLocked(true); setPreviewGateOpen(true); }
   };
   const handlePreviewGateSuccess = () => {
     setPreviewGateOpen(false);
-    const action = pendingPreviewActionRef.current;
-    pendingPreviewActionRef.current = null;
-    if (action) action();
+    setPreviewLocked(false);
   };
   const handleClosePreview  = () => {
     setIsPreviewOpen(false);
     setCurrentVideo('');
     setActivePreviewLecture(null);
+    setPreviewGateOpen(false);
+    setPreviewLocked(false);
     // Pop the ONE history entry we pushed when opening, if we're still on
     // it — keeps Back/Forward in sync with an explicit close (via the X
     // button or Escape), not just a browser Back press.
@@ -1741,6 +1902,8 @@ export default function CourseLandingPage() {
       setIsPreviewOpen(false);
       setCurrentVideo('');
       setActivePreviewLecture(null);
+      setPreviewGateOpen(false);
+      setPreviewLocked(false);
     }
     // Same for the reviews overlay: a browser Back that leaves its history
     // entry closes it and leaves the visitor on this course page.
@@ -2113,37 +2276,13 @@ export default function CourseLandingPage() {
       </div>
     ) : null,
 
-    // BUNDLES — named packages, each with its own price, an optional %-off
-    // badge, and an FAQ-style dropdown list of what's included. Each gets its
-    // own "Enroll Now in this Bundle" button, which charges the bundle's own
-    // price instead of the plain course price (see EnrolledPage.jsx).
+    // BUNDLE OFFER — one card per bundle (see BundleOfferCard). No section
+    // heading above it: the card carries its own "Bundle Offer" label.
     bundles: bundles.length > 0 ? (
-      <div className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
-        <h2 className="text-2xl md:text-3xl lg:text-4xl font-bold text-[#1a1208] mb-6 md:mb-8" style={{ fontFamily: "'Playfair Display', serif" }}>Bundles</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
+      <div ref={setBundlesEl} className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
+        <div className={`grid gap-5 md:gap-6 ${bundles.length > 1 ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
           {bundles.map((bundle, bi) => (
-            <div key={bundle._id || bi} className="border border-[#ece6dd] rounded-2xl p-5 md:p-6 bg-[#f8f4ed] flex flex-col">
-              <div className="flex items-start justify-between gap-2 mb-2">
-                <h3 className="text-lg md:text-xl font-bold text-[#1a1208]" style={{ fontFamily: "'Playfair Display', serif" }}>{bundle.name}</h3>
-                {bundle.discountPercentage > 0 && (
-                  <span className="flex-shrink-0 bg-[#e8540a] text-white text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap">{bundle.discountPercentage}% OFF</span>
-                )}
-              </div>
-              <p className="text-xl md:text-2xl font-bold text-[#1a1208] mb-4" style={{ fontFamily: "'Playfair Display', serif" }}>
-                PKR {Number(bundle.price || 0).toLocaleString()}
-              </p>
-              {bundle.items?.length > 0 && (
-                <div className="space-y-2 mb-5 flex-1">
-                  {bundle.items.map((item, i) => <BundleFaqItem key={i} item={item} />)}
-                </div>
-              )}
-              <button
-                onClick={() => navigate(`/course/${courseData._id}/enroll?bundle=${bundle._id}`)}
-                className="w-full bg-[#1a1208] hover:bg-[#2d2416] text-white font-bold py-3 rounded-xl transition text-base border-none cursor-pointer mt-auto"
-              >
-                Enroll Now in this Bundle
-              </button>
-            </div>
+            <BundleOfferCard key={bundle._id || bi} bundle={bundle} onEnroll={() => handleBundleEnrollClick(bundle)} />
           ))}
         </div>
       </div>
@@ -2157,16 +2296,20 @@ export default function CourseLandingPage() {
           (remembered 360 days). See PreviewLeadGateModal above. */}
       <PreviewLeadGateModal
         isOpen={previewGateOpen}
-        onClose={() => { setPreviewGateOpen(false); pendingPreviewActionRef.current = null; }}
+        onClose={handleClosePreview}
         onSuccess={handlePreviewGateSuccess}
         courseId={courseData._id}
         courseTitle={courseData.title}
         api={api}
+        user={user}
       />
 
       {/* FULL-SCREEN COURSE PREVIEW POPUP */}
       {isPreviewOpen && (
-        <div className="fixed inset-0 z-[9999] bg-black bg-opacity-95 flex flex-col">
+        <div
+          className="fixed inset-0 z-[9999] bg-black bg-opacity-95 flex flex-col"
+          style={previewLocked ? { filter: 'blur(10px)', pointerEvents: 'none', userSelect: 'none', transition: 'filter .2s ease' } : { transition: 'filter .2s ease' }}
+        >
           <div className="absolute top-4 right-4 z-10">
             <button onClick={handleClosePreview}
               className="p-3 bg-white bg-opacity-10 hover:bg-opacity-20 rounded-full transition border-none cursor-pointer backdrop-blur-sm">
@@ -2180,7 +2323,11 @@ export default function CourseLandingPage() {
             </div>
           </div>
           <div className="w-full bg-black">
-            <div className="max-w-7xl mx-auto"><PreviewVideoWithTracking url={currentVideo} course={courseData} lecture={activePreviewLecture} /></div>
+            <div className="max-w-7xl mx-auto">
+              {previewLocked
+                ? <div className="w-full aspect-video bg-black" />
+                : <PreviewVideoWithTracking url={currentVideo} course={courseData} lecture={activePreviewLecture} />}
+            </div>
           </div>
 
           {/* Clickable rating link below the free lecture video player — closes this
@@ -3138,7 +3285,7 @@ export default function CourseLandingPage() {
       </footer>
 
       {/* STICKY BOTTOM BAR — MOBILE */}
-      <div className="fixed bottom-0 left-0 right-0 lg:hidden bg-white border-t-2 border-[#ece6dd] p-3 md:p-4 z-50 flex items-center w-full shadow-2xl">
+      <div className={`fixed bottom-0 left-0 right-0 lg:hidden bg-white border-t-2 border-[#ece6dd] p-3 md:p-4 z-50 items-center w-full shadow-2xl ${bundlesInView ? 'hidden' : 'flex'}`}>
         <button
           onClick={handleEnrollClick}
           style={{
@@ -3167,7 +3314,7 @@ export default function CourseLandingPage() {
         </button>
       </div>
 
-      <div className="h-16 md:h-20 lg:h-0" />
+      <div className="h-16 md:h-20 lg:h-0 bg-[#1a1208]" />
 
       <style jsx>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=Playfair+Display:wght@700;800;900&display=swap');
