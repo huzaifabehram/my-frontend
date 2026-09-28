@@ -11,11 +11,18 @@
 // that appears on that course's own landing page (Shopify.jsx) — these all
 // come straight from CoursesContext's normalized course object (rating,
 // reviews, students), so a card's numbers always match its course page.
+//
+// SPEED (this update): thumbnails are requested at card size in a modern
+// format (Cloudinary f_auto/q_auto/w_600) and lazy-loaded instead of
+// downloading every full-size upload at once; touching/hovering a card starts
+// loading that course immediately, so the course page is ready sooner.
 // ─────────────────────────────────────────────────────────────────────────────
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Star, Clock, Users, Search, Filter, X, ChevronDown, BookOpen, Zap } from 'lucide-react';
 import { useCourses, getDisplayStats } from '../context/CoursesContext';
+import { loadCourseOnce } from '../utils/courseCache';
+import { optimizeImage } from '../utils/imageOptimize';
 import SiteHeader from '../components/SiteHeader';
 import SiteFooter from '../components/SiteFooter';
 
@@ -39,7 +46,8 @@ function CourseThumbnail({ course }) {
   const [imgErr, setImgErr] = useState(false);
   if (course.thumbnail && !imgErr) {
     return (
-      <img src={course.thumbnail} alt={course.title}
+      <img src={optimizeImage(course.thumbnail, 600)} alt={course.title}
+        loading="lazy" decoding="async"
         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
         onError={() => setImgErr(true)} />
     );
@@ -55,7 +63,7 @@ function CourseThumbnail({ course }) {
 // landing page (Shopify.jsx) exactly — same border, rounded corners, gold
 // star rating, and price styling — so a course looks the same wherever it
 // shows up on the site.
-function CourseCard({ course, onClick }) {
+function CourseCard({ course, onClick, onPrefetch }) {
   const discount = course.originalPrice && course.originalPrice > course.price
     ? Math.round((1 - course.price / course.originalPrice) * 100)
     : null;
@@ -65,7 +73,8 @@ function CourseCard({ course, onClick }) {
   // real counts on their own.
   const { rating: displayRating, reviewCount: displayReviewCount, studentCount: displayStudentCount } = useMemo(() => getDisplayStats(course), [course]);
   return (
-    <div onClick={onClick}
+    <div onClick={onClick} onMouseEnter={onPrefetch} onTouchStart={onPrefetch}
+      style={{ WebkitTapHighlightColor: 'transparent' }}
       className="group bg-white border border-[#ece6dd] rounded-2xl overflow-hidden hover:shadow-lg hover:-translate-y-0.5 transition-all duration-300 cursor-pointer flex flex-col">
       <div className="relative h-40 md:h-44 overflow-hidden">
         <CourseThumbnail course={course} />
@@ -145,7 +154,7 @@ function SkeletonCard() {
 
 export default function CoursesPage() {
   const navigate = useNavigate();
-  const { courses, loading } = useCourses();
+  const { courses, loading, fetchCourseById } = useCourses();
 
   const [search,     setSearch]     = useState('');
   const [category,   setCategory]   = useState('All');
@@ -330,7 +339,8 @@ export default function CoursesPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             {filtered.map(course => (
               <CourseCard key={course._id} course={course}
-                onClick={() => navigate(`/course/${course._id}`)} />
+                onClick={() => navigate(`/course/${course._id}`)}
+                onPrefetch={() => loadCourseOnce(course._id, fetchCourseById)} />
             ))}
           </div>
         )}
@@ -340,4 +350,4 @@ export default function CoursesPage() {
       <SiteFooter />
     </div>
   );
-}
+} 

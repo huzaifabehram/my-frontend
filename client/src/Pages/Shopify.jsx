@@ -195,7 +195,7 @@
 //            added a newsletter box outside the tabs that posts to the backend.
 import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from 'react';
 import { useNavigate, useParams, useLocation, useNavigationType } from 'react-router-dom';
-import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Volume2, ArrowLeft } from 'lucide-react';
+import { ChevronDown, Play, Star, Users, Clock, BookOpen, Menu, X, Search, Check, Award, Smartphone, Film, Download, Globe, Shield, ChevronLeft, ChevronRight, MessageCircle, Volume2, ArrowLeft, ArrowRight, Infinity as InfinityIcon, Headphones, HelpCircle, Laptop } from 'lucide-react';
 import { useCourses } from '../context/CoursesContext';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -672,16 +672,20 @@ function PreviewLeadGateModal({ isOpen, onClose, onSuccess, courseId, courseTitl
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BUNDLE OFFER CARD — one beautiful card per bundle (Course Editor → Bundles):
-// heading + a short description, then every module as a dropdown row with its
-// own "actual price" struck through in orange, then the total actual price
-// (also struck through), the discounted bundle price, the % saved, and the
-// enroll button. All the prices are typed in by the instructor.
+// BUNDLE OFFER CARD — one premium card per bundle (Course Editor → Bundles):
+// dark header with the site's own footer logo, the bundle's name and a short
+// description, a dynamic "Complete Guide to N Courses" line (N = number of
+// modules), two rows of trust badges, a "What's Included" module list (each
+// with the icon/logo the instructor uploaded, a title, a short line, and its
+// own original price struck through), a "Best Value" price panel (original
+// price vs. the bundle's offer price, with the % and amount saved), and a
+// two-tone Enroll button. All the prices and the description come from what
+// the instructor typed in the Course Editor.
 // ─────────────────────────────────────────────────────────────────────────────
 function StruckPrice({ amount, large = false }) {
   return (
     <span
-      className={`whitespace-nowrap ${large ? 'text-xl md:text-2xl font-extrabold text-[#6b5e4e]' : 'text-sm md:text-base font-semibold text-[#9e9789]'}`}
+      className={`whitespace-nowrap ${large ? 'text-xl md:text-2xl font-extrabold text-[#6b5e4e]' : 'text-sm md:text-base font-bold text-[#9e9789]'}`}
       style={{ textDecoration: 'line-through', textDecorationColor: '#e8540a', textDecorationThickness: large ? '3px' : '2px' }}
     >
       PKR {Number(amount || 0).toLocaleString()}
@@ -689,30 +693,43 @@ function StruckPrice({ amount, large = false }) {
   );
 }
 
-function BundleModuleRow({ item }) {
-  const [open, setOpen] = useState(false);
-  const hasContent = Boolean(item.content && item.content.trim());
-  const price = Number(item.price) || 0;
+// A trust badge used in the two rows under the bundle title — icon in a
+// translucent circle, label underneath, same style for both rows.
+function BundleBadge({ Icon, label }) {
   return (
-    <div className={`rounded-xl border transition-colors ${open ? 'border-[#e8540a]/40 bg-[#fffaf5]' : 'border-[#ece6dd] bg-[#fbf8f3]'}`}>
-      <button
-        type="button"
-        onClick={() => hasContent && setOpen((o) => !o)}
-        className={`w-full flex items-center gap-3 px-3.5 py-3 text-left bg-transparent border-none ${hasContent ? 'cursor-pointer' : 'cursor-default'}`}
-        style={{ WebkitTapHighlightColor: 'transparent' }}
-      >
-        <ChevronDown size={18} className={`flex-shrink-0 transition-transform ${hasContent ? 'text-[#e8540a]' : 'text-[#d8cfbf]'} ${open ? 'rotate-180' : ''}`} />
-        <span className="flex-1 min-w-0 text-sm md:text-base font-semibold text-[#1a1208] leading-snug break-words">{item.title}</span>
-        {price > 0 && <StruckPrice amount={price} />}
-      </button>
-      {open && hasContent && (
-        <p className="px-4 pb-3.5 pl-[2.9rem] text-xs md:text-sm text-[#6b5e4e] leading-relaxed whitespace-pre-line">{item.content}</p>
-      )}
+    <div className="flex items-center gap-2.5 min-w-0">
+      <div className="w-9 h-9 md:w-10 md:h-10 rounded-full bg-white/10 flex items-center justify-center flex-shrink-0">
+        <Icon size={17} className="text-[#f9c97a]" />
+      </div>
+      <span className="text-xs md:text-sm font-semibold text-[#e8d9c5] leading-snug">{label}</span>
     </div>
   );
 }
 
-function BundleOfferCard({ bundle, onEnroll }) {
+// One "What's Included" row — the instructor's uploaded icon/logo (or an
+// orange initial-letter badge when there isn't one yet), the module's title
+// and short line, and its own original price struck through on the right.
+function BundleModuleRow({ item }) {
+  const price = Number(item.price) || 0;
+  return (
+    <div className="flex items-center gap-3 md:gap-4 rounded-xl border border-[#ece6dd] bg-[#fbf8f3] px-3.5 py-3 md:px-4 md:py-3.5">
+      <div className="w-11 h-11 md:w-12 md:h-12 rounded-full bg-white border border-[#ece6dd] flex items-center justify-center flex-shrink-0 overflow-hidden shadow-sm">
+        {item.imageUrl ? (
+          <img src={optimizeImage(item.imageUrl, 120)} alt={item.title} className="w-full h-full object-cover" loading="lazy" decoding="async" />
+        ) : (
+          <span className="text-[#e8540a] font-extrabold text-base">{(item.title || '?').charAt(0).toUpperCase()}</span>
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm md:text-base font-extrabold text-[#1a1208] uppercase tracking-wide leading-snug break-words">{item.title}</p>
+        {item.content && <p className="text-xs md:text-sm text-[#8a7d6c] leading-snug mt-0.5 break-words">{item.content}</p>}
+      </div>
+      {price > 0 && <div className="flex-shrink-0"><StruckPrice amount={price} /></div>}
+    </div>
+  );
+}
+
+function BundleOfferCard({ bundle, footerLogoUrl, onEnroll }) {
   const items = Array.isArray(bundle.items) ? bundle.items.filter((it) => it && String(it.title || '').trim()) : [];
   const offerPrice = Number(bundle.price) || 0;
   const actualTotal = items.reduce((sum, it) => sum + (Number(it.price) || 0), 0);
@@ -721,53 +738,97 @@ function BundleOfferCard({ bundle, onEnroll }) {
   // otherwise falls back to the manual "Discount %" typed in the editor.
   const pct = hasActual ? Math.round((1 - offerPrice / actualTotal) * 100) : (Number(bundle.discountPercentage) || 0);
   const saved = hasActual ? actualTotal - offerPrice : 0;
+  const courseCount = items.length;
 
   return (
     <div className="rounded-3xl overflow-hidden border border-[#ece6dd] bg-white shadow-lg flex flex-col">
-      <div className="bg-gradient-to-br from-[#1a1208] via-[#2d2416] to-[#3d2b1a] px-5 md:px-8 pt-6 md:pt-8 pb-6 md:pb-7">
-        <span className="inline-block bg-[#f9c97a] text-[#7a4a00] text-[11px] font-extrabold tracking-wider uppercase px-3 py-1 rounded-full mb-3">Bundle Offer</span>
-        <h3 className="text-2xl md:text-3xl font-bold text-white leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>{bundle.name}</h3>
-        {bundle.description && (
-          <p className="mt-3 text-[#d9cfbf] text-sm md:text-base leading-relaxed whitespace-pre-line">{bundle.description}</p>
+      {/* HEADER */}
+      <div className="relative bg-gradient-to-br from-[#1a1208] via-[#2d2416] to-[#3d2b1a] px-5 md:px-8 pt-6 md:pt-8 pb-6 md:pb-7 overflow-hidden">
+        <div className="absolute -right-10 -top-10 w-56 h-56 rounded-full bg-white/5 pointer-events-none" aria-hidden="true" />
+        <div className="relative flex items-start justify-between gap-3 mb-4">
+          <span className="inline-flex items-center gap-1.5 bg-[#f9c97a] text-[#7a4a00] text-[11px] font-extrabold tracking-wider uppercase px-3 py-1.5 rounded-full">
+            <Award size={13} /> Bundle Offer
+          </span>
+          {footerLogoUrl && (
+            <img src={optimizeImage(footerLogoUrl, 300)} alt="Logo" className="h-8 md:h-9 w-auto object-contain flex-shrink-0" decoding="async" />
+          )}
+        </div>
+        <h3 className="relative text-2xl md:text-3xl font-bold text-white leading-tight" style={{ fontFamily: "'Playfair Display', serif" }}>{bundle.name}</h3>
+        {courseCount > 0 && (
+          <p className="relative mt-1.5 text-sm md:text-base text-[#f9c97a] font-semibold">
+            Complete Guide to {courseCount} {courseCount === 1 ? 'Course' : 'Courses'} • One Powerful Bundle
+          </p>
         )}
+        {bundle.description && (
+          <p className="relative mt-3 text-[#d9cfbf] text-sm md:text-base leading-relaxed whitespace-pre-line">{bundle.description}</p>
+        )}
+
+        {/* Trust badges — two rows, same style */}
+        <div className="relative mt-5 md:mt-6 grid grid-cols-3 gap-3 pt-5 border-t border-white/10">
+          <BundleBadge Icon={InfinityIcon} label="Lifetime Access" />
+          <BundleBadge Icon={Award} label="Certificate of Completion" />
+          <BundleBadge Icon={Laptop} label="Learn at Your Own Pace" />
+        </div>
+        <div className="relative mt-3 grid grid-cols-2 gap-3">
+          <BundleBadge Icon={Headphones} label="24/7 Support" />
+          <BundleBadge Icon={HelpCircle} label="Live Q&A Sessions" />
+        </div>
       </div>
 
+      {/* BODY */}
       <div className="px-4 md:px-8 py-5 md:py-7 flex-1 flex flex-col">
         {items.length > 0 && (
           <>
-            <p className="text-xs font-bold uppercase tracking-wider text-[#9e9789] mb-3">What's included</p>
+            <div className="mb-3">
+              <p className="text-sm md:text-base font-extrabold uppercase tracking-wide text-[#1a1208]">What's Included</p>
+              <span className="block w-10 h-1 rounded-full bg-[#e8540a] mt-1.5" aria-hidden="true" />
+            </div>
             <div className="space-y-2.5">
-              {items.map((item, i) => <BundleModuleRow key={item.id || item._id || i} item={item} />)}
+              {items.map((item, i) => <BundleModuleRow key={item._id || i} item={item} />)}
             </div>
           </>
         )}
 
-        {hasActual && (
-          <div className="mt-5 pt-4 border-t border-dashed border-[#e6dccb] flex items-center justify-center gap-3 flex-wrap">
-            <span className="text-base md:text-lg font-bold text-[#3d3020]">Original Price</span>
-            <StruckPrice amount={actualTotal} large />
-          </div>
-        )}
-
-        <div className="mt-4 rounded-2xl bg-gradient-to-br from-[#fdf2ea] to-[#fbe4d0] border border-[#f5ddc4] px-4 py-5 md:px-6 text-center">
-          <p className="text-[11px] md:text-xs font-extrabold uppercase tracking-[0.18em] text-[#e8540a]">Bundle Offer Price</p>
-          <p className="mt-1 text-3xl md:text-4xl font-extrabold text-[#1a1208]">
-            PKR {offerPrice.toLocaleString()}
-          </p>
+        {/* PRICE PANEL — "Best Value" ribbon + original vs. offer price */}
+        <div className="relative mt-5 rounded-2xl bg-gradient-to-br from-[#fdf2ea] to-[#fbe4d0] border border-[#f5ddc4] overflow-hidden">
           {pct > 0 && (
-            <div className="mt-3 inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-1 bg-[#e8540a] text-white text-sm font-bold px-4 py-1.5 rounded-full shadow-sm">
-              <span>Save {pct}%</span>
-              {saved > 0 && <span className="opacity-90 font-semibold">• You save PKR {saved.toLocaleString()}</span>}
+            <span className="absolute top-0 left-0 inline-flex items-center gap-1 bg-[#e8540a] text-white text-[11px] font-extrabold uppercase tracking-wide px-3 py-1.5 rounded-br-xl">
+              <Star size={11} fill="currentColor" /> Best Value
+            </span>
+          )}
+          <div className={`grid ${hasActual ? 'grid-cols-2' : 'grid-cols-1'} gap-3 px-4 md:px-6 pt-9 pb-5 md:pt-10`}>
+            {hasActual && (
+              <div className="text-center border-r border-[#f0dcc2] pr-2">
+                <p className="text-[11px] md:text-xs font-bold uppercase tracking-wide text-[#9e9789] mb-1.5">Original Price</p>
+                <StruckPrice amount={actualTotal} large />
+              </div>
+            )}
+            <div className="text-center">
+              <p className="text-[11px] md:text-xs font-extrabold uppercase tracking-[0.12em] text-[#e8540a] mb-1.5">Bundle Offer Price</p>
+              <p className="text-2xl md:text-3xl font-extrabold text-[#1a1208]">PKR {offerPrice.toLocaleString()}</p>
+            </div>
+          </div>
+          {pct > 0 && (
+            <div className="px-4 md:px-6 pb-5 flex justify-center">
+              <span className="inline-flex flex-wrap items-center justify-center gap-x-2 gap-y-1 bg-[#e8540a] text-white text-xs md:text-sm font-bold px-4 py-1.5 rounded-full shadow-sm">
+                <Award size={13} /> Save {pct}%{saved > 0 ? ` • You save PKR ${saved.toLocaleString()}` : ''}
+              </span>
             </div>
           )}
         </div>
 
+        {/* ENROLL — two-tone: dark action + orange % badge, like the price panel above */}
         <button
           onClick={onEnroll}
-          className="w-full mt-5 bg-gradient-to-br from-[#1a1208] via-[#2d2416] to-[#3d2b1a] hover:from-[#2d2416] hover:to-[#4a3421] text-white font-bold py-3.5 rounded-xl transition text-base md:text-lg border-none cursor-pointer shadow-lg"
           style={{ WebkitTapHighlightColor: 'transparent' }}
+          className="w-full mt-5 rounded-xl overflow-hidden border-none cursor-pointer shadow-lg flex items-stretch text-white font-bold text-sm md:text-base"
         >
-          Enroll Now in Discounted Price{pct > 0 ? ` • ${pct}% OFF` : ''}
+          <span className="flex-1 flex items-center justify-center gap-2 bg-gradient-to-br from-[#1a1208] via-[#2d2416] to-[#3d2b1a] hover:from-[#2d2416] hover:to-[#4a3421] transition py-3.5 px-4">
+            <ArrowRight size={17} /> Enroll Now in Discounted Price
+          </span>
+          {pct > 0 && (
+            <span className="flex-shrink-0 flex items-center justify-center bg-[#e8540a] px-4 md:px-5">{pct}% OFF</span>
+          )}
         </button>
       </div>
     </div>
@@ -2321,7 +2382,7 @@ export default function CourseLandingPage() {
       <div ref={setBundlesEl} className="mb-8 md:mb-12 pt-6 md:pt-8 border-t border-[#ece6dd] w-full">
         <div className={`grid gap-5 md:gap-6 ${bundles.length > 1 ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
           {bundles.map((bundle, bi) => (
-            <BundleOfferCard key={bundle._id || bi} bundle={bundle} onEnroll={() => handleBundleEnrollClick(bundle)} />
+            <BundleOfferCard key={bundle._id || bi} bundle={bundle} footerLogoUrl={footerLogoUrl} onEnroll={() => handleBundleEnrollClick(bundle)} />
           ))}
         </div>
       </div>

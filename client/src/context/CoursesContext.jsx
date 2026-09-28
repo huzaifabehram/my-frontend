@@ -1,5 +1,5 @@
 // src/context/CoursesContext.jsx
-import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from "react";
 import axios from "axios";
 import { API_BASE_URL } from "../config/apiBase";
 
@@ -178,6 +178,40 @@ export function normalizeCourse(raw, index) {
     ? source.alsoBoughtCourseIds.map((id) => String(id))
     : [];
 
+  // NEW: bundles — named packages set in the Instructor Dashboard's Course
+  // Editor (own price, description, and a list of modules with their own
+  // "original" prices). `_id` is kept as a string: it's what goes in the
+  // "Enroll Now in this Bundle" link (?bundle=<_id>) and what the server
+  // matches to charge the bundle's price.
+  const bundles = Array.isArray(source.bundles)
+    ? source.bundles
+        .filter((b) => b && typeof b === "object")
+        .map((b) => ({
+          _id: b._id != null ? String(b._id) : undefined,
+          name: b.name || "",
+          description: b.description || "",
+          price: Number(b.price) || 0,
+          discountPercentage: Number(b.discountPercentage) || 0,
+          items: Array.isArray(b.items)
+            ? b.items
+                .filter((it) => it && typeof it === "object")
+                .map((it) => ({
+                  _id: it._id != null ? String(it._id) : undefined,
+                  title: it.title || "",
+                  price: Number(it.price) || 0,
+                  content: it.content || "",
+                  imageUrl: it.imageUrl || "",
+                }))
+            : [],
+        }))
+    : [];
+
+  // NEW: Custom Content Blocks (heading / sub heading / video or image / FAQ)
+  // — free-form objects, passed through as saved.
+  const customBlocks = Array.isArray(source.customBlocks)
+    ? source.customBlocks.filter((b) => b && typeof b === "object")
+    : [];
+
   const reviewsList = Array.isArray(source.reviews_list)
     ? source.reviews_list
         .filter((r) => r && typeof r === "object")
@@ -261,31 +295,91 @@ export function normalizeCourse(raw, index) {
     videoTestimonials,
     projectGallery,
     alsoBoughtCourseIds,
+
+    // NEW: these were being dropped here, which is why a custom breadcrumb,
+    // bundles and custom blocks set in the Instructor Dashboard never reached
+    // the course page. `breadcrumbText` is ALWAYS present (empty string when
+    // unset) so the course page can tell "this course has no custom
+    // breadcrumb" apart from "this copy of the course predates the field".
+    breadcrumbText:     typeof source.breadcrumbText === "string" ? source.breadcrumbText : "",
+    bundles,
+    customBlocks,
+    editorSectionOrder: Array.isArray(source.editorSectionOrder) ? source.editorSectionOrder.map(String) : [],
   };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COURSE LIST — remembered between visits
+// The list of published courses used to start EMPTY on every page load, so the
+// Home and Courses pages sat on skeleton cards (and a "loading" course page)
+// until the server answered — which can take a long time when it has to wake
+// up. The last list is now kept in localStorage: the site paints from that
+// immediately and refreshes it quietly in the background. If the refresh
+// fails (server asleep / offline) the remembered list stays on screen instead
+// of being wiped to "no courses".
+// ─────────────────────────────────────────────────────────────────────────────
+const LIST_CACHE_KEY = "lerni_courses_list_v2";
+let listCacheRead = false;
+let listCacheValue = null;
+
+function readListCache() {
+  if (listCacheRead) return listCacheValue;
+  listCacheRead = true;
+  try {
+    const raw = localStorage.getItem(LIST_CACHE_KEY);
+    if (raw) {
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr) && arr.length) listCacheValue = arr;
+    }
+  } catch { /* unreadable cache — start empty */ }
+  return listCacheValue;
+}
+
+function writeListCache(list) {
+  try {
+    if (!Array.isArray(list) || list.length === 0) { localStorage.removeItem(LIST_CACHE_KEY); return; }
+    const json = JSON.stringify(list);
+    if (json.length < 1500000) localStorage.setItem(LIST_CACHE_KEY, json);
+  } catch { /* storage full/unavailable — the site just loads fresh next time */ }
+}
+
+// Called from index.js before React starts, so the request is already under
+// way (and a sleeping server already waking) while the app boots. The
+// provider's first load picks this promise up instead of asking again.
+let earlyListRequest = null;
+export function prefetchCourseList() {
+  if (!earlyListRequest) earlyListRequest = API.get("/courses");
+  return earlyListRequest;
 }
 
 const CoursesContext = createContext(null);
 
 export function CoursesProvider({ children }) {
-  const [courses, setCourses] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [courses, setCourses] = useState(() => readListCache() || []);
+  const [loading, setLoading] = useState(() => !readListCache());
   const [error,   setError]   = useState(null);
 
+  const hasDataRef = useRef(courses.length > 0);
+  const coursesRef = useRef(courses);
+  coursesRef.current = courses;
+
   const fetchPublishedCourses = useCallback(async () => {
-    setLoading(true);
+    // With a remembered list on screen we refresh silently — no loading state.
+    if (!hasDataRef.current) setLoading(true);
     setError(null);
     try {
-      console.log(`[CoursesContext] 🔍 Fetching from: ${BASE_URL}/courses`);
-      const res = await API.get("/courses");
+      const request = earlyListRequest || API.get("/courses");
+      earlyListRequest = null; // later refreshes must be fresh requests
+      const res = await request;
       const raw = Array.isArray(res.data) ? res.data : (res.data?.courses || []);
-      console.log(`[CoursesContext] ✅ Fetched ${raw.length} published courses`);
-      console.log(`[CoursesContext] Sample course:`, raw[0]);
-      setCourses(raw.map((c, i) => normalizeCourse(c, i)).filter(Boolean));
+      const list = raw.map((c, i) => normalizeCourse(c, i)).filter(Boolean);
+      hasDataRef.current = list.length > 0;
+      setCourses(list);
     } catch (err) {
       console.error("[CoursesContext] ❌ Fetch failed:", err.message);
-      console.error("[CoursesContext] Full error:", err.response?.data || err);
       setError(err.message);
-      setCourses([]);
+      // keep a remembered list on screen if we have one
+      if (!hasDataRef.current) setCourses([]);
     } finally {
       setLoading(false);
     }
@@ -293,27 +387,33 @@ export function CoursesProvider({ children }) {
 
   useEffect(() => { fetchPublishedCourses(); }, [fetchPublishedCourses]);
 
-  // ─── NEW: Fetch a single course by ID with full sections data ─────────────
-  // The list endpoint uses .select("-sections") so sections are stripped.
-  // This hits /api/courses/:id which returns the full document including sections.
+  // Keep the remembered list in step with the live one (fetches AND the
+  // instructor dashboard's create/update/delete syncs below).
+  const skipFirstWrite = useRef(true);
+  useEffect(() => {
+    if (skipFirstWrite.current) { skipFirstWrite.current = false; return undefined; }
+    if (loading) return undefined;
+    const t = setTimeout(() => writeListCache(courses), 400);
+    return () => clearTimeout(t);
+  }, [courses, loading]);
+
+  // ─── Fetch a single course by ID with full sections data ──────────────────
+  // The list endpoint strips sections (and other heavy fields), so this hits
+  // /api/courses/:id which returns the full document.
+  // Reads the list through a ref so this function keeps the SAME identity for
+  // the life of the app — before, it was re-created whenever the list changed,
+  // which made everything depending on it re-run.
   const fetchCourseById = useCallback(async (id) => {
     if (!id) return null;
     try {
-      console.log(`[CoursesContext] 🔍 Fetching full course: ${BASE_URL}/courses/${id}`);
       const res = await API.get(`/courses/${id}`);
-      const index = courses.findIndex((c) => c._id === id);
-      const course = normalizeCourse(res.data, index >= 0 ? index : 0);
-      console.log(`[CoursesContext] ✅ Full course fetched, sections:`, course?.sections?.length);
-      console.log(`[CoursesContext] ✅ Image testimonials:`, course?.imageTestimonials?.length);
-      console.log(`[CoursesContext] ✅ Video testimonials:`, course?.videoTestimonials?.length);
-      console.log(`[CoursesContext] ✅ Project gallery:`, course?.projectGallery?.length);
-      console.log(`[CoursesContext] ✅ Also bought IDs:`, course?.alsoBoughtCourseIds?.length);
-      return course;
+      const index = coursesRef.current.findIndex((c) => c._id === id);
+      return normalizeCourse(res.data, index >= 0 ? index : 0);
     } catch (err) {
       console.error("[CoursesContext] ❌ fetchCourseById failed:", err.message);
       return null;
     }
-  }, [courses]);
+  }, []);
 
   const syncCreated = useCallback((raw, index) => {
     if (!raw || raw.status !== "published") return;
@@ -348,14 +448,16 @@ export function CoursesProvider({ children }) {
     return courses.find((c) => c._id === id || c.id === id) || null;
   }, [courses]);
 
+  const value = useMemo(() => ({
+    courses, loading, error,
+    fetchPublishedCourses,
+    fetchCourseById,
+    syncCreated, syncUpdated, syncDeleted,
+    getCourse,
+  }), [courses, loading, error, fetchPublishedCourses, fetchCourseById, syncCreated, syncUpdated, syncDeleted, getCourse]);
+
   return (
-    <CoursesContext.Provider value={{
-      courses, loading, error,
-      fetchPublishedCourses,
-      fetchCourseById,
-      syncCreated, syncUpdated, syncDeleted,
-      getCourse,
-    }}>
+    <CoursesContext.Provider value={value}>
       {children}
     </CoursesContext.Provider>
   );
@@ -365,4 +467,4 @@ export function useCourses() {
   const ctx = useContext(CoursesContext);
   if (!ctx) throw new Error("useCourses must be inside <CoursesProvider>");
   return ctx;
-}
+} 

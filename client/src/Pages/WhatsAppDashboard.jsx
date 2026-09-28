@@ -74,24 +74,23 @@ export default function WhatsAppDashboard({ toast }) {
             </select>
           )}
 
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="sm:w-56 flex-shrink-0 space-y-1">
+          <div>
+            {/* Compact tab bar — same pill style used across Super Admin, so
+                this reads as tabs of THIS page, not a separate app opening. */}
+            <div className="flex flex-wrap gap-2 mb-4">
               {FEATURES.map((f) => (
                 <button
                   key={f.key}
                   onClick={() => setFeature(f.key)}
-                  className={`w-full text-left px-3 py-2.5 rounded-lg cursor-pointer border-none transition ${feature === f.key ? "bg-[#e8540a] text-white" : "bg-white text-gray-700 hover:bg-gray-50"}`}
+                  title={f.desc}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border cursor-pointer transition ${feature === f.key ? "bg-[#e8540a] text-white border-[#e8540a]" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`}
                 >
-                  <div className="flex items-center gap-2">
-                    <span>{f.icon}</span>
-                    <span className="font-semibold text-sm">{f.label}</span>
-                  </div>
-                  <p className={`text-[11px] mt-0.5 ${feature === f.key ? "text-white/80" : "text-gray-400"}`}>{f.desc}</p>
+                  <span>{f.icon}</span>{f.label}
                 </button>
               ))}
             </div>
 
-            <div className="flex-1 min-w-0">
+            <div className="min-w-0">
               {!selectedSession ? (
                 <EmptyState icon="💬" title="Select an account" body="Choose a WhatsApp account above to see its details." />
               ) : (
@@ -773,15 +772,17 @@ function ChatsFeature({ toast, session, active }) {
   let lastDay = "";
 
   return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4" style={{ minHeight: 420 }}>
-      {/* ── chat list ── */}
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden sm:col-span-1">
+    <>
+    <div className="rounded-xl border border-gray-100 overflow-hidden bg-white" style={{ height: "min(78vh, 760px)", minHeight: 420 }}>
+    <div className="grid grid-cols-1 sm:grid-cols-3 h-full">
+      {/* ── chat list — full width on mobile until a chat is opened, then hidden ── */}
+      <div className={`bg-white overflow-hidden sm:col-span-1 sm:border-r border-gray-100 flex-col h-full ${activeNumber ? "hidden sm:flex" : "flex"}`}>
         {loadingThreads && threads.length === 0 ? (
           <p className="text-sm text-gray-400 p-4">Loading…</p>
         ) : threads.length === 0 ? (
           <p className="text-sm text-gray-400 p-4">No conversations yet. If you just connected, chat history is still importing — it appears here automatically.</p>
         ) : (
-          <div className="divide-y divide-gray-100 max-h-[620px] overflow-y-auto">
+          <div className="flex-1 divide-y divide-gray-100 overflow-y-auto">
             {threads.map((t) => {
               const unread = t.unreadCount > 0 && activeNumber !== t.number;
               return (
@@ -817,13 +818,18 @@ function ChatsFeature({ toast, session, active }) {
         )}
       </div>
 
-      {/* ── open chat ── */}
-      <div className="bg-white rounded-xl border border-gray-100 sm:col-span-2 flex flex-col relative">
+      {/* ── open chat — hidden on mobile until a chat is opened, then full width ── */}
+      <div className={`bg-white sm:col-span-2 flex-col relative h-full ${activeNumber ? "flex" : "hidden sm:flex"}`}>
         {!activeNumber ? (
           <div className="flex-1 flex items-center justify-center text-sm text-gray-400 p-8 text-center">Select a conversation on the left to see the full chat.</div>
         ) : (
           <>
-            <div className="p-3 flex items-center gap-2.5 border-b border-gray-100">
+            <div className="p-3 flex items-center gap-1.5 border-b border-gray-100">
+              {/* Real-app mobile behaviour: tapping Back clears the open chat and
+                  returns to the list, instead of both panes being stacked
+                  permanently on top of each other. */}
+              <button onClick={() => { activeRef.current = ""; setActiveNumber(""); }} title="Back to chats"
+                className="sm:hidden flex-shrink-0 w-8 h-8 rounded-full hover:bg-gray-100 flex items-center justify-center text-gray-600 bg-transparent border-none cursor-pointer text-lg">←</button>
               <button onClick={() => setModal("info")} className="flex items-center gap-2.5 flex-1 min-w-0 text-left bg-transparent border-0 cursor-pointer p-0">
                 {contactPhoto ? <img src={contactPhoto} alt="" className="w-9 h-9 rounded-full object-cover" /> : <div className="w-9 h-9 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 text-xs">👤</div>}
                 <div className="min-w-0">
@@ -844,7 +850,7 @@ function ChatsFeature({ toast, session, active }) {
               <HeaderIcon title="Contact info" onClick={() => setModal("info")}>ⓘ</HeaderIcon>
             </div>
 
-            <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto p-3 space-y-1.5 max-h-[480px] min-h-[320px]" style={{ background: "#efeae2" }}>
+            <div ref={scrollRef} onScroll={onScroll} className="flex-1 overflow-y-auto p-3 space-y-1.5 min-h-0" style={{ background: "#efeae2" }}>
               {loadingOlder && <p className="text-center text-[11px] text-gray-500">Loading older messages…</p>}
               {loadingMessages && messages.length === 0 ? <p className="text-xs text-gray-500">Loading…</p> : messages.map((m) => {
                 const day = dayLabel(m.createdAt);
@@ -921,6 +927,8 @@ function ChatsFeature({ toast, session, active }) {
           </>
         )}
       </div>
+    </div>
+    </div>
 
       {/* ── modals ── */}
       {pendingFiles.length > 0 && <AttachmentModal files={pendingFiles} onCancel={() => setPendingFiles([])} onSend={sendPendingFiles} />}
@@ -938,7 +946,7 @@ function ChatsFeature({ toast, session, active }) {
           onEditTags={() => setModal("tags")} onClear={() => clearChat(activeNumber)} onClose={() => setModal(null)}
         />
       )}
-    </div>
+    </>
   );
 }
 

@@ -924,6 +924,8 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
   // badge, and an FAQ-style "what's included" dropdown list. Each bundle: 
   // { id, name, price, discountPercentage, items: [{ id, title, content }] }
   const [bundles, setBundles] = useState(existing?.bundles || []);
+  const [uploadingBundleItemImage, setUploadingBundleItemImage] = useState({}); // keyed by module item id
+  const bundleItemImageRefs = useRef({});
 
   // Order of the editor's own sections (see EditorSectionShell above) and how
   // many copies "Duplicate" makes for each custom block.
@@ -1208,7 +1210,32 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
     toast("Bundle removed", "success");
   };
   const addBundleItem = (bundleId) => {
-    setBundles(p => p.map(b => (b.id || b._id) === bundleId ? { ...b, items: [...(b.items || []), { id: uid(), title: '', price: '', content: '' }] } : b));
+    setBundles(p => p.map(b => (b.id || b._id) === bundleId ? { ...b, items: [...(b.items || []), { id: uid(), title: '', price: '', content: '', imageUrl: '', imagePreview: '' }] } : b));
+  };
+  // Uploads a module's icon/logo (e.g. the Facebook or Shopify logo) to
+  // Cloudinary — same upload endpoint and pattern as the course thumbnail
+  // and Custom Content Block images above.
+  const handleBundleItemImageFile = async (e, bundleId, itemId) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => updateBundleItem(bundleId, itemId, 'imagePreview', ev.target.result);
+    reader.readAsDataURL(file);
+    setUploadingBundleItemImage(p => ({ ...p, [itemId]: true }));
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      const res = await api.post("/upload/image", formData);
+      const url = res.data?.url ?? res.data?.secure_url ?? res.data?.imageUrl;
+      if (!url) { toast("Upload succeeded but no URL returned.", "error"); return; }
+      updateBundleItem(bundleId, itemId, 'imageUrl', url);
+      updateBundleItem(bundleId, itemId, 'imagePreview', url);
+      toast("Module icon uploaded ✓", "success");
+    } catch { toast("Upload failed.", "error"); }
+    finally {
+      setUploadingBundleItemImage(p => ({ ...p, [itemId]: false }));
+      if (e.target) e.target.value = "";
+    }
   };
   const updateBundleItem = (bundleId, itemId, field, val) => {
     setBundles(p => p.map(b => (b.id || b._id) !== bundleId ? b : {
@@ -1296,7 +1323,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
         ...b,
         price: parseFloat(b.price) || 0,
         discountPercentage: parseFloat(b.discountPercentage) || 0,
-        items: (b.items || []).map(it => ({ ...it, price: parseFloat(it.price) || 0 })),
+        items: (b.items || []).map(({ imagePreview, ...it }) => ({ ...it, price: parseFloat(it.price) || 0 })),
       })),
       alsoBoughtCourseIds: alsoBoughtIds,
     };
@@ -1808,7 +1835,7 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                         <Textarea label="About this bundle (4–6 lines — shown under the heading)" value={bundle.description || ""} onChange={v => updateBundle(bId, "description", v)} placeholder="Explain what this bundle is, who it's for, and why it's worth it…" rows={5} className="mb-3"/>
                         <div className="mt-2">
                           <div className="flex items-center justify-between mb-2">
-                            <label className="text-xs sm:text-sm font-medium text-gray-700">Modules (each is a dropdown on the course page, with its original price)</label>
+                            <label className="text-xs sm:text-sm font-medium text-gray-700">Modules (icon, name, a short line, and its original price — shown on the course page)</label>
                             <button onClick={() => addBundleItem(bId)} className="text-xs font-semibold text-[#e8540a] hover:text-[#c94708] transition bg-transparent border-none cursor-pointer">+ Add Module</button>
                           </div>
                           <div className="space-y-2">
@@ -1816,20 +1843,35 @@ function CourseEditorPage({ courses, createCourse, updateCourse, toast }) {
                               const iId = item.id || item._id;
                               return (
                                 <div key={iId} className="bg-white border border-gray-200 rounded-lg p-3">
-                                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
-                                    <input value={item.title || ""} onChange={e => updateBundleItem(bId, iId, "title", e.target.value)}
-                                      placeholder="Module name — e.g. Facebook Marketing"
-                                      className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
-                                    <div className="flex items-center gap-2">
-                                      <input type="number" value={item.price ?? ""} onChange={e => updateBundleItem(bId, iId, "price", e.target.value)}
-                                        placeholder="Original price"
-                                        className="w-full sm:w-32 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
-                                      <button onClick={() => deleteBundleItem(bId, iId)} className="text-red-400 hover:text-red-600 transition text-xs px-2 py-1 rounded hover:bg-red-50 flex-shrink-0">✕</button>
+                                  <div className="flex items-start gap-3">
+                                    {/* Module icon/logo — e.g. the Facebook or Shopify logo — uploaded to Cloudinary */}
+                                    <div className="w-12 h-12 flex-shrink-0 relative">
+                                      <div className="w-full h-full bg-gray-100 rounded-full overflow-hidden border-2 border-dashed border-gray-300 hover:border-[#e8540a]/60 transition cursor-pointer group flex items-center justify-center"
+                                        onClick={() => bundleItemImageRefs.current[iId]?.click()}>
+                                        {(item.imagePreview || item.imageUrl)
+                                          ? <img src={item.imagePreview || item.imageUrl} alt="Icon" className="w-full h-full object-cover"/>
+                                          : <span className="text-lg text-gray-300">🖼️</span>}
+                                        <UploadOverlay uploading={uploadingBundleItemImage[iId]}/>
+                                      </div>
+                                      <input ref={el => (bundleItemImageRefs.current[iId] = el)} type="file" accept="image/*" className="hidden" onChange={e => handleBundleItemImageFile(e, bId, iId)}/>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex flex-col sm:flex-row sm:items-center gap-2 mb-2">
+                                        <input value={item.title || ""} onChange={e => updateBundleItem(bId, iId, "title", e.target.value)}
+                                          placeholder="Module name — e.g. Facebook Marketing"
+                                          className="flex-1 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
+                                        <div className="flex items-center gap-2">
+                                          <input type="number" value={item.price ?? ""} onChange={e => updateBundleItem(bId, iId, "price", e.target.value)}
+                                            placeholder="Original price"
+                                            className="w-full sm:w-32 border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
+                                          <button onClick={() => deleteBundleItem(bId, iId)} className="text-red-400 hover:text-red-600 transition text-xs px-2 py-1 rounded hover:bg-red-50 flex-shrink-0">✕</button>
+                                        </div>
+                                      </div>
+                                      <textarea value={item.content || ""} onChange={e => updateBundleItem(bId, iId, "content", e.target.value)}
+                                        placeholder="Short line shown under the module name — e.g. Master Facebook Marketing" rows={2}
+                                        className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
                                     </div>
                                   </div>
-                                  <textarea value={item.content || ""} onChange={e => updateBundleItem(bId, iId, "content", e.target.value)}
-                                    placeholder="Optional detail shown when this module's dropdown is opened" rows={2}
-                                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[#e8540a]"/>
                                 </div>
                               );
                             })}
