@@ -21,6 +21,10 @@
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { Routes, Route, NavLink, useNavigate, useLocation, Navigate } from "react-router-dom";
+import {
+  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
+  ResponsiveContainer, PieChart, Pie, Cell,
+} from "recharts";
 import { useAuth } from "../context/AuthContext";
 import { useSuperAdminData } from "../hooks/useSuperAdminData";
 import { StatusBadge, SectionHeader, Btn, EmptyState } from "./SuperAdminUI";
@@ -1283,10 +1287,13 @@ function ProductTrackingPage({ toast }) {
 }
 
 // ── Dashboard ────────────────────────────────────────────────────────────────
+const TRACKING_PIE_COLORS = ["#e11d48", "#3b82f6", "#f59e0b", "#10b981", "#8b5cf6", "#ec4899", "#6366f1", "#84cc16", "#f97316", "#14b8a6", "#64748b"];
+
 function TrackingDashboardTab({ toast }) {
   const { API: api } = useAuth();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [importing, setImporting] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -1294,13 +1301,42 @@ function TrackingDashboardTab({ toast }) {
   }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [load]);
 
+  const runImport = async () => {
+    if (!window.confirm("Import all the orders, inventory, and expenses from your Excel sheet? This won't create duplicates if run again.")) return;
+    setImporting(true);
+    try {
+      const res = await api.post("/admin/tracking/import-excel-data");
+      const { imported } = res.data || {};
+      toast(`Imported ${imported?.orders || 0} orders, ${imported?.inventory || 0} products, ${imported?.expenses || 0} expenses`, "success");
+      load();
+    } catch { toast("Import failed", "error"); }
+    finally { setImporting(false); }
+  };
+
   if (loading) return <p className="text-sm text-gray-400">Loading…</p>;
   if (!data) return <EmptyState icon="📦" title="No data yet" body="Add some orders, inventory, and expenses to see your dashboard." />;
 
   const money = (n) => `PKR ${Math.round(n || 0).toLocaleString()}`;
 
+  // Empty-state: nothing entered yet — offer the one-time Excel import right
+  // here instead of a bare "no data" message.
+  if (data.totalOrders === 0 && (!data.expenseByCategory || Object.keys(data.expenseByCategory).length === 0)) {
+    return (
+      <EmptyState icon="📦" title="No data yet" body="Add your own orders/inventory/expenses, or import everything from the Excel sheet you shared to get started."
+        action={<Btn onClick={runImport} disabled={importing}>{importing ? "Importing…" : "Import Data From Excel Sheet"}</Btn>} />
+    );
+  }
+
+  const pieStatusData = (data.statusPercentages || []).map((s) => ({ name: TRACKING_STATUS_LABEL[s.status] || s.status, value: s.count }));
+  const pieExpenseData = Object.entries(data.expenseByCategory || {}).map(([cat, amt]) => ({ name: cat, value: amt }));
+  const productChartData = (data.productBreakdown || []).filter((p) => p.revenue > 0).map((p) => ({ name: p.productTitle, revenue: p.revenue, delivered: p.unitsDelivered }));
+
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <Btn variant="secondary" size="sm" onClick={runImport} disabled={importing}>{importing ? "Importing…" : "⤓ Import Data From Excel Sheet"}</Btn>
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
         <StatCard icon="📥" label="Total Orders Received" value={data.totalOrders} color="rose" />
         <StatCard icon="🚚" label="Total Dispatch" value={data.totalDispatch} color="blue" />
@@ -1316,59 +1352,118 @@ function TrackingDashboardTab({ toast }) {
         <StatCard icon="💵" label="Total Net Profit" value={money(data.netProfit)} color="purple" />
       </div>
 
+      {/* Daily Orders & Sales trend */}
+      {data.dailyTrend && data.dailyTrend.length > 1 && (
+        <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
+          <SectionHeader title="Orders & Sales Trend" />
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart data={data.dailyTrend} margin={{ top: 5, right: 20, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" />
+              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
+              <YAxis yAxisId="left" tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
+              <YAxis yAxisId="right" orientation="right" tickFormatter={(v) => `${v / 1000}k`} tick={{ fontSize: 11, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
+              <Tooltip formatter={(v, name) => [name === "sales" ? money(v) : v, name === "sales" ? "Sales" : "Orders"]} contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }} />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Line yAxisId="left" type="monotone" dataKey="orders" name="Orders" stroke="#3b82f6" strokeWidth={2} dot={false} />
+              <Line yAxisId="right" type="monotone" dataKey="sales" name="Sales (PKR)" stroke="#e11d48" strokeWidth={2} dot={false} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       <div className="grid lg:grid-cols-2 gap-4">
         <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
           <SectionHeader title="Order Status Breakdown" />
-          {(!data.statusPercentages || data.statusPercentages.length === 0) ? (
+          {pieStatusData.length === 0 ? (
             <p className="text-sm text-gray-400">No orders yet.</p>
           ) : (
-            <div className="space-y-2.5">
-              {data.statusPercentages.map((s) => (
-                <div key={s.status} className="flex items-center gap-3">
-                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 w-36 text-center ${TRACKING_STATUS_COLOR[s.status] || "bg-gray-100 text-gray-600"}`}>{TRACKING_STATUS_LABEL[s.status] || s.status}</span>
-                  <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-rose-500 rounded-full" style={{ width: `${s.percentage}%` }} /></div>
-                  <span className="text-xs text-gray-500 w-20 text-right flex-shrink-0">{s.count} ({s.percentage}%)</span>
-                </div>
-              ))}
-            </div>
+            <>
+              <ResponsiveContainer width="100%" height={220}>
+                <PieChart>
+                  <Pie data={pieStatusData} cx="50%" cy="50%" innerRadius={45} outerRadius={80} paddingAngle={2} dataKey="value">
+                    {pieStatusData.map((_, i) => <Cell key={i} fill={TRACKING_PIE_COLORS[i % TRACKING_PIE_COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }} />
+                </PieChart>
+              </ResponsiveContainer>
+              <div className="space-y-2 mt-2">
+                {data.statusPercentages.map((s, i) => (
+                  <div key={s.status} className="flex items-center gap-2 text-xs">
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: TRACKING_PIE_COLORS[i % TRACKING_PIE_COLORS.length] }} />
+                    <span className="text-gray-600 flex-1 truncate">{TRACKING_STATUS_LABEL[s.status] || s.status}</span>
+                    <span className="font-semibold text-gray-800">{s.count} ({s.percentage}%)</span>
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
         <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
-          <SectionHeader title="Per-Product Breakdown" />
-          {(!data.productBreakdown || data.productBreakdown.length === 0) ? (
+          <SectionHeader title="Revenue by Product" />
+          {productChartData.length === 0 ? (
             <p className="text-sm text-gray-400">Add products to Inventory to see this.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead><tr className="text-left text-xs text-gray-400 uppercase"><th className="py-1.5 pr-2">Product</th><th className="py-1.5 pr-2">Delivered</th><th className="py-1.5 pr-2">Revenue</th><th className="py-1.5">Available</th></tr></thead>
-                <tbody className="divide-y divide-gray-50">
-                  {data.productBreakdown.map((p, i) => (
-                    <tr key={i}>
-                      <td className="py-2 pr-2 font-medium text-gray-800">{p.productTitle}{p.productCode ? ` (${p.productCode})` : ""}</td>
-                      <td className="py-2 pr-2 text-gray-600">{p.unitsDelivered}</td>
-                      <td className="py-2 pr-2 text-gray-600">{money(p.revenue)}</td>
-                      <td className="py-2 text-gray-600">{p.availableQty}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={productChartData} layout="vertical" margin={{ top: 0, right: 16, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" horizontal={false} />
+                <XAxis type="number" tickFormatter={(v) => `${v / 1000}k`} tick={{ fontSize: 10, fill: "#9ca3af" }} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: "#6b7280" }} axisLine={false} tickLine={false} width={110} />
+                <Tooltip formatter={(v) => [money(v), "Revenue"]} contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }} />
+                <Bar dataKey="revenue" fill="#e11d48" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
           )}
         </div>
       </div>
 
       <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
+        <SectionHeader title="Per-Product Breakdown" />
+        {(!data.productBreakdown || data.productBreakdown.length === 0) ? (
+          <p className="text-sm text-gray-400">Add products to Inventory to see this.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead><tr className="text-left text-xs text-gray-400 uppercase"><th className="py-1.5 pr-2">Product</th><th className="py-1.5 pr-2">Delivered</th><th className="py-1.5 pr-2">Revenue</th><th className="py-1.5">Available</th></tr></thead>
+              <tbody className="divide-y divide-gray-50">
+                {data.productBreakdown.map((p, i) => (
+                  <tr key={i}>
+                    <td className="py-2 pr-2 font-medium text-gray-800">{p.productTitle}{p.productCode ? ` (${p.productCode})` : ""}</td>
+                    <td className="py-2 pr-2 text-gray-600">{p.unitsDelivered}</td>
+                    <td className="py-2 pr-2 text-gray-600">{money(p.revenue)}</td>
+                    <td className="py-2 text-gray-600">{p.availableQty}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
         <SectionHeader title="Expenses by Category" />
-        {(!data.expenseByCategory || Object.keys(data.expenseByCategory).length === 0) ? (
+        {pieExpenseData.length === 0 ? (
           <p className="text-sm text-gray-400">No expenses recorded yet.</p>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {Object.entries(data.expenseByCategory).map(([cat, amt]) => (
-              <div key={cat} className="bg-gray-50 rounded-lg p-3">
-                <p className="text-xs text-gray-400">{cat}</p>
-                <p className="font-bold text-gray-800 text-sm mt-0.5">{money(amt)}</p>
-              </div>
-            ))}
+          <div className="grid lg:grid-cols-2 gap-4 items-center">
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie data={pieExpenseData} cx="50%" cy="50%" innerRadius={45} outerRadius={80} paddingAngle={2} dataKey="value">
+                  {pieExpenseData.map((_, i) => <Cell key={i} fill={TRACKING_PIE_COLORS[i % TRACKING_PIE_COLORS.length]} />)}
+                </Pie>
+                <Tooltip formatter={(v) => money(v)} contentStyle={{ borderRadius: 8, border: "1px solid #e5e7eb", fontSize: 12 }} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="grid grid-cols-2 gap-3">
+              {Object.entries(data.expenseByCategory).map(([cat, amt], i) => (
+                <div key={cat} className="bg-gray-50 rounded-lg p-3 flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: TRACKING_PIE_COLORS[i % TRACKING_PIE_COLORS.length] }} />
+                  <div className="min-w-0">
+                    <p className="text-xs text-gray-400 truncate">{cat}</p>
+                    <p className="font-bold text-gray-800 text-sm">{money(amt)}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -1380,7 +1475,6 @@ function TrackingDashboardTab({ toast }) {
   );
 }
 
-// ── Orders ───────────────────────────────────────────────────────────────────
 function TrackingOrderForm({ initial, onSave, onCancel }) {
   const [form, setForm] = useState(initial || {
     date: new Date().toISOString().slice(0, 10), orderNo: "", productTitle: "", productCode: "", courier: "",
@@ -1424,6 +1518,7 @@ function TrackingOrdersTab({ toast }) {
   const [statusFilter, setStatusFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState(null); // null | {} (new) | order (edit)
+  const [selected, setSelected] = useState([]);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -1433,6 +1528,9 @@ function TrackingOrdersTab({ toast }) {
     api.get(`/admin/tracking/orders?${params.toString()}`).then((r) => setOrders(r.data || [])).catch(() => toast("Failed to load orders", "error")).finally(() => setLoading(false));
   }, [api, statusFilter, search]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { setSelected([]); }, [orders.length === 0]);
+  const toggleOne = (id) => setSelected((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const toggleAll = () => setSelected((p) => (p.length === orders.length ? [] : orders.map((o) => o._id)));
 
   const save = async (data) => {
     try {
@@ -1448,6 +1546,12 @@ function TrackingOrdersTab({ toast }) {
     try { await api.delete(`/admin/tracking/orders/${id}`); toast("Deleted", "success"); load(); }
     catch { toast("Could not delete", "error"); }
   };
+  const removeSelected = async () => {
+    if (selected.length === 0) return;
+    if (!window.confirm(`Delete ${selected.length} selected order${selected.length === 1 ? "" : "s"}? This can't be undone.`)) return;
+    try { await Promise.all(selected.map((id) => api.delete(`/admin/tracking/orders/${id}`))); toast("Deleted", "success"); setSelected([]); load(); }
+    catch { toast("Could not delete some orders", "error"); }
+  };
 
   return (
     <div>
@@ -1458,6 +1562,7 @@ function TrackingOrdersTab({ toast }) {
           <option value="all">All statuses</option>
           {TRACKING_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
         </select>
+        {selected.length > 0 && <Btn size="sm" variant="danger" onClick={removeSelected}>Delete Selected ({selected.length})</Btn>}
         <Btn size="sm" onClick={() => setEditing({})}>+ Add Order</Btn>
       </div>
       {loading ? <p className="text-sm text-gray-400">Loading…</p> : orders.length === 0 ? (
@@ -1466,6 +1571,7 @@ function TrackingOrdersTab({ toast }) {
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50"><tr className="text-left text-xs text-gray-500 uppercase">
+              <th className="px-3 py-2.5"><input type="checkbox" checked={selected.length === orders.length} onChange={toggleAll} className="w-4 h-4 accent-rose-600" /></th>
               <th className="px-3 py-2.5">Date</th><th className="px-3 py-2.5">Order #</th><th className="px-3 py-2.5">Product</th>
               <th className="px-3 py-2.5">Customer</th><th className="px-3 py-2.5">Courier</th><th className="px-3 py-2.5">Price</th>
               <th className="px-3 py-2.5">Status</th><th className="px-3 py-2.5">Payment</th><th className="px-3 py-2.5">Actions</th>
@@ -1473,6 +1579,7 @@ function TrackingOrdersTab({ toast }) {
             <tbody className="divide-y divide-gray-50">
               {orders.map((o) => (
                 <tr key={o._id} className="hover:bg-gray-50">
+                  <td className="px-3 py-2.5"><input type="checkbox" checked={selected.includes(o._id)} onChange={() => toggleOne(o._id)} className="w-4 h-4 accent-rose-600" /></td>
                   <td className="px-3 py-2.5 whitespace-nowrap text-gray-500">{new Date(o.date).toLocaleDateString()}</td>
                   <td className="px-3 py-2.5 font-medium text-gray-800">{o.orderNo}</td>
                   <td className="px-3 py-2.5 text-gray-600">{o.productTitle}{o.productCode ? ` (${o.productCode})` : ""}</td>
@@ -1542,6 +1649,9 @@ function TrackingInventoryTab({ toast }) {
     api.get("/admin/tracking/inventory").then((r) => setItems(r.data || [])).catch(() => toast("Failed to load inventory", "error")).finally(() => setLoading(false));
   }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [load]);
+  const [selected, setSelected] = useState([]);
+  const toggleOne = (id) => setSelected((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const toggleAll = () => setSelected((p) => (p.length === items.length ? [] : items.map((i) => i._id)));
 
   const save = async (data) => {
     try {
@@ -1555,16 +1665,26 @@ function TrackingInventoryTab({ toast }) {
     try { await api.delete(`/admin/tracking/inventory/${id}`); toast("Deleted", "success"); load(); }
     catch { toast("Could not delete", "error"); }
   };
+  const removeSelected = async () => {
+    if (selected.length === 0) return;
+    if (!window.confirm(`Delete ${selected.length} selected item${selected.length === 1 ? "" : "s"}?`)) return;
+    try { await Promise.all(selected.map((id) => api.delete(`/admin/tracking/inventory/${id}`))); toast("Deleted", "success"); setSelected([]); load(); }
+    catch { toast("Could not delete some items", "error"); }
+  };
 
   return (
     <div>
-      <div className="flex justify-end mb-4"><Btn size="sm" onClick={() => setEditing({})}>+ Add Product</Btn></div>
+      <div className="flex justify-end gap-2 mb-4">
+        {selected.length > 0 && <Btn size="sm" variant="danger" onClick={removeSelected}>Delete Selected ({selected.length})</Btn>}
+        <Btn size="sm" onClick={() => setEditing({})}>+ Add Product</Btn>
+      </div>
       {loading ? <p className="text-sm text-gray-400">Loading…</p> : items.length === 0 ? (
         <EmptyState icon="🏷️" title="No inventory yet" body="Add your products to track stock and profit." action={<Btn size="sm" onClick={() => setEditing({})}>+ Add Product</Btn>} />
       ) : (
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-gray-50"><tr className="text-left text-xs text-gray-500 uppercase">
+              <th className="px-3 py-2.5"><input type="checkbox" checked={selected.length === items.length} onChange={toggleAll} className="w-4 h-4 accent-rose-600" /></th>
               <th className="px-3 py-2.5">Product</th><th className="px-3 py-2.5">Cost</th><th className="px-3 py-2.5">Selling</th>
               <th className="px-3 py-2.5">Profit/Unit</th><th className="px-3 py-2.5">Purchased</th><th className="px-3 py-2.5">Available</th>
               <th className="px-3 py-2.5">Dispatched</th><th className="px-3 py-2.5">Delivered</th><th className="px-3 py-2.5">Returned</th>
@@ -1577,6 +1697,7 @@ function TrackingInventoryTab({ toast }) {
                 const grossProfit = profitPerUnit * (i.deliveredQty || 0);
                 return (
                   <tr key={i._id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2.5"><input type="checkbox" checked={selected.includes(i._id)} onChange={() => toggleOne(i._id)} className="w-4 h-4 accent-rose-600" /></td>
                     <td className="px-3 py-2.5 font-medium text-gray-800">{i.productTitle}{i.productCode ? ` (${i.productCode})` : ""}</td>
                     <td className="px-3 py-2.5 text-gray-600">PKR {i.costPrice}</td>
                     <td className="px-3 py-2.5 text-gray-600">PKR {i.sellingPrice}</td>
@@ -1640,6 +1761,9 @@ function TrackingExpensesTab({ toast }) {
     api.get("/admin/tracking/expenses").then((r) => setExpenses(r.data || [])).catch(() => toast("Failed to load expenses", "error")).finally(() => setLoading(false));
   }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load(); }, [load]);
+  const [selected, setSelected] = useState([]);
+  const toggleOne = (id) => setSelected((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const toggleAll = () => setSelected((p) => (p.length === expenses.length ? [] : expenses.map((e) => e._id)));
 
   const save = async (data) => {
     try {
@@ -1653,13 +1777,22 @@ function TrackingExpensesTab({ toast }) {
     try { await api.delete(`/admin/tracking/expenses/${id}`); toast("Deleted", "success"); load(); }
     catch { toast("Could not delete", "error"); }
   };
+  const removeSelected = async () => {
+    if (selected.length === 0) return;
+    if (!window.confirm(`Delete ${selected.length} selected expense${selected.length === 1 ? "" : "s"}?`)) return;
+    try { await Promise.all(selected.map((id) => api.delete(`/admin/tracking/expenses/${id}`))); toast("Deleted", "success"); setSelected([]); load(); }
+    catch { toast("Could not delete some expenses", "error"); }
+  };
   const total = expenses.reduce((s, e) => s + (e.amount || 0), 0);
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <p className="text-sm text-gray-500">Total: <span className="font-bold text-gray-800">PKR {total.toLocaleString()}</span></p>
-        <Btn size="sm" onClick={() => setEditing({})}>+ Add Expense</Btn>
+        <div className="flex gap-2">
+          {selected.length > 0 && <Btn size="sm" variant="danger" onClick={removeSelected}>Delete Selected ({selected.length})</Btn>}
+          <Btn size="sm" onClick={() => setEditing({})}>+ Add Expense</Btn>
+        </div>
       </div>
       {loading ? <p className="text-sm text-gray-400">Loading…</p> : expenses.length === 0 ? (
         <EmptyState icon="💸" title="No expenses yet" body="Log your recurring costs here — Shopify, ad spend, delivery charges, and more." action={<Btn size="sm" onClick={() => setEditing({})}>+ Add Expense</Btn>} />
@@ -1667,11 +1800,13 @@ function TrackingExpensesTab({ toast }) {
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-gray-50"><tr className="text-left text-xs text-gray-500 uppercase">
+              <th className="px-3 py-2.5"><input type="checkbox" checked={selected.length === expenses.length} onChange={toggleAll} className="w-4 h-4 accent-rose-600" /></th>
               <th className="px-3 py-2.5">Date</th><th className="px-3 py-2.5">Category</th><th className="px-3 py-2.5">Amount</th><th className="px-3 py-2.5">Note</th><th className="px-3 py-2.5">Actions</th>
             </tr></thead>
             <tbody className="divide-y divide-gray-50">
               {expenses.map((e) => (
                 <tr key={e._id} className="hover:bg-gray-50">
+                  <td className="px-3 py-2.5"><input type="checkbox" checked={selected.includes(e._id)} onChange={() => toggleOne(e._id)} className="w-4 h-4 accent-rose-600" /></td>
                   <td className="px-3 py-2.5 whitespace-nowrap text-gray-500">{new Date(e.date).toLocaleDateString()}</td>
                   <td className="px-3 py-2.5 font-medium text-gray-800">{e.category}</td>
                   <td className="px-3 py-2.5 text-gray-600">PKR {e.amount.toLocaleString()}</td>
