@@ -146,6 +146,8 @@ const NAV_ITEMS = [
   { to: "/superadmin/courses",      label: "Courses",       icon: "📚" },
   { to: "/superadmin/verifications", label: "Verifications", icon: "🧾", badge: true },
   { to: "/superadmin/messages",     label: "Messages",      icon: "✉️" },
+  { to: "/superadmin/product-tracking", label: "Product Tracking", icon: "📦" },
+  { to: "/superadmin/products",     label: "Products",      icon: "🛍️" },
   { to: "/superadmin/automation",   label: "Automation Workflow", icon: "⚡" },
   { to: "/superadmin/contacts",     label: "Contacts",      icon: "👤" },
   { to: "/superadmin/tasks",        label: "Tasks",         icon: "✅" },
@@ -1202,6 +1204,632 @@ function CreateFormTab({ toast }) {
   );
 }
 
+// ═════════════════════════════════════════════════════════════════════════
+// PRODUCT TRACKING — a self-contained COD e-commerce tracker (orders/courier
+// status, an expense ledger, inventory, and a profit dashboard), replacing
+// the hand-kept "Complete E-com Business Management Sheet" Excel workbook.
+// Four sub-tabs: Dashboard | Orders | Inventory | Expenses, plus a ROAS/ROI
+// scenario calculator. Entries are made directly here — nothing about this
+// tab is tied to courses/instructors, it's the admin's own business tool.
+// ═════════════════════════════════════════════════════════════════════════
+const TRACKING_STATUS_OPTIONS = [
+  { value: "pending",             label: "Pending" },
+  { value: "confirmed",           label: "Confirmed" },
+  { value: "dispatched",          label: "Dispatched" },
+  { value: "in_transit",          label: "In Transit" },
+  { value: "out_for_delivery",    label: "Out For Delivery" },
+  { value: "delivered",           label: "Delivered" },
+  { value: "returned",            label: "Returned" },
+  { value: "cancelled",           label: "Cancelled" },
+  { value: "failed_delivery",     label: "Failed Delivery" },
+  { value: "non_service_area",    label: "Non-Service Area" },
+  { value: "address_incomplete",  label: "Address Incomplete" },
+];
+const TRACKING_STATUS_LABEL = Object.fromEntries(TRACKING_STATUS_OPTIONS.map((o) => [o.value, o.label]));
+const TRACKING_STATUS_COLOR = {
+  pending: "bg-gray-100 text-gray-600", confirmed: "bg-blue-100 text-blue-700", dispatched: "bg-indigo-100 text-indigo-700",
+  in_transit: "bg-amber-100 text-amber-700", out_for_delivery: "bg-amber-100 text-amber-800", delivered: "bg-emerald-100 text-emerald-700",
+  returned: "bg-red-100 text-red-700", cancelled: "bg-gray-200 text-gray-500", failed_delivery: "bg-red-100 text-red-600",
+  non_service_area: "bg-red-50 text-red-500", address_incomplete: "bg-amber-50 text-amber-600",
+};
+const EXPENSE_CATEGORY_SUGGESTIONS = ["Shopify", "Rent", "Salaries", "Marketing Fees", "Ad Cost", "Delivery Charges", "Agency Fees", "Transportation", "Other"];
+
+function trackingPill(active) {
+  return `px-3 py-1.5 rounded-lg text-xs font-bold border cursor-pointer transition ${active ? "bg-rose-600 text-white border-rose-600" : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"}`;
+}
+
+function TField({ label, ...props }) {
+  return (
+    <div className="flex flex-col gap-1">
+      {label && <label className="text-xs font-medium text-gray-700">{label}</label>}
+      <input {...props} className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-rose-500" />
+    </div>
+  );
+}
+function TSelect({ label, options, ...props }) {
+  return (
+    <div className="flex flex-col gap-1">
+      {label && <label className="text-xs font-medium text-gray-700">{label}</label>}
+      <select {...props} className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-rose-500">
+        {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function ProductTrackingPage({ toast }) {
+  const [subTab, setSubTab] = useState("dashboard"); // dashboard | orders | inventory | expenses | calculator
+  const TABS = [
+    { key: "dashboard",  label: "Dashboard" },
+    { key: "orders",     label: "Orders" },
+    { key: "inventory",  label: "Inventory" },
+    { key: "expenses",   label: "Expenses" },
+    { key: "calculator", label: "ROAS & ROI Calculator" },
+  ];
+  return (
+    <div>
+      <SectionHeader title="Product Tracking" />
+      <p className="text-sm text-gray-500 mb-4 -mt-2">Your own order/courier tracking, inventory, and expense ledger — replaces the Excel sheet.</p>
+      <div className="flex flex-wrap gap-2 mb-5">
+        {TABS.map((t) => <button key={t.key} onClick={() => setSubTab(t.key)} className={trackingPill(subTab === t.key)}>{t.label}</button>)}
+      </div>
+      {subTab === "dashboard" && <TrackingDashboardTab toast={toast} />}
+      {subTab === "orders" && <TrackingOrdersTab toast={toast} />}
+      {subTab === "inventory" && <TrackingInventoryTab toast={toast} />}
+      {subTab === "expenses" && <TrackingExpensesTab toast={toast} />}
+      {subTab === "calculator" && <RoasCalculatorTab />}
+    </div>
+  );
+}
+
+// ── Dashboard ────────────────────────────────────────────────────────────────
+function TrackingDashboardTab({ toast }) {
+  const { API: api } = useAuth();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.get("/admin/tracking/dashboard").then((r) => setData(r.data)).catch(() => toast("Failed to load dashboard", "error")).finally(() => setLoading(false));
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [load]);
+
+  if (loading) return <p className="text-sm text-gray-400">Loading…</p>;
+  if (!data) return <EmptyState icon="📦" title="No data yet" body="Add some orders, inventory, and expenses to see your dashboard." />;
+
+  const money = (n) => `PKR ${Math.round(n || 0).toLocaleString()}`;
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <StatCard icon="📥" label="Total Orders Received" value={data.totalOrders} color="rose" />
+        <StatCard icon="🚚" label="Total Dispatch" value={data.totalDispatch} color="blue" />
+        <StatCard icon="✅" label="Total Delivered" value={data.totalDelivered} color="green" />
+        <StatCard icon="💰" label="Delivered Parcel Amount" value={money(data.deliveredParcelAmount)} color="amber" />
+        <StatCard icon="⏳" label="Pending COD" value={money(data.pendingCOD)} color="purple" />
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <StatCard icon="🧾" label="Total Sales" value={money(data.totalSales)} color="rose" />
+        <StatCard icon="📢" label="Total Ad Spend" value={money(data.totalAdSpend)} color="blue" />
+        <StatCard icon="🚛" label="Total Delivery Charges" value={money(data.totalDeliveryCharges)} color="amber" />
+        <StatCard icon="📈" label="Gross Profit" value={money(data.grossProfit)} color="green" />
+        <StatCard icon="💵" label="Total Net Profit" value={money(data.netProfit)} color="purple" />
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-4">
+        <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
+          <SectionHeader title="Order Status Breakdown" />
+          {(!data.statusPercentages || data.statusPercentages.length === 0) ? (
+            <p className="text-sm text-gray-400">No orders yet.</p>
+          ) : (
+            <div className="space-y-2.5">
+              {data.statusPercentages.map((s) => (
+                <div key={s.status} className="flex items-center gap-3">
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded-full flex-shrink-0 w-36 text-center ${TRACKING_STATUS_COLOR[s.status] || "bg-gray-100 text-gray-600"}`}>{TRACKING_STATUS_LABEL[s.status] || s.status}</span>
+                  <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden"><div className="h-full bg-rose-500 rounded-full" style={{ width: `${s.percentage}%` }} /></div>
+                  <span className="text-xs text-gray-500 w-20 text-right flex-shrink-0">{s.count} ({s.percentage}%)</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
+          <SectionHeader title="Per-Product Breakdown" />
+          {(!data.productBreakdown || data.productBreakdown.length === 0) ? (
+            <p className="text-sm text-gray-400">Add products to Inventory to see this.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="text-left text-xs text-gray-400 uppercase"><th className="py-1.5 pr-2">Product</th><th className="py-1.5 pr-2">Delivered</th><th className="py-1.5 pr-2">Revenue</th><th className="py-1.5">Available</th></tr></thead>
+                <tbody className="divide-y divide-gray-50">
+                  {data.productBreakdown.map((p, i) => (
+                    <tr key={i}>
+                      <td className="py-2 pr-2 font-medium text-gray-800">{p.productTitle}{p.productCode ? ` (${p.productCode})` : ""}</td>
+                      <td className="py-2 pr-2 text-gray-600">{p.unitsDelivered}</td>
+                      <td className="py-2 pr-2 text-gray-600">{money(p.revenue)}</td>
+                      <td className="py-2 text-gray-600">{p.availableQty}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
+        <SectionHeader title="Expenses by Category" />
+        {(!data.expenseByCategory || Object.keys(data.expenseByCategory).length === 0) ? (
+          <p className="text-sm text-gray-400">No expenses recorded yet.</p>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            {Object.entries(data.expenseByCategory).map(([cat, amt]) => (
+              <div key={cat} className="bg-gray-50 rounded-lg p-3">
+                <p className="text-xs text-gray-400">{cat}</p>
+                <p className="font-bold text-gray-800 text-sm mt-0.5">{money(amt)}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <p className="text-xs text-gray-400">
+        Gross Profit = Delivered Parcel Amount − Cost of Goods Sold (delivered units × cost price) − Delivery Charges.
+        Net Profit = Gross Profit − every other expense.
+      </p>
+    </div>
+  );
+}
+
+// ── Orders ───────────────────────────────────────────────────────────────────
+function TrackingOrderForm({ initial, onSave, onCancel }) {
+  const [form, setForm] = useState(initial || {
+    date: new Date().toISOString().slice(0, 10), orderNo: "", productTitle: "", productCode: "", courier: "",
+    price: "", customerName: "", customerPhone: "", customerAddress: "", trackingId: "",
+    status: "pending", paymentStatus: "pending", remarks: "",
+  });
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  return (
+    <Modal onClose={onCancel} title={initial ? "Edit Order" : "Add Order"}>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <TField label="Date" type="date" value={form.date?.slice(0, 10) || ""} onChange={(e) => set("date", e.target.value)} />
+        <TField label="Order No." value={form.orderNo} onChange={(e) => set("orderNo", e.target.value)} placeholder="#ES71427" />
+        <TField label="Product Title" value={form.productTitle} onChange={(e) => set("productTitle", e.target.value)} placeholder="Smart Water Bottle" />
+        <TField label="Product Code" value={form.productCode} onChange={(e) => set("productCode", e.target.value)} placeholder="SWB" />
+        <TField label="Courier" value={form.courier} onChange={(e) => set("courier", e.target.value)} placeholder="PostEX / Leopard / TCS / Trax" />
+        <TField label="Price (PKR)" type="number" value={form.price} onChange={(e) => set("price", e.target.value)} />
+        <TField label="Customer Name" value={form.customerName} onChange={(e) => set("customerName", e.target.value)} />
+        <TField label="Customer Phone" value={form.customerPhone} onChange={(e) => set("customerPhone", e.target.value)} />
+        <TField label="Tracking ID" value={form.trackingId} onChange={(e) => set("trackingId", e.target.value)} className="sm:col-span-2" />
+        <div className="sm:col-span-2">
+          <TField label="Customer Address" value={form.customerAddress} onChange={(e) => set("customerAddress", e.target.value)} />
+        </div>
+        <TSelect label="Status" value={form.status} onChange={(e) => set("status", e.target.value)} options={TRACKING_STATUS_OPTIONS} />
+        <TSelect label="Payment Status" value={form.paymentStatus} onChange={(e) => set("paymentStatus", e.target.value)} options={[{ value: "pending", label: "Pending" }, { value: "paid", label: "Paid" }, { value: "returned", label: "Returned" }]} />
+        <div className="sm:col-span-2">
+          <TField label="Remarks" value={form.remarks} onChange={(e) => set("remarks", e.target.value)} />
+        </div>
+      </div>
+      <div className="flex gap-2 mt-5">
+        <Btn variant="secondary" onClick={onCancel} className="flex-1">Cancel</Btn>
+        <Btn onClick={() => onSave({ ...form, price: parseFloat(form.price) || 0 })} className="flex-1">Save</Btn>
+      </div>
+    </Modal>
+  );
+}
+
+function TrackingOrdersTab({ toast }) {
+  const { API: api } = useAuth();
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [search, setSearch] = useState("");
+  const [editing, setEditing] = useState(null); // null | {} (new) | order (edit)
+
+  const load = useCallback(() => {
+    setLoading(true);
+    const params = new URLSearchParams();
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (search.trim()) params.set("search", search.trim());
+    api.get(`/admin/tracking/orders?${params.toString()}`).then((r) => setOrders(r.data || [])).catch(() => toast("Failed to load orders", "error")).finally(() => setLoading(false));
+  }, [api, statusFilter, search]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [load]);
+
+  const save = async (data) => {
+    try {
+      if (data._id) await api.put(`/admin/tracking/orders/${data._id}`, data);
+      else await api.post("/admin/tracking/orders", data);
+      toast("Order saved", "success");
+      setEditing(null);
+      load();
+    } catch { toast("Could not save order", "error"); }
+  };
+  const remove = async (id) => {
+    if (!window.confirm("Delete this order?")) return;
+    try { await api.delete(`/admin/tracking/orders/${id}`); toast("Deleted", "success"); load(); }
+    catch { toast("Could not delete", "error"); }
+  };
+
+  return (
+    <div>
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search order #, name, phone, tracking ID…"
+          className="flex-1 min-w-[200px] border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
+        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+          <option value="all">All statuses</option>
+          {TRACKING_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+        <Btn size="sm" onClick={() => setEditing({})}>+ Add Order</Btn>
+      </div>
+      {loading ? <p className="text-sm text-gray-400">Loading…</p> : orders.length === 0 ? (
+        <EmptyState icon="📦" title="No orders yet" body="Add your first order to start tracking." action={<Btn size="sm" onClick={() => setEditing({})}>+ Add Order</Btn>} />
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50"><tr className="text-left text-xs text-gray-500 uppercase">
+              <th className="px-3 py-2.5">Date</th><th className="px-3 py-2.5">Order #</th><th className="px-3 py-2.5">Product</th>
+              <th className="px-3 py-2.5">Customer</th><th className="px-3 py-2.5">Courier</th><th className="px-3 py-2.5">Price</th>
+              <th className="px-3 py-2.5">Status</th><th className="px-3 py-2.5">Payment</th><th className="px-3 py-2.5">Actions</th>
+            </tr></thead>
+            <tbody className="divide-y divide-gray-50">
+              {orders.map((o) => (
+                <tr key={o._id} className="hover:bg-gray-50">
+                  <td className="px-3 py-2.5 whitespace-nowrap text-gray-500">{new Date(o.date).toLocaleDateString()}</td>
+                  <td className="px-3 py-2.5 font-medium text-gray-800">{o.orderNo}</td>
+                  <td className="px-3 py-2.5 text-gray-600">{o.productTitle}{o.productCode ? ` (${o.productCode})` : ""}</td>
+                  <td className="px-3 py-2.5 text-gray-600">{o.customerName}<br /><span className="text-xs text-gray-400">{o.customerPhone}</span></td>
+                  <td className="px-3 py-2.5 text-gray-600">{o.courier}</td>
+                  <td className="px-3 py-2.5 text-gray-600">PKR {o.price}</td>
+                  <td className="px-3 py-2.5"><span className={`text-xs font-bold px-2 py-0.5 rounded-full whitespace-nowrap ${TRACKING_STATUS_COLOR[o.status] || "bg-gray-100 text-gray-600"}`}>{TRACKING_STATUS_LABEL[o.status] || o.status}</span></td>
+                  <td className="px-3 py-2.5 text-gray-600 capitalize">{o.paymentStatus}</td>
+                  <td className="px-3 py-2.5"><div className="flex gap-1">
+                    <Btn size="sm" variant="secondary" onClick={() => setEditing(o)}>Edit</Btn>
+                    <Btn size="sm" variant="danger" onClick={() => remove(o._id)}>Del</Btn>
+                  </div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {editing !== null && <TrackingOrderForm initial={editing._id ? editing : null} onSave={save} onCancel={() => setEditing(null)} />}
+    </div>
+  );
+}
+
+// ── Inventory ────────────────────────────────────────────────────────────────
+function TrackingInventoryForm({ initial, onSave, onCancel }) {
+  const [form, setForm] = useState(initial || {
+    productTitle: "", productCode: "", costPrice: "", sellingPrice: "",
+    purchasedQty: "", dispatchedQty: "", deliveredQty: "", returnedQty: "", status: "in_stock",
+    purchaseDate: new Date().toISOString().slice(0, 10),
+  });
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  return (
+    <Modal onClose={onCancel} title={initial ? "Edit Inventory Item" : "Add Inventory Item"}>
+      <div className="grid sm:grid-cols-2 gap-3">
+        <TField label="Purchase Date" type="date" value={form.purchaseDate?.slice(0, 10) || ""} onChange={(e) => set("purchaseDate", e.target.value)} />
+        <TField label="Product Title" value={form.productTitle} onChange={(e) => set("productTitle", e.target.value)} placeholder="Smart Water Bottle" />
+        <TField label="Product Code" value={form.productCode} onChange={(e) => set("productCode", e.target.value)} placeholder="SWB" />
+        <TSelect label="Status" value={form.status} onChange={(e) => set("status", e.target.value)} options={[{ value: "in_stock", label: "In Stock" }, { value: "low_stock", label: "Low Stock" }, { value: "out_of_stock", label: "Out of Stock" }]} />
+        <TField label="Cost Price (PKR)" type="number" value={form.costPrice} onChange={(e) => set("costPrice", e.target.value)} />
+        <TField label="Selling Price (PKR)" type="number" value={form.sellingPrice} onChange={(e) => set("sellingPrice", e.target.value)} />
+        <TField label="Purchased Qty" type="number" value={form.purchasedQty} onChange={(e) => set("purchasedQty", e.target.value)} />
+        <TField label="Dispatched Qty" type="number" value={form.dispatchedQty} onChange={(e) => set("dispatchedQty", e.target.value)} />
+        <TField label="Delivered Qty" type="number" value={form.deliveredQty} onChange={(e) => set("deliveredQty", e.target.value)} />
+        <TField label="Returned Qty" type="number" value={form.returnedQty} onChange={(e) => set("returnedQty", e.target.value)} />
+      </div>
+      <div className="flex gap-2 mt-5">
+        <Btn variant="secondary" onClick={onCancel} className="flex-1">Cancel</Btn>
+        <Btn onClick={() => onSave({
+          ...form,
+          costPrice: parseFloat(form.costPrice) || 0, sellingPrice: parseFloat(form.sellingPrice) || 0,
+          purchasedQty: parseInt(form.purchasedQty, 10) || 0, dispatchedQty: parseInt(form.dispatchedQty, 10) || 0,
+          deliveredQty: parseInt(form.deliveredQty, 10) || 0, returnedQty: parseInt(form.returnedQty, 10) || 0,
+        })} className="flex-1">Save</Btn>
+      </div>
+    </Modal>
+  );
+}
+
+function TrackingInventoryTab({ toast }) {
+  const { API: api } = useAuth();
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.get("/admin/tracking/inventory").then((r) => setItems(r.data || [])).catch(() => toast("Failed to load inventory", "error")).finally(() => setLoading(false));
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [load]);
+
+  const save = async (data) => {
+    try {
+      if (data._id) await api.put(`/admin/tracking/inventory/${data._id}`, data);
+      else await api.post("/admin/tracking/inventory", data);
+      toast("Inventory saved", "success"); setEditing(null); load();
+    } catch { toast("Could not save", "error"); }
+  };
+  const remove = async (id) => {
+    if (!window.confirm("Delete this inventory item?")) return;
+    try { await api.delete(`/admin/tracking/inventory/${id}`); toast("Deleted", "success"); load(); }
+    catch { toast("Could not delete", "error"); }
+  };
+
+  return (
+    <div>
+      <div className="flex justify-end mb-4"><Btn size="sm" onClick={() => setEditing({})}>+ Add Product</Btn></div>
+      {loading ? <p className="text-sm text-gray-400">Loading…</p> : items.length === 0 ? (
+        <EmptyState icon="🏷️" title="No inventory yet" body="Add your products to track stock and profit." action={<Btn size="sm" onClick={() => setEditing({})}>+ Add Product</Btn>} />
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50"><tr className="text-left text-xs text-gray-500 uppercase">
+              <th className="px-3 py-2.5">Product</th><th className="px-3 py-2.5">Cost</th><th className="px-3 py-2.5">Selling</th>
+              <th className="px-3 py-2.5">Profit/Unit</th><th className="px-3 py-2.5">Purchased</th><th className="px-3 py-2.5">Available</th>
+              <th className="px-3 py-2.5">Dispatched</th><th className="px-3 py-2.5">Delivered</th><th className="px-3 py-2.5">Returned</th>
+              <th className="px-3 py-2.5">Status</th><th className="px-3 py-2.5">Gross Profit</th><th className="px-3 py-2.5">Actions</th>
+            </tr></thead>
+            <tbody className="divide-y divide-gray-50">
+              {items.map((i) => {
+                const profitPerUnit = (i.sellingPrice || 0) - (i.costPrice || 0);
+                const available = (i.purchasedQty || 0) - (i.dispatchedQty || 0);
+                const grossProfit = profitPerUnit * (i.deliveredQty || 0);
+                return (
+                  <tr key={i._id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2.5 font-medium text-gray-800">{i.productTitle}{i.productCode ? ` (${i.productCode})` : ""}</td>
+                    <td className="px-3 py-2.5 text-gray-600">PKR {i.costPrice}</td>
+                    <td className="px-3 py-2.5 text-gray-600">PKR {i.sellingPrice}</td>
+                    <td className="px-3 py-2.5 text-gray-600">PKR {profitPerUnit}</td>
+                    <td className="px-3 py-2.5 text-gray-600">{i.purchasedQty}</td>
+                    <td className="px-3 py-2.5 text-gray-600">{available}</td>
+                    <td className="px-3 py-2.5 text-gray-600">{i.dispatchedQty}</td>
+                    <td className="px-3 py-2.5 text-gray-600">{i.deliveredQty}</td>
+                    <td className="px-3 py-2.5 text-gray-600">{i.returnedQty}</td>
+                    <td className="px-3 py-2.5"><span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 capitalize whitespace-nowrap">{i.status.replace(/_/g, " ")}</span></td>
+                    <td className="px-3 py-2.5 font-semibold text-gray-800">PKR {grossProfit}</td>
+                    <td className="px-3 py-2.5"><div className="flex gap-1">
+                      <Btn size="sm" variant="secondary" onClick={() => setEditing(i)}>Edit</Btn>
+                      <Btn size="sm" variant="danger" onClick={() => remove(i._id)}>Del</Btn>
+                    </div></td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {editing !== null && <TrackingInventoryForm initial={editing._id ? editing : null} onSave={save} onCancel={() => setEditing(null)} />}
+    </div>
+  );
+}
+
+// ── Expenses ─────────────────────────────────────────────────────────────────
+function TrackingExpenseForm({ initial, onSave, onCancel }) {
+  const [form, setForm] = useState(initial || { date: new Date().toISOString().slice(0, 10), category: "Shopify", amount: "", note: "" });
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  return (
+    <Modal onClose={onCancel} title={initial ? "Edit Expense" : "Add Expense"}>
+      <div className="space-y-3">
+        <TField label="Date" type="date" value={form.date?.slice(0, 10) || ""} onChange={(e) => set("date", e.target.value)} />
+        <div className="flex flex-col gap-1">
+          <label className="text-xs font-medium text-gray-700">Category</label>
+          <input list="expense-categories" value={form.category} onChange={(e) => set("category", e.target.value)}
+            className="border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-rose-500" />
+          <datalist id="expense-categories">{EXPENSE_CATEGORY_SUGGESTIONS.map((c) => <option key={c} value={c} />)}</datalist>
+        </div>
+        <TField label="Amount (PKR)" type="number" value={form.amount} onChange={(e) => set("amount", e.target.value)} />
+        <TField label="Note (optional)" value={form.note} onChange={(e) => set("note", e.target.value)} />
+      </div>
+      <div className="flex gap-2 mt-5">
+        <Btn variant="secondary" onClick={onCancel} className="flex-1">Cancel</Btn>
+        <Btn onClick={() => onSave({ ...form, amount: parseFloat(form.amount) || 0 })} className="flex-1">Save</Btn>
+      </div>
+    </Modal>
+  );
+}
+
+function TrackingExpensesTab({ toast }) {
+  const { API: api } = useAuth();
+  const [expenses, setExpenses] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.get("/admin/tracking/expenses").then((r) => setExpenses(r.data || [])).catch(() => toast("Failed to load expenses", "error")).finally(() => setLoading(false));
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [load]);
+
+  const save = async (data) => {
+    try {
+      if (data._id) await api.put(`/admin/tracking/expenses/${data._id}`, data);
+      else await api.post("/admin/tracking/expenses", data);
+      toast("Expense saved", "success"); setEditing(null); load();
+    } catch { toast("Could not save", "error"); }
+  };
+  const remove = async (id) => {
+    if (!window.confirm("Delete this expense?")) return;
+    try { await api.delete(`/admin/tracking/expenses/${id}`); toast("Deleted", "success"); load(); }
+    catch { toast("Could not delete", "error"); }
+  };
+  const total = expenses.reduce((s, e) => s + (e.amount || 0), 0);
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-sm text-gray-500">Total: <span className="font-bold text-gray-800">PKR {total.toLocaleString()}</span></p>
+        <Btn size="sm" onClick={() => setEditing({})}>+ Add Expense</Btn>
+      </div>
+      {loading ? <p className="text-sm text-gray-400">Loading…</p> : expenses.length === 0 ? (
+        <EmptyState icon="💸" title="No expenses yet" body="Log your recurring costs here — Shopify, ad spend, delivery charges, and more." action={<Btn size="sm" onClick={() => setEditing({})}>+ Add Expense</Btn>} />
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50"><tr className="text-left text-xs text-gray-500 uppercase">
+              <th className="px-3 py-2.5">Date</th><th className="px-3 py-2.5">Category</th><th className="px-3 py-2.5">Amount</th><th className="px-3 py-2.5">Note</th><th className="px-3 py-2.5">Actions</th>
+            </tr></thead>
+            <tbody className="divide-y divide-gray-50">
+              {expenses.map((e) => (
+                <tr key={e._id} className="hover:bg-gray-50">
+                  <td className="px-3 py-2.5 whitespace-nowrap text-gray-500">{new Date(e.date).toLocaleDateString()}</td>
+                  <td className="px-3 py-2.5 font-medium text-gray-800">{e.category}</td>
+                  <td className="px-3 py-2.5 text-gray-600">PKR {e.amount.toLocaleString()}</td>
+                  <td className="px-3 py-2.5 text-gray-500">{e.note}</td>
+                  <td className="px-3 py-2.5"><div className="flex gap-1">
+                    <Btn size="sm" variant="secondary" onClick={() => setEditing(e)}>Edit</Btn>
+                    <Btn size="sm" variant="danger" onClick={() => remove(e._id)}>Del</Btn>
+                  </div></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {editing !== null && <TrackingExpenseForm initial={editing._id ? editing : null} onSave={save} onCancel={() => setEditing(null)} />}
+    </div>
+  );
+}
+
+// ── ROAS & ROI Calculator ────────────────────────────────────────────────────
+// A live "what-if" scenario tool, same input fields as the sheet's ROAS & ROI
+// tab (AVG Cost, AVG Selling Price, Variable Cost Per Order, Free Shipping
+// Charges, Return Rate %, Monthly ad spend, Card Tax % on spend, Fixed
+// Costs). Nothing here is saved — it recomputes live as you type. Every
+// output's formula is named alongside it so you can judge the numbers
+// yourself, rather than trusting a hidden calculation.
+function RoasCalculatorTab() {
+  const [inputs, setInputs] = useState({
+    orders: 300, avgSellingPrice: 2000, avgCost: 750, variableCostPerOrder: 300,
+    freeShippingCharges: 200, returnRatePct: 20, monthlySpending: 150000, cardTaxPct: 5.2, fixedCosts: 8000,
+  });
+  const set = (k, v) => setInputs((p) => ({ ...p, [k]: v }));
+  const n = (v) => parseFloat(v) || 0;
+
+  const orders = n(inputs.orders);
+  const deliveredOrders = Math.round(orders * (1 - n(inputs.returnRatePct) / 100));
+  const sales = orders * n(inputs.avgSellingPrice);
+  const revenueReturned = sales * (n(inputs.returnRatePct) / 100);
+  const netSales = sales - revenueReturned;
+  const cogs = deliveredOrders * n(inputs.avgCost);
+  const grossProfit = netSales - cogs;
+  const fulfillmentCost = orders * (n(inputs.variableCostPerOrder) + n(inputs.freeShippingCharges));
+  const cardTax = n(inputs.monthlySpending) * (n(inputs.cardTaxPct) / 100);
+  const totalAdSpend = n(inputs.monthlySpending) + cardTax;
+  const totalCost = cogs + fulfillmentCost + n(inputs.fixedCosts) + totalAdSpend;
+  const profit = netSales - fulfillmentCost - n(inputs.fixedCosts) - totalAdSpend;
+  const roi = totalCost > 0 ? profit / totalCost : 0;
+  const netMarginPct = sales > 0 ? (profit / sales) * 100 : 0;
+
+  const Row = ({ label, value, formula, money = true, highlight }) => (
+    <div className={`flex items-center justify-between gap-3 py-2 border-b border-gray-50 last:border-0 ${highlight ? "bg-rose-50 -mx-3 px-3 rounded" : ""}`}>
+      <div>
+        <p className={`text-sm ${highlight ? "font-bold text-gray-900" : "text-gray-700"}`}>{label}</p>
+        <p className="text-[11px] text-gray-400">{formula}</p>
+      </div>
+      <p className={`text-sm font-bold whitespace-nowrap ${highlight ? (value < 0 ? "text-red-600" : "text-emerald-700") : "text-gray-800"}`}>
+        {money ? `PKR ${Math.round(value).toLocaleString()}` : `${value.toFixed(1)}%`}
+      </p>
+    </div>
+  );
+
+  return (
+    <div className="grid lg:grid-cols-2 gap-4">
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm space-y-3">
+        <SectionHeader title="Inputs" />
+        <TField label="No. of Orders" type="number" value={inputs.orders} onChange={(e) => set("orders", e.target.value)} />
+        <TField label="AVG Selling Price (PKR)" type="number" value={inputs.avgSellingPrice} onChange={(e) => set("avgSellingPrice", e.target.value)} />
+        <TField label="AVG Cost / Unit (PKR)" type="number" value={inputs.avgCost} onChange={(e) => set("avgCost", e.target.value)} />
+        <TField label="Variable Cost Per Order (PKR)" type="number" value={inputs.variableCostPerOrder} onChange={(e) => set("variableCostPerOrder", e.target.value)} />
+        <TField label="Free Shipping Charges (PKR)" type="number" value={inputs.freeShippingCharges} onChange={(e) => set("freeShippingCharges", e.target.value)} />
+        <TField label="Return Rate %" type="number" value={inputs.returnRatePct} onChange={(e) => set("returnRatePct", e.target.value)} />
+        <TField label="Monthly Ad Spending (PKR)" type="number" value={inputs.monthlySpending} onChange={(e) => set("monthlySpending", e.target.value)} />
+        <TField label="Card Tax % on Spend" type="number" value={inputs.cardTaxPct} onChange={(e) => set("cardTaxPct", e.target.value)} />
+        <TField label="Fixed Costs — monthly (PKR)" type="number" value={inputs.fixedCosts} onChange={(e) => set("fixedCosts", e.target.value)} />
+      </div>
+      <div className="bg-white rounded-xl border border-gray-100 p-4 sm:p-6 shadow-sm">
+        <SectionHeader title="Result" />
+        <Row label="Delivered Orders" value={deliveredOrders} formula="Orders × (1 − Return Rate %)" money={false} />
+        <Row label="Sales" value={sales} formula="Orders × AVG Selling Price" />
+        <Row label="Revenue Returned" value={revenueReturned} formula="Sales × Return Rate %" />
+        <Row label="Net Sales" value={netSales} formula="Sales − Revenue Returned" />
+        <Row label="COGS" value={cogs} formula="Delivered Orders × AVG Cost" />
+        <Row label="Gross Profit" value={grossProfit} formula="Net Sales − COGS" />
+        <Row label="Fulfillment Cost" value={fulfillmentCost} formula="Orders × (Variable Cost + Free Shipping)" />
+        <Row label="Total Ad Spend" value={totalAdSpend} formula="Monthly Spending + Card Tax" />
+        <Row label="Total Cost" value={totalCost} formula="COGS + Fulfillment + Fixed + Ad Spend" />
+        <Row label="Profit" value={profit} formula="Net Sales − Fulfillment − Fixed − Ad Spend" highlight />
+        <Row label="Net Margin % on Sales" value={netMarginPct} formula="Profit ÷ Sales" money={false} />
+        <Row label="ROI" value={roi * 100} formula="Profit ÷ Total Cost" money={false} />
+      </div>
+    </div>
+  );
+}
+
+// ═════════════════════════════════════════════════════════════════════════
+// PRODUCTS — every instructor's showcase products (Instructor Portal →
+// Products), shown here as cards for moderation. A student-facing mini
+// version is planned separately later.
+// ═════════════════════════════════════════════════════════════════════════
+const PRODUCT_TAG_STYLE = {
+  new: { label: "New", cls: "bg-blue-100 text-blue-700" },
+  hot_sale: { label: "Hot Sale", cls: "bg-red-100 text-red-700" },
+  trending: { label: "Trending", cls: "bg-amber-100 text-amber-700" },
+};
+
+function ProductsPage({ toast }) {
+  const { API: api } = useAuth();
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.get("/admin/products").then((r) => setProducts(r.data || [])).catch(() => toast("Failed to load products", "error")).finally(() => setLoading(false));
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [load]);
+
+  const remove = async (id) => {
+    if (!window.confirm("Remove this product?")) return;
+    try { await api.delete(`/admin/products/${id}`); toast("Removed", "success"); load(); }
+    catch { toast("Could not remove", "error"); }
+  };
+
+  return (
+    <div>
+      <SectionHeader title="Products" />
+      <p className="text-sm text-gray-500 mb-5 -mt-2">Winning/trending products instructors showcase to students, from every instructor.</p>
+      {loading ? <p className="text-sm text-gray-400">Loading…</p> : products.length === 0 ? (
+        <EmptyState icon="🛍️" title="No products yet" body="Once instructors add products from their portal, they'll show up here as cards." />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {products.map((p) => {
+            const tag = PRODUCT_TAG_STYLE[p.tag];
+            return (
+              <div key={p._id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden group">
+                <div className="h-36 bg-gray-100 relative overflow-hidden">
+                  {p.imageUrl
+                    ? <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
+                    : <div className="w-full h-full flex items-center justify-center text-4xl">🛍️</div>}
+                  {tag && <span className={`absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded-full ${tag.cls}`}>{tag.label}</span>}
+                  <button onClick={() => remove(p._id)} className="absolute top-2 right-2 w-6 h-6 rounded-full bg-white/90 text-red-500 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition border-none cursor-pointer shadow">✕</button>
+                </div>
+                <div className="p-3">
+                  <p className="font-bold text-gray-900 text-sm truncate">{p.name}</p>
+                  <p className="text-xs text-gray-400 mt-0.5">by {p.instructor?.name || "Instructor"}</p>
+                  <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                    <span>🛒 {p.unitsSold || 0} sold</span>
+                    <span>⭐ {p.rating || 0} ({p.reviews || 0})</span>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SettingsPage({ toast }) {
   const { API: api } = useAuth();
   const [logoUrl, setLogoUrl] = useState("");
@@ -1710,6 +2338,8 @@ export default function SuperAdminDashboard() {
           <Route path="opportunities" element={<OpportunitiesPage toast={toast} />} />
           <Route path="triggers" element={<TriggerLinksPage toast={toast} />} />
           <Route path="whatsapp" element={<WhatsAppDashboard toast={toast} />} />
+          <Route path="product-tracking" element={<ProductTrackingPage toast={toast} />} />
+          <Route path="products" element={<ProductsPage toast={toast} />} />
           <Route path="review-importer" element={<ReviewImporterPage toast={toast} courses={courses} />} />
           <Route path="forms" element={<FormsPage toast={toast} courses={courses} />} />
           <Route path="tags" element={<TagsPage toast={toast} />} />

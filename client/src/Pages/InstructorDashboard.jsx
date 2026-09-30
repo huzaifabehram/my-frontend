@@ -449,6 +449,7 @@ const NAV_ITEMS = [
   { to: "/instructor/reviews",   label: "Reviews",       icon: "⭐" },
   { to: "/instructor/create",    label: "Create Course", icon: "＋" },
   { to: "/instructor/analytics", label: "Analytics",     icon: "↗" },
+  { to: "/instructor/products",  label: "Products",      icon: "🛍️" },
   { to: "/instructor/profile",   label: "Profile",       icon: "◉" },
   { to: "/instructor/theme-editor", label: "Theme Editor", icon: "🎨", themeEditorOnly: true },
 ];
@@ -2942,6 +2943,167 @@ function ReviewsPage({ courses, loading }) {
   );
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PAGE: PRODUCTS — winning/trending products the instructor showcases to
+// students. Uploaded photo (Cloudinary, same upload endpoint as course
+// thumbnails), name, units sold, reviews/rating, and a New/Hot Sale/Trending
+// tag. These show up as cards in Super Admin → Products (every instructor's
+// products together) — a student-facing mini version is planned separately
+// later.
+// ─────────────────────────────────────────────────────────────────────────────
+const PRODUCT_TAG_OPTIONS = [
+  { value: "none", label: "No tag" },
+  { value: "new", label: "New" },
+  { value: "hot_sale", label: "Hot Sale" },
+  { value: "trending", label: "Trending" },
+];
+const PRODUCT_TAG_BADGE = {
+  new: { label: "New", cls: "bg-blue-100 text-blue-700" },
+  hot_sale: { label: "Hot Sale", cls: "bg-red-100 text-red-700" },
+  trending: { label: "Trending", cls: "bg-amber-100 text-amber-700" },
+};
+
+function ProductForm({ initial, onSave, onCancel, toast }) {
+  const { API: api } = useAuth();
+  const [form, setForm] = useState(initial || { name: "", description: "", imageUrl: "", unitsSold: "", reviews: "", rating: "", tag: "none" });
+  const [imagePreview, setImagePreview] = useState(initial?.imageUrl || "");
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef();
+  const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const handleImageFile = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => setImagePreview(ev.target.result);
+    reader.readAsDataURL(file);
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+      const res = await api.post("/upload/image", formData);
+      const url = res.data?.url ?? res.data?.secure_url ?? res.data?.imageUrl;
+      if (!url) { toast("Upload succeeded but no URL returned.", "error"); return; }
+      set("imageUrl", url);
+      setImagePreview(url);
+      toast("Photo uploaded to Cloudinary ✓", "success");
+    } catch { toast("Upload failed.", "error"); }
+    finally { setUploading(false); if (e.target) e.target.value = ""; }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-[200] flex items-center justify-center p-4" onClick={onCancel}>
+      <div className="bg-white rounded-2xl w-full max-w-lg p-5 sm:p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+        <h3 className="text-lg font-bold text-gray-900 mb-4">{initial ? "Edit Product" : "Add Product"}</h3>
+        <div className="space-y-4">
+          <div className="flex items-start gap-4">
+            <div className="w-24 h-24 flex-shrink-0 relative">
+              <div className="w-full h-full bg-gray-100 rounded-lg overflow-hidden border-2 border-dashed border-gray-300 hover:border-[#e8540a]/60 transition cursor-pointer flex items-center justify-center"
+                onClick={() => fileRef.current?.click()}>
+                {imagePreview ? <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" /> : <span className="text-2xl text-gray-300">🖼️</span>}
+                <UploadOverlay uploading={uploading} />
+              </div>
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={handleImageFile} />
+            </div>
+            <p className="text-xs text-gray-400 flex-1">Click the box to upload a photo — saved to Cloudinary.</p>
+          </div>
+          <Input label="Product Name" value={form.name} onChange={(v) => set("name", v)} placeholder="e.g. Smart Water Bottle" />
+          <Textarea label="Description (optional)" value={form.description} onChange={(v) => set("description", v)} rows={2} />
+          <div className="grid grid-cols-2 gap-3">
+            <Input label="Units Sold" type="number" value={form.unitsSold} onChange={(v) => set("unitsSold", v)} />
+            <Input label="Reviews" type="number" value={form.reviews} onChange={(v) => set("reviews", v)} />
+            <Input label="Rating (0–5)" type="number" value={form.rating} onChange={(v) => set("rating", v)} />
+            <Select label="Tag" value={form.tag} onChange={(v) => set("tag", v)} options={PRODUCT_TAG_OPTIONS} />
+          </div>
+        </div>
+        <div className="flex gap-2 mt-5">
+          <Btn variant="secondary" onClick={onCancel} className="flex-1">Cancel</Btn>
+          <Btn disabled={uploading} onClick={() => onSave({
+            ...form,
+            unitsSold: parseInt(form.unitsSold, 10) || 0,
+            reviews: parseInt(form.reviews, 10) || 0,
+            rating: parseFloat(form.rating) || 0,
+          })} className="flex-1">Save</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProductsPage({ toast }) {
+  const { API: api } = useAuth();
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(null); // null | {} (new) | product (edit)
+
+  const load = useCallback(() => {
+    setLoading(true);
+    api.get("/instructor/products").then((r) => setProducts(r.data || [])).catch(() => toast("Failed to load products", "error")).finally(() => setLoading(false));
+  }, [api]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [load]);
+
+  const save = async (data) => {
+    try {
+      if (data._id) await api.put(`/instructor/products/${data._id}`, data);
+      else await api.post("/instructor/products", data);
+      toast("Product saved", "success");
+      setEditing(null);
+      load();
+    } catch (err) { toast(err.response?.data?.message || "Could not save product.", "error"); }
+  };
+  const remove = async (id) => {
+    if (!window.confirm("Delete this product?")) return;
+    try { await api.delete(`/instructor/products/${id}`); toast("Deleted", "success"); load(); }
+    catch { toast("Could not delete.", "error"); }
+  };
+
+  return (
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h2 className="text-xl sm:text-2xl font-extrabold text-gray-900">Products</h2>
+          <p className="text-xs sm:text-sm text-gray-500 mt-0.5">Showcase winning/trending products to your students.</p>
+        </div>
+        <Btn onClick={() => setEditing({})}>+ Add Product</Btn>
+      </div>
+      {loading ? (
+        <p className="text-sm text-gray-400 text-center py-16">Loading…</p>
+      ) : products.length === 0 ? (
+        <EmptyState icon="🛍️" title="No products yet" body="Add a product to introduce winning/trending picks to your students." action={<Btn size="sm" onClick={() => setEditing({})}>+ Add Product</Btn>} />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {products.map((p) => {
+            const tag = PRODUCT_TAG_BADGE[p.tag];
+            return (
+              <div key={p._id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden group">
+                <div className="h-36 bg-gray-100 relative overflow-hidden">
+                  {p.imageUrl
+                    ? <img src={p.imageUrl} alt={p.name} className="w-full h-full object-cover" loading="lazy" />
+                    : <div className="w-full h-full flex items-center justify-center text-4xl">🛍️</div>}
+                  {tag && <span className={`absolute top-2 left-2 text-[10px] font-bold px-2 py-0.5 rounded-full ${tag.cls}`}>{tag.label}</span>}
+                </div>
+                <div className="p-3">
+                  <p className="font-bold text-gray-900 text-sm truncate">{p.name}</p>
+                  {p.description && <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{p.description}</p>}
+                  <div className="flex items-center gap-3 mt-2 text-xs text-gray-500">
+                    <span>🛒 {p.unitsSold || 0} sold</span>
+                    <span>⭐ {p.rating || 0} ({p.reviews || 0})</span>
+                  </div>
+                  <div className="flex gap-1 mt-3">
+                    <Btn size="sm" variant="secondary" onClick={() => setEditing(p)} className="flex-1">Edit</Btn>
+                    <Btn size="sm" variant="danger" onClick={() => remove(p._id)} className="flex-1">Delete</Btn>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {editing !== null && <ProductForm initial={editing._id ? editing : null} onSave={save} onCancel={() => setEditing(null)} toast={toast} />}
+    </div>
+  );
+}
+
 export default function InstructorDashboard() {
   const { user, API: api } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
@@ -3017,6 +3179,7 @@ export default function InstructorDashboard() {
           <Route path="students" element={<StudentsPage courses={courses} loading={loading}/>}/>
           <Route path="reviews" element={<ReviewsPage courses={courses} loading={loading}/>}/>
           <Route path="analytics" element={<AnalyticsPage courses={courses}/>}/>
+          <Route path="products" element={<ProductsPage toast={toast}/>}/>
           <Route path="profile"   element={<ProfilePage toast={toast}/>}/>
           <Route path="*"         element={<Navigate to="" replace/>}/>
         </Routes>
